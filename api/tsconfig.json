@@ -5,6 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "declaration": true,
+    "rootDir": "src",
     "outDir": "dist",
     "strict": true,
     "noUnusedLocals": true,
