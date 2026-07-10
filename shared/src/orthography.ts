@@ -19,8 +19,8 @@
 //   toneInsensitive         - tone marks stripped, underdots preserved
 //   orthographyInsensitive  - tone marks AND underdots stripped, lowercased
 
-const TONE_MARKS = new Set(['̀', '́', '̂', '̄']); // grave, acute, circumflex, macron
-const UNDERDOT_MARKS = new Set(['̣', '̇']); // dot below (ẹ ọ), dot above (ṣ)
+export const TONE_MARKS = new Set(['̀', '́', '̂', '̄']); // grave, acute, circumflex, macron
+export const UNDERDOT_MARKS = new Set(['̣', '̇']); // dot below (ẹ ọ), dot above (ṣ)
 
 export function exactForm(s: string): string {
   return s;

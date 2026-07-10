@@ -6,3 +6,7 @@ export * from './diagnoseEntry';
 export * from './definitionAxis';
 export * from './syllableSplit';
 export * from './componentsAxis';
+export * from './searchShared';
+export * from './kaikkiSearch';
+export * from './vocabSearch';
+export * from './duplicateCheck';

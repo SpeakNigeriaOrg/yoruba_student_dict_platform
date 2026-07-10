@@ -75,13 +75,37 @@ report.
   `possibleMatches` fallback - those branches, plus `invalidComponents`
   (never present in well-formed real data), are covered by direct unit
   tests instead.
-- Not yet ported: `kaikki_search.py`, `vocab_search.py`, `duplicate_check.py`
-  - these are next, building up from this now-verified foundation rather
-  than porting everything in one pass. With these three axes ported,
-  `generate_diagnostics.py`'s own per-entry pipeline (`diagnoseEntry` ->
-  `resolveEffectiveDisplayText`/`checkSyllableSplit` ->
-  `resolveDefinitionSource`/`checkDefinition` -> `componentsAxisFields`) is
-  now fully replicated in TypeScript.
+With the definition, syllable-split, and etymology axes ported,
+`generate_diagnostics.py`'s own per-entry pipeline (`diagnoseEntry` ->
+`resolveEffectiveDisplayText`/`checkSyllableSplit` ->
+`resolveDefinitionSource`/`checkDefinition` -> `componentsAxisFields`) is
+fully replicated in TypeScript.
+
+- `searchShared.ts` - ported (`looksLikeYoruba`/`tokenizeEnglish`, shared by
+  both search modules below, mirroring how `vocab_search.py` imports these
+  two helpers directly from `kaikki_search.py` rather than duplicating
+  them).
+- `kaikkiSearch.ts` - ported (`buildSearchIndex`/`searchKaikki` - the
+  engine behind the Add Word screen's Kaikki search), verified against all
+  5 real fixture queries with exact result order preserved (tier rank, then
+  score, then original lexicon order - JS `Array.sort`'s stability matches
+  Python's, so no reimplementation of that tie-breaking was needed).
+- `vocabSearch.ts` - ported (`searchVocab` - the engine behind Add Phrase's
+  component picker and the Etymology screen's manual-components widget),
+  verified against all 4 real fixture queries, including the `word_id`
+  substring-match tier (`moto_automobile`'s word_id contains "ile", the
+  tail of "automobile", surfacing it for a query that its own displayText
+  "mọ́tò" doesn't match at all).
+- `duplicateCheck.ts` - ported (`findPossibleDuplicates`), verified against
+  all 3 real fixture cases including the two regression-worthy ones: the
+  `ẹdìyẹ`/`adìẹ` cross-reference-chain match, and confirming `owó`
+  (money) never false-matches unrelated "owo"-base-spelling homographs
+  (business, hand, etc.) it doesn't actually share a Kaikki concept with.
+
+This completes the port of every module `yoruba-student-dict/scripts/
+export_js_port_fixtures.py` exports fixtures for - `/shared` is now a
+complete, fixture-verified TypeScript replica of the Python engine's public
+surface.
 
 `npm run test --workspace=shared` and `npm run build --workspace=shared`
 both run clean locally (`tsc` type-checks the library source; test files
