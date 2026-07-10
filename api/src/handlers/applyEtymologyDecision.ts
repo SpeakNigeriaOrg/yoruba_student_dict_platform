@@ -49,10 +49,13 @@ export async function applyEtymologyDecision(
     throw new ComponentsRequiredError();
   }
 
-  await withTransaction(pool, (client) => applyInTransaction(client, wordId, input, decidedBy));
+  await withTransaction(pool, (client) => applyEtymologyDecisionInTransaction(client, wordId, input, decidedBy));
 }
 
-async function applyInTransaction(
+/** Exported so approveContribution.ts can compose this into its own single
+ * transaction, rather than calling applyEtymologyDecision (which would
+ * open a second, separate transaction). */
+export async function applyEtymologyDecisionInTransaction(
   client: Queryable,
   wordId: string,
   input: ApplyEtymologyDecisionInput,

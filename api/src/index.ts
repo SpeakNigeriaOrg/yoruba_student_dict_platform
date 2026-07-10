@@ -7,3 +7,5 @@ import './functions/getRoles.js';
 import './functions/words.js';
 import './functions/phrases.js';
 import './functions/decisions.js';
+import './functions/contributions.js';
+import './functions/approveContribution.js';

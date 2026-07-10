@@ -59,10 +59,13 @@ export async function applySpellingDecision(
     throw new NewDisplayTextRequiredError();
   }
 
-  await withTransaction(pool, (client) => applyInTransaction(client, wordId, input, decidedBy));
+  await withTransaction(pool, (client) => applySpellingDecisionInTransaction(client, wordId, input, decidedBy));
 }
 
-async function applyInTransaction(
+/** Exported so approveContribution.ts can compose this into its own single
+ * transaction, rather than calling applySpellingDecision (which would open
+ * a second, separate transaction). */
+export async function applySpellingDecisionInTransaction(
   client: Queryable,
   wordId: string,
   input: ApplySpellingDecisionInput,

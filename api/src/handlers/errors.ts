@@ -1,13 +1,22 @@
 // handlers/errors.ts
 //
-// Error shared by every decision/contribution handler that operates on an
-// existing word (as opposed to createWord/createPhrase, which each define
-// their own WordIdAlreadyExistsError since that one is specific to
-// creation and only used in those two places).
+// Errors shared across handlers. WordIdAlreadyExistsError started out
+// duplicated identically in createWord.ts and createPhrase.ts (each
+// creation path defining its own copy) - consolidated here once
+// approveContribution.ts needed to compose both of them together and
+// catch/attribute the same error regardless of which path a 'new_entry'
+// contribution's type took.
 
 export class WordNotFoundError extends Error {
   constructor(public readonly wordId: string) {
     super(`word_id '${wordId}' not found in golden_record`);
     this.name = 'WordNotFoundError';
+  }
+}
+
+export class WordIdAlreadyExistsError extends Error {
+  constructor(public readonly wordId: string) {
+    super(`word_id '${wordId}' already exists in golden_record`);
+    this.name = 'WordIdAlreadyExistsError';
   }
 }

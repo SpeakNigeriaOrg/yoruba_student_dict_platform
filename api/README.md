@@ -7,7 +7,7 @@ diagnosis/search stays client-side in `app/` (see its README).
 ## Status
 
 Scaffolded and partially implemented, verified against a real local
-Postgres instance (`npm run test --workspace=api`, 40/40 passing) -
+Postgres instance (`npm run test --workspace=api`, 53/53 passing) -
 `func`/the Azure Functions Core Tools emulator aren't available in this
 development environment, so the actual HTTP-triggered `app.http(...)`
 wrappers (`src/functions/*.ts`) are `tsc`-checked but not runtime-tested
@@ -63,9 +63,34 @@ Implemented:
     load the (multi-MB) lexicon at runtime yet - revisit once that's
     decided; see the comment at the top of `applySpellingDecision.ts`.
 
-Not yet implemented: `POST /contributions`, `POST /contributions/{id}/approve`,
-`POST /utterances/sas-token`, `POST /utterances/register`,
-`GET /assignments/me` - these are next.
+- `POST /contributions` (`src/functions/contributions.ts`,
+  `src/handlers/submitContribution.ts`) - any authenticated user proposes a
+  decision on an existing word's axis, or (`axis: 'new_entry'`) a brand-new
+  word/phrase. Purely records a pending row; nothing is applied until a
+  curator approves it. `decisionInputParsing.ts` holds the per-axis
+  request-body validation shared with `POST /decisions/{axis}`, since a
+  contribution's `proposed_value` is exactly "the decision, not yet
+  applied" - identical shape either way.
+- `POST /contributions/{id}/approve` (`src/functions/approveContribution.ts`,
+  `src/handlers/approveContribution.ts`) - curator-only. Applies a pending
+  contribution exactly like the curator's own direct decision would, by
+  composing the *same* `apply*DecisionInTransaction`/`createWord`/
+  `createPhraseInTransaction` functions the direct-decision endpoints use
+  - each handler now exports both a `pg.Pool`-based entry point (opens its
+  own transaction) and a `Queryable`-based `*InTransaction` variant (for
+  composing into a larger one). Everything - reading and locking the
+  contribution row (`for update`, so two concurrent approvals of the same
+  contribution can't both apply it), the content change, and marking the
+  contribution `approved` - happens in one transaction, so a contribution
+  can never end up applied-but-still-pending or approved-but-never-applied.
+  Confirmed by test: a `new_entry` phrase contribution with a bad
+  component reference rolls back cleanly and the contribution stays
+  `pending`, not stuck half-applied.
+
+Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`,
+`GET /assignments/me` - these are next. The audio endpoints in particular
+need a real Azure Storage account to test the SAS-token flow against,
+which doesn't exist yet.
 
 ## Structure
 
@@ -86,6 +111,14 @@ Not yet implemented: `POST /contributions`, `POST /contributions/{id}/approve`,
   component check is enforced server-side too, not just in the UI).
 - `src/handlers/*.ts` - the actual business logic, framework-agnostic
   (no `@azure/functions` imports), tested against real local Postgres.
+  `handlers/errors.ts` holds error classes genuinely shared across
+  handlers (`WordNotFoundError`, `WordIdAlreadyExistsError` - the latter
+  started out duplicated identically in `createWord.ts`/`createPhrase.ts`
+  until `approveContribution.ts` needed to compose both and catch/
+  attribute the same error regardless of which path a `new_entry`
+  contribution's type took).
+- `src/decisionInputParsing.ts` - per-axis request-body validation shared
+  by `functions/decisions.ts` and `functions/contributions.ts`.
 - `src/functions/*.ts` - thin `app.http(...)` registrations: parse the
   request, call a handler, map its result/errors to an HTTP response.
 - `src/testSupport.ts` - test-only helpers (not imported by non-test code).
@@ -94,7 +127,13 @@ Not yet implemented: `POST /contributions`, `POST /contributions/{id}/approve`,
   (e.g. `testcw_` for `createWord.test.ts`) rather than one global pattern
   - two files racing to clean up the same broad pattern is exactly what
   caused real cross-file test failures the first time this was written
-  with a single shared `test_` prefix.
+  with a single shared `test_` prefix. `cleanUpTestData` also explicitly
+  cleans up `contributions` rows (matched by `word_id` OR by
+  `submitted_by`/`reviewed_by`) before deleting `users` - a `new_entry`
+  contribution's `word_id` is null, so `golden_record`'s own
+  `ON DELETE CASCADE` never reaches it, and `contributions.submitted_by`
+  has no cascade either, which surfaced as a real FK-violation failure the
+  first time contribution tests ran.
 
 ## Local development
 

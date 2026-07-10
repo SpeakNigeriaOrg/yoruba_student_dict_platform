@@ -11,6 +11,7 @@
 
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
+import { WordIdAlreadyExistsError } from './errors.js';
 
 export interface CreatePhraseInput {
   wordId: string;
@@ -20,12 +21,7 @@ export interface CreatePhraseInput {
   components: string[];
 }
 
-export class WordIdAlreadyExistsError extends Error {
-  constructor(public readonly wordId: string) {
-    super(`word_id '${wordId}' already exists in golden_record`);
-    this.name = 'WordIdAlreadyExistsError';
-  }
-}
+export { WordIdAlreadyExistsError };
 
 export class NoComponentsError extends Error {
   constructor() {
@@ -52,7 +48,10 @@ export async function createPhrase(pool: pg.Pool, input: CreatePhraseInput, crea
   await withTransaction(pool, (client) => createPhraseInTransaction(client, input, createdBy));
 }
 
-async function createPhraseInTransaction(client: Queryable, input: CreatePhraseInput, createdBy: string): Promise<void> {
+/** Exported so approveContribution.ts's 'new_entry' (phrase) path can
+ * compose this into its own single transaction, rather than calling
+ * createPhrase (which would open a second, separate transaction). */
+export async function createPhraseInTransaction(client: Queryable, input: CreatePhraseInput, createdBy: string): Promise<void> {
   const existingWord = await client.query('select 1 from golden_record where word_id = $1', [input.wordId]);
   if ((existingWord.rowCount ?? 0) > 0) {
     throw new WordIdAlreadyExistsError(input.wordId);

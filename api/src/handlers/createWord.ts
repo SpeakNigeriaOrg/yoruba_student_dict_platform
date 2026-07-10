@@ -8,6 +8,7 @@
 // db/migrations/0001_initial_schema.sql).
 
 import type { Queryable } from '../db.js';
+import { WordIdAlreadyExistsError } from './errors.js';
 
 export interface CreateWordInput {
   wordId: string;
@@ -16,13 +17,12 @@ export interface CreateWordInput {
   definition?: string | null;
 }
 
-export class WordIdAlreadyExistsError extends Error {
-  constructor(public readonly wordId: string) {
-    super(`word_id '${wordId}' already exists in golden_record`);
-    this.name = 'WordIdAlreadyExistsError';
-  }
-}
+export { WordIdAlreadyExistsError };
 
+/** Takes a Queryable (not pg.Pool specifically) since this is a single
+ * insert with no internal transaction of its own - callers that need it as
+ * part of a larger transaction (e.g. approveContribution.ts's 'new_entry'
+ * path) can pass a pg.PoolClient directly. */
 export async function createWord(db: Queryable, input: CreateWordInput, createdBy: string): Promise<void> {
   const existing = await db.query('select 1 from golden_record where word_id = $1', [input.wordId]);
   if ((existing.rowCount ?? 0) > 0) {
