@@ -7,7 +7,7 @@ diagnosis/search stays client-side in `app/` (see its README).
 ## Status
 
 Scaffolded and partially implemented, verified against a real local
-Postgres instance (`npm run test --workspace=api`, 53/53 passing) -
+Postgres instance (`npm run test --workspace=api`, 56/56 passing) -
 `func`/the Azure Functions Core Tools emulator aren't available in this
 development environment, so the actual HTTP-triggered `app.http(...)`
 wrappers (`src/functions/*.ts`) are `tsc`-checked but not runtime-tested
@@ -86,11 +86,16 @@ Implemented:
   Confirmed by test: a `new_entry` phrase contribution with a bad
   component reference rolls back cleanly and the contribution stays
   `pending`, not stuck half-applied.
+- `GET /assignments/me` (`src/functions/assignmentsMe.ts`,
+  `src/handlers/listMyAssignments.ts`) - any authenticated user; the
+  calling user's assigned word_id batch, joined with `golden_record` for
+  the fields a "my assignments" screen needs. A curator's bulk view over
+  everyone's assignments (`/api/assignments/*` in
+  `staticwebapp.config.json`) isn't implemented yet.
 
-Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`,
-`GET /assignments/me` - these are next. The audio endpoints in particular
-need a real Azure Storage account to test the SAS-token flow against,
-which doesn't exist yet.
+Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`
+- these need a real Azure Storage account to test the SAS-token flow
+against, which doesn't exist yet.
 
 ## Structure
 
