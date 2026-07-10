@@ -1,0 +1,11 @@
+{
+  "name": "@yoruba-student-dict-platform/db",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migrate": "node migrate.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}
