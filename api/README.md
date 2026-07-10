@@ -7,7 +7,7 @@ diagnosis/search stays client-side in `app/` (see its README).
 ## Status
 
 Scaffolded and partially implemented, verified against a real local
-Postgres instance (`npm run test --workspace=api`, 22/22 passing) -
+Postgres instance (`npm run test --workspace=api`, 40/40 passing) -
 `func`/the Azure Functions Core Tools emulator aren't available in this
 development environment, so the actual HTTP-triggered `app.http(...)`
 wrappers (`src/functions/*.ts`) are `tsc`-checked but not runtime-tested
@@ -39,10 +39,33 @@ Implemented:
   the stricter "≥2" the old tool's UI alone enforces) and does an existence
   pre-check for a clean error before the `golden_record_components` foreign
   key would otherwise reject it with a raw constraint violation.
+- `POST /decisions/{axis}` (`src/functions/decisions.ts`,
+  `src/handlers/applySpellingDecision.ts` / `applyDefinitionDecision.ts` /
+  `applyEtymologyDecision.ts`) - a curator's direct decision on one of the
+  three review axes. Every axis applies its content change (if any) and
+  upserts `word_decisions` in one transaction - re-deciding an axis
+  overwrites the previous row rather than accumulating history.
+  - `definition` and `etymology` are fully self-contained: `custom`
+    definition text is human-authored, and `accept_proposed`/`custom`
+    components are word_ids the client already resolved against its own
+    held copy of the Kaikki lexicon (validated here exactly like
+    `createPhrase`'s existence check).
+  - `spelling` bundles the syllable-split sub-decision
+    (`syllableAction`/`syllableNote`) alongside the main Kaikki-comparison
+    decision, mirroring how a single `dictionary_overrides.json[wordId]`
+    entry carries both as sibling fields in the old tool.
+    `accept_programmatic` recomputes syllables from whichever spelling is
+    *effective* after this same call (the new one, if `adopt_kaikki` is
+    also happening) - same rationale as `resolveEffectiveDisplayText`.
+  - **Known gap**: `adopt_kaikki` requires the caller to supply
+    `newDisplayText` directly rather than this handler re-deriving it from
+    the Kaikki lexicon itself. The Function app has no established way to
+    load the (multi-MB) lexicon at runtime yet - revisit once that's
+    decided; see the comment at the top of `applySpellingDecision.ts`.
 
-Not yet implemented: `POST /decisions/{axis}`, `POST /contributions`,
-`POST /contributions/{id}/approve`, `POST /utterances/sas-token`,
-`POST /utterances/register`, `GET /assignments/me` - these are next.
+Not yet implemented: `POST /contributions`, `POST /contributions/{id}/approve`,
+`POST /utterances/sas-token`, `POST /utterances/register`,
+`GET /assignments/me` - these are next.
 
 ## Structure
 
