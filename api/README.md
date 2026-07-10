@@ -13,8 +13,18 @@ Planned endpoints (see repo root README and
   (never touches `Golden_Record` directly). Any authenticated user.
 - `POST /contributions/{id}/approve` - curator applies a pending
   contribution into `Golden_Record`. Curator role only.
-- `POST /utterances` - audio upload metadata + blob write, queues
-  `vad-service` processing. Any authenticated user.
+- `POST /uploads/sas-token` - issues a short-lived Blob Storage SAS token
+  for direct client-to-Blob upload. Any authenticated user. A browser can
+  never hold Azure Storage account credentials, so this exists regardless
+  of where audio segmentation happens (see `app/`'s README - v1 segments
+  client-side, no `vad-service`/Container App).
+- `POST /utterances/register` - called after the client has already
+  uploaded whole-word/syllable clips directly to Blob Storage via the SAS
+  token above; writes the `Utterances`/`SyllableObservations` rows. This is
+  also where `syllable_text` gets normalized into its indexed tone/
+  orthography-insensitive forms and legacy R2-compatible key via `shared/`'s
+  ported orthography logic - one canonical place for that computation
+  regardless of where segmentation ran.
 - `GET /assignments/me` - the calling user's assigned word_id batch.
 - `GET|POST /GetRoles` - the custom role-source function
   `staticwebapp.config.json` points `auth.rolesSource` at. Looks up the
