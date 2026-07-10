@@ -36,9 +36,23 @@ report.
   vocab words (multi-word/phrase entries correctly excluded from parity
   checks, same as the Python export script does - there's no
   Python-computed value to compare against for those).
-- Not yet ported: `generate_diagnostics.py`'s classification/scoring
-  functions (`diagnose_entry`, `classify_tone_match`,
-  `components_axis_fields`, etc.), `kaikki_search.py`, `vocab_search.py`,
+- `toneMatching.ts` - ported (`classifyToneMatch`/`formsEqual`/
+  `classifyAgainstForms`), fixture tests passing including the owó/ọwọ́ and
+  ìlẹ̀/ilé named regressions.
+- `diagnoseEntry.ts` - ported (`diagnoseEntry`/`applyOverride` and their
+  candidate-disambiguation helpers: `deriveEnglishHint`, `scoreCandidate`,
+  `isAlternativeFormOnly`, `findCandidateByForm`, `collapseRepeatedVowels`,
+  `findRelaxedCandidates`), verified against every one of the 92 real vocab
+  entries' recorded `diagnose_entry` output (`raw_vocab.json` +
+  `raw_kaikki_lexicon.json` + `raw_overrides.json` as input,
+  `full_diagnostics_report.json` as expected output, restricted to the
+  fields `diagnose_entry` itself sets), plus both named regression fixtures
+  and direct unit tests of `applyOverride`'s `keep_ours`/`adopt_kaikki`
+  branches (not currently exercised by any real override, so covered
+  synthetically instead of left unverified).
+- Not yet ported: `generate_diagnostics.py`'s remaining axes
+  (`check_definition`, `check_syllable_split`, `components_axis_fields`,
+  `resolve_definition_source`), `kaikki_search.py`, `vocab_search.py`,
   `duplicate_check.py` - these are next, building up from this now-verified
   foundation rather than porting everything in one pass.
 
