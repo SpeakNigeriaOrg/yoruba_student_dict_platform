@@ -1,0 +1,9 @@
+*.ts
+!*.d.ts
+src
+.vscode
+test
+local.settings.json
+tsconfig.json
+*.test.js
+.git*

@@ -13,8 +13,10 @@
   },
   "scripts": {
     "test:shared": "npm run test --workspace=shared",
+    "test:api": "npm run test --workspace=api",
     "dev:app": "npm run dev --workspace=app",
     "build:app": "npm run build --workspace=app",
+    "build:api": "npm run build --workspace=api",
     "db:migrate": "npm run migrate --workspace=db"
   }
 }
