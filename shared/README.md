@@ -50,11 +50,19 @@ report.
   and direct unit tests of `applyOverride`'s `keep_ours`/`adopt_kaikki`
   branches (not currently exercised by any real override, so covered
   synthetically instead of left unverified).
-- Not yet ported: `generate_diagnostics.py`'s remaining axes
-  (`check_definition`, `check_syllable_split`, `components_axis_fields`,
-  `resolve_definition_source`), `kaikki_search.py`, `vocab_search.py`,
-  `duplicate_check.py` - these are next, building up from this now-verified
-  foundation rather than porting everything in one pass.
+- `definitionAxis.ts` - ported (`resolveDefinitionSource`/`checkDefinition`
+  and their helpers: `realGlosses`, `findHintMatchingGloss`,
+  `proposeDefinition`), verified against all 92 real vocab entries'
+  recorded definition-axis output (chained through the already-verified
+  `diagnoseEntry` first, exactly mirroring `generate_diagnostics()`'s own
+  per-entry pipeline), plus both named regression fixtures and direct unit
+  tests of `resolveDefinitionSource`'s explicit-`definitionSourceForm`
+  branch (not currently exercised by any real override).
+- Not yet ported: `generate_diagnostics.py`'s remaining axis
+  (`check_syllable_split`, `components_axis_fields`), `kaikki_search.py`,
+  `vocab_search.py`, `duplicate_check.py` - these are next, building up
+  from this now-verified foundation rather than porting everything in one
+  pass.
 
 `npm run test --workspace=shared` and `npm run build --workspace=shared`
 both run clean locally (`tsc` type-checks the library source; test files

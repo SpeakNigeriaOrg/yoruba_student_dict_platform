@@ -46,7 +46,9 @@ export interface DiagnoseOverride {
   note?: string;
   action?: 'keep_ours' | 'adopt_kaikki' | 'select_candidate';
   candidateForm?: string;
-  definitionAction?: string;
+  definitionAction?: 'confirm' | 'custom';
+  definitionText?: string;
+  definitionSourceForm?: string;
   syllableAction?: string;
   componentsAction?: string;
 }

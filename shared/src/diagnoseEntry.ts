@@ -31,9 +31,9 @@ export function deriveEnglishHint(wordId: string, displayText: string): string {
   return idx === -1 ? '' : wordId.slice(idx + 1).replace(/_/g, ' ');
 }
 
-const ALTERNATIVE_FORM_PATTERN = /^alternative form of\b/i;
+export const ALTERNATIVE_FORM_PATTERN = /^alternative form of\b/i;
 
-function escapeRegExp(s: string): string {
+export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -45,8 +45,10 @@ export function scoreCandidate(hint: string, candidate: KaikkiSense): number {
 
 /** Kaikki's "alternative form of X" cross-reference entries always repeat
  * X's own gloss text, so they tie with X on keyword score every time. Used
- * to break that tie in favor of the primary entry. */
-export function isAlternativeFormOnly(candidate: KaikkiSense): boolean {
+ * to break that tie in favor of the primary entry. Takes just the glosses
+ * (not a full KaikkiSense) so it also works on the ad-hoc "just the glosses
+ * we matched against" case the definition axis needs. */
+export function isAlternativeFormOnly(candidate: { glosses: string[] }): boolean {
   const glosses = candidate.glosses;
   return glosses.length > 0 && glosses.every((g) => ALTERNATIVE_FORM_PATTERN.test(g.trim()));
 }
