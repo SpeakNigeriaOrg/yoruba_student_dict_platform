@@ -1,0 +1,104 @@
+[
+  {
+    "input": "owó",
+    "exact": "owó",
+    "toneInsensitive": "owo",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "ọwọ́",
+    "exact": "ọwọ́",
+    "toneInsensitive": "ọwọ",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "òwò",
+    "exact": "òwò",
+    "toneInsensitive": "owo",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "ọ̀wọ̀",
+    "exact": "ọ̀wọ̀",
+    "toneInsensitive": "ọwọ",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "ọwọ̀",
+    "exact": "ọwọ̀",
+    "toneInsensitive": "ọwọ",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "ọ̀wọ́",
+    "exact": "ọ̀wọ́",
+    "toneInsensitive": "ọwọ",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "ìlẹ̀",
+    "exact": "ìlẹ̀",
+    "toneInsensitive": "ilẹ",
+    "orthographyInsensitive": "ile"
+  },
+  {
+    "input": "ilẹ̀",
+    "exact": "ilẹ̀",
+    "toneInsensitive": "ilẹ",
+    "orthographyInsensitive": "ile"
+  },
+  {
+    "input": "ilé",
+    "exact": "ilé",
+    "toneInsensitive": "ile",
+    "orthographyInsensitive": "ile"
+  },
+  {
+    "input": "kàn",
+    "exact": "kàn",
+    "toneInsensitive": "kan",
+    "orthographyInsensitive": "kan"
+  },
+  {
+    "input": "kán",
+    "exact": "kán",
+    "toneInsensitive": "kan",
+    "orthographyInsensitive": "kan"
+  },
+  {
+    "input": "kan",
+    "exact": "kan",
+    "toneInsensitive": "kan",
+    "orthographyInsensitive": "kan"
+  },
+  {
+    "input": "ẹdìyẹ",
+    "exact": "ẹdìyẹ",
+    "toneInsensitive": "ẹdiyẹ",
+    "orthographyInsensitive": "ediye"
+  },
+  {
+    "input": "adìyẹ",
+    "exact": "adìyẹ",
+    "toneInsensitive": "adiyẹ",
+    "orthographyInsensitive": "adiye"
+  },
+  {
+    "input": "adìẹ",
+    "exact": "adìẹ",
+    "toneInsensitive": "adiẹ",
+    "orthographyInsensitive": "adie"
+  },
+  {
+    "input": "Ọ̀wọ̀",
+    "exact": "Ọ̀wọ̀",
+    "toneInsensitive": "ọwọ",
+    "orthographyInsensitive": "owo"
+  },
+  {
+    "input": "Adúke",
+    "exact": "Adúke",
+    "toneInsensitive": "aduke",
+    "orthographyInsensitive": "aduke"
+  }
+]

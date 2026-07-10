@@ -1,0 +1,3072 @@
+{
+  "summary": {
+    "tone_mismatch": 4,
+    "match": 68,
+    "matched_alternative_form": 4,
+    "ambiguous_match": 3,
+    "underdot_mismatch": 6,
+    "phrase": 1,
+    "not_in_kaikki": 6
+  },
+  "totalEntries": 92,
+  "entries": [
+    {
+      "wordId": "ejika_shoulder",
+      "displayText": "ejika",
+      "englishHint": "shoulder",
+      "status": "tone_mismatch",
+      "matchedForm": "èjìká",
+      "canonicalForm": "èjìká",
+      "adoptionTarget": "èjìká",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "shoulder"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "shoulder"
+      ],
+      "definitionSourceForm": "èjìká",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "shoulder",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ejika_shoulder"
+      ]
+    },
+    {
+      "wordId": "eti_ear",
+      "displayText": "etí",
+      "englishHint": "ear",
+      "status": "match",
+      "matchedForm": "etí",
+      "canonicalForm": "etí",
+      "adoptionTarget": "etí",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "ear",
+        "edge, side"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "ear",
+        "edge, side"
+      ],
+      "definitionSourceForm": "etí",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "ear",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "eti_ear"
+      ]
+    },
+    {
+      "wordId": "imu_nose",
+      "displayText": "imú",
+      "englishHint": "nose",
+      "status": "match",
+      "matchedForm": "imú",
+      "canonicalForm": "imú",
+      "adoptionTarget": "imú",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "nose"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "nose"
+      ],
+      "definitionSourceForm": "imú",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "nose",
+      "definitionProposed": "nose",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "imu_nose"
+      ]
+    },
+    {
+      "wordId": "oju_eye",
+      "displayText": "ojú",
+      "englishHint": "eye",
+      "status": "match",
+      "matchedForm": "ojú",
+      "canonicalForm": "ojú",
+      "adoptionTarget": "ojú",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "eye",
+        "face, surface"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "eye",
+        "face, surface"
+      ],
+      "definitionSourceForm": "ojú",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "eye",
+      "definitionProposed": "eye",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "oju_eye"
+      ]
+    },
+    {
+      "wordId": "ori_head",
+      "displayText": "orí",
+      "englishHint": "head",
+      "status": "match",
+      "matchedForm": "orí",
+      "canonicalForm": "orí",
+      "adoptionTarget": "orí",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "head",
+        "top, leader",
+        "the metaphysical concept of one's spiritual intuition, destiny, and consciousness, deified as a divinity, Orí."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "head",
+        "top, leader",
+        "the metaphysical concept of one's spiritual intuition, destiny, and consciousness, deified as a divinity, Orí."
+      ],
+      "definitionSourceForm": "orí",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "head",
+      "definitionProposed": "head",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ori_head"
+      ]
+    },
+    {
+      "wordId": "awo_plate",
+      "displayText": "àwo",
+      "englishHint": "plate",
+      "status": "match",
+      "matchedForm": "àwo",
+      "canonicalForm": "àwo",
+      "adoptionTarget": "àwo",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "dish, plate"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "dish, plate"
+      ],
+      "definitionSourceForm": "àwo",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "dish, plate",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "awo_plate"
+      ]
+    },
+    {
+      "wordId": "ikun_stomach",
+      "displayText": "ikùn",
+      "englishHint": "stomach",
+      "status": "match",
+      "matchedForm": "ikùn",
+      "canonicalForm": "ikùn",
+      "adoptionTarget": "ikùn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "abdomen, belly",
+        "big belly, potbelly, paunch",
+        "mind"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "resolvedBy": "manual_selection",
+      "note": "re-confirmed after testing the clear-decision fix",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "abdomen, belly",
+        "big belly, potbelly, paunch",
+        "mind"
+      ],
+      "definitionSourceForm": "ikùn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "abdomen, belly",
+      "definitionProposed": "abdomen, belly",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ikun_stomach"
+      ]
+    },
+    {
+      "wordId": "ikoko_pot",
+      "displayText": "ìkòkò",
+      "englishHint": "pot",
+      "status": "match",
+      "matchedForm": "ìkòkò",
+      "canonicalForm": "ìkòkò",
+      "adoptionTarget": "ìkòkò",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "pot, multipurpose pot traditionally made of clay."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "pot, multipurpose pot traditionally made of clay."
+      ],
+      "definitionSourceForm": "ìkòkò",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "pot, multipurpose pot traditionally made of clay.",
+      "definitionProposed": "pot, multipurpose pot traditionally made of clay.",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ikoko_pot"
+      ]
+    },
+    {
+      "wordId": "enu_mouth",
+      "displayText": "ẹnu",
+      "englishHint": "mouth",
+      "status": "match",
+      "matchedForm": "ẹnu",
+      "canonicalForm": "ẹnu",
+      "adoptionTarget": "ẹnu",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "mouth"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "mouth"
+      ],
+      "definitionSourceForm": "ẹnu",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "mouth",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "enu_mouth"
+      ]
+    },
+    {
+      "wordId": "orun_neck",
+      "displayText": "ọrùn",
+      "englishHint": "neck",
+      "status": "match",
+      "matchedForm": "ọrùn",
+      "canonicalForm": "ọrùn",
+      "adoptionTarget": "ọrùn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "neck"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "neck"
+      ],
+      "definitionSourceForm": "ọrùn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "neck",
+      "definitionProposed": "neck",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "orun_neck"
+      ]
+    },
+    {
+      "wordId": "owo_hand",
+      "displayText": "ọwọ",
+      "englishHint": "hand",
+      "status": "tone_mismatch",
+      "matchedForm": "ọwọ́",
+      "canonicalForm": "ọwọ́",
+      "adoptionTarget": "ọwọ́",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "hand",
+        "direction, location, side; either right or left",
+        "one hundred naira",
+        "impact, influence, effect",
+        "handwriting, penmanship",
+        "care, handling",
+        "time of action or event; current",
+        "possession (literally, \"in the hand of someone\")",
+        "active engagement, endorsement",
+        "grip, power, force",
+        "applause"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "hand",
+        "direction, location, side; either right or left",
+        "one hundred naira",
+        "impact, influence, effect",
+        "handwriting, penmanship",
+        "care, handling",
+        "time of action or event; current",
+        "possession (literally, \"in the hand of someone\")",
+        "active engagement, endorsement",
+        "grip, power, force",
+        "applause"
+      ],
+      "definitionSourceForm": "ọwọ́",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "hand",
+      "definitionProposed": "hand",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "owo_hand"
+      ]
+    },
+    {
+      "wordId": "agemo_july",
+      "displayText": "Agẹmọ",
+      "englishHint": "july",
+      "status": "match",
+      "matchedForm": "Agẹmọ",
+      "canonicalForm": "Agẹmọ",
+      "adoptionTarget": "Agẹmọ",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "a primordial orisha primarily worshipped as an ancestral spirit by the Ìjẹ̀bú people. They are believed to be an orisha of fertility, childbirth, and protector of children. It is closely associated with Egúngún, Gẹ̀lẹ̀dẹ́, and Èlùkú.",
+        "an annual Ìjẹ̀bú festival held in honor of the orisha Agẹmọ",
+        "July, the second month of the traditional Yoruba calendar, the Kọ́jọ́dá; the Agẹmọ festival is held during this month"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "a primordial orisha primarily worshipped as an ancestral spirit by the Ìjẹ̀bú people. They are believed to be an orisha of fertility, childbirth, and protector of children. It is closely associated with Egúngún, Gẹ̀lẹ̀dẹ́, and Èlùkú.",
+        "an annual Ìjẹ̀bú festival held in honor of the orisha Agẹmọ",
+        "July, the second month of the traditional Yoruba calendar, the Kọ́jọ́dá; the Agẹmọ festival is held during this month"
+      ],
+      "definitionSourceForm": "Agẹmọ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "July, the second month of the traditional Yoruba calendar, the Kọ́jọ́dá; the Agẹmọ festival is held during this month",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "agemo_july"
+      ]
+    },
+    {
+      "wordId": "aja_dog",
+      "displayText": "ajá",
+      "englishHint": "dog",
+      "status": "match",
+      "matchedForm": "ajá",
+      "canonicalForm": "ajá",
+      "adoptionTarget": "ajá",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "dog"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "dog"
+      ],
+      "definitionSourceForm": "ajá",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "dog",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "aja_dog"
+      ]
+    },
+    {
+      "wordId": "alangba_lizard",
+      "displayText": "aláǹgbá",
+      "englishHint": "lizard",
+      "status": "match",
+      "matchedForm": "aláǹgbá",
+      "canonicalForm": "aláǹgbá",
+      "adoptionTarget": "aláǹgbá",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "lizard"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "lizard"
+      ],
+      "definitionSourceForm": "aláǹgbá",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "lizard",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "alangba_lizard"
+      ]
+    },
+    {
+      "wordId": "baluwe_bathroom",
+      "displayText": "balùwẹ̀",
+      "englishHint": "bathroom",
+      "status": "matched_alternative_form",
+      "matchedForm": "balùwẹ̀",
+      "canonicalForm": "ibalùwẹ̀",
+      "adoptionTarget": "ibalùwẹ̀",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "bathroom"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "bathroom"
+      ],
+      "definitionSourceForm": "balùwẹ̀",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "bathroom",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "baluwe_bathroom"
+      ]
+    },
+    {
+      "wordId": "beelu_november",
+      "displayText": "Beélú",
+      "englishHint": "november",
+      "status": "ambiguous_match",
+      "candidatesConsidered": [
+        {
+          "form": "Bélú",
+          "pos": "name",
+          "glosses": [
+            "November, the sixth month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+          ]
+        }
+      ],
+      "discoveredViaRelaxedMatch": true,
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "November, the sixth month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Bélú",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": false,
+      "definitionStatus": "pending_custom",
+      "definitionCurrent": null,
+      "definitionProposed": "November, the sixth month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "beelu_november"
+      ]
+    },
+    {
+      "wordId": "dide_stand",
+      "displayText": "dìde",
+      "englishHint": "stand",
+      "status": "match",
+      "matchedForm": "dìde",
+      "canonicalForm": "dìde",
+      "adoptionTarget": "dìde",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to stand, get up, rise"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to stand, get up, rise"
+      ],
+      "definitionSourceForm": "dìde",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "to stand, get up, rise",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "dide_stand"
+      ]
+    },
+    {
+      "wordId": "ewe_leaf",
+      "displayText": "ewé",
+      "englishHint": "leaf",
+      "status": "match",
+      "matchedForm": "ewé",
+      "canonicalForm": "ewé",
+      "adoptionTarget": "ewé",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "leaf, foliage",
+        "The leaves of the plants Thaumatococcus daniellii and Megaphrynium macrostachyum, which are used in wrapping foods."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "leaf, foliage",
+        "The leaves of the plants Thaumatococcus daniellii and Megaphrynium macrostachyum, which are used in wrapping foods."
+      ],
+      "definitionSourceForm": "ewé",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "leaf, foliage",
+      "definitionProposed": "leaf, foliage",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ewe_leaf"
+      ]
+    },
+    {
+      "wordId": "ibusun_bed",
+      "displayText": "ibùsùn",
+      "englishHint": "bed",
+      "status": "match",
+      "matchedForm": "ibùsùn",
+      "canonicalForm": "ibùsùn",
+      "adoptionTarget": "ibùsùn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "bed"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "bed"
+      ],
+      "definitionSourceForm": "ibùsùn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "bed",
+      "definitionProposed": "bed",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ibusun_bed"
+      ]
+    },
+    {
+      "wordId": "idodo_navel",
+      "displayText": "idodo",
+      "englishHint": "navel",
+      "status": "match",
+      "matchedForm": "idodo",
+      "canonicalForm": "idodo",
+      "adoptionTarget": "idodo",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "navel, belly button"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "navel, belly button"
+      ],
+      "definitionSourceForm": "idodo",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "navel, belly button",
+      "definitionProposed": "navel, belly button",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "idodo_navel"
+      ]
+    },
+    {
+      "wordId": "igbe_april",
+      "displayText": "Igbe",
+      "englishHint": "april",
+      "status": "match",
+      "matchedForm": "Igbe",
+      "canonicalForm": "Igbe",
+      "adoptionTarget": "Igbe",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "April, the eleventh month in the Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "April, the eleventh month in the Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Igbe",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "April, the eleventh month in the Yoruba calendar, the Kọ́jọ́dá",
+      "definitionProposed": "April, the eleventh month in the Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "igbe_april"
+      ]
+    },
+    {
+      "wordId": "igbo_forest",
+      "displayText": "igbó",
+      "englishHint": "forest",
+      "status": "match",
+      "matchedForm": "igbó",
+      "canonicalForm": "igbó",
+      "adoptionTarget": "igbó",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "forest, bush, grove"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "forest, bush, grove"
+      ],
+      "definitionSourceForm": "igbó",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "forest, bush, grove",
+      "definitionProposed": "forest, bush, grove",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "igbo_forest"
+      ]
+    },
+    {
+      "wordId": "irin_iron",
+      "displayText": "irin",
+      "englishHint": "iron",
+      "status": "match",
+      "matchedForm": "irin",
+      "canonicalForm": "irin",
+      "adoptionTarget": "irin",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "metal (in particular) iron",
+        "metal (in particular) iron",
+        "iron (chemical element, Fe, atomic number 26)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "metal (in particular) iron",
+        "metal (in particular) iron",
+        "iron (chemical element, Fe, atomic number 26)"
+      ],
+      "definitionSourceForm": "irin",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "metal (in particular) iron",
+      "definitionProposed": "metal (in particular) iron",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "irin_iron"
+      ]
+    },
+    {
+      "wordId": "itan_thigh",
+      "displayText": "itan",
+      "englishHint": "thigh",
+      "status": "match",
+      "matchedForm": "itan",
+      "canonicalForm": "itan",
+      "adoptionTarget": "itan",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "thigh"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "thigh"
+      ],
+      "definitionSourceForm": "itan",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "thigh",
+      "definitionProposed": "thigh",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "itan_thigh"
+      ]
+    },
+    {
+      "wordId": "jeun_eat",
+      "displayText": "jẹun",
+      "englishHint": "eat",
+      "status": "match",
+      "matchedForm": "jẹun",
+      "canonicalForm": "jẹun",
+      "adoptionTarget": "jẹun",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to eat food",
+        "to make a living"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "jẹ",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "ohun",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to eat food",
+        "to make a living"
+      ],
+      "definitionSourceForm": "jẹun",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "to eat food",
+      "definitionProposed": "to eat food",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "jẹ",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "to eat, to consume"
+          ],
+          "previewGlossesAreExactMatches": true
+        },
+        {
+          "kaikkiForm": "ohun",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "thing",
+            "what, whatever"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "jeun_eat"
+      ]
+    },
+    {
+      "wordId": "lo_go",
+      "displayText": "lọ",
+      "englishHint": "go",
+      "status": "match",
+      "matchedForm": "lọ",
+      "canonicalForm": "lọ",
+      "adoptionTarget": "lọ",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to go"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to go"
+      ],
+      "definitionSourceForm": "lọ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "to go",
+      "definitionProposed": "to go",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "lo_go"
+      ]
+    },
+    {
+      "wordId": "okudu_june",
+      "displayText": "Okúdù",
+      "englishHint": "june",
+      "status": "tone_mismatch",
+      "matchedForm": "Òkúdu",
+      "canonicalForm": "Òkúdu",
+      "adoptionTarget": "Òkúdu",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "June, the first month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "June, the first month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Òkúdu",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "June, the first month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "definitionProposed": "June, the first month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "okudu_june"
+      ]
+    },
+    {
+      "wordId": "pele_sorry",
+      "displayText": "pẹ̀lẹ́",
+      "englishHint": "sorry",
+      "status": "match",
+      "matchedForm": "pẹ̀lẹ́",
+      "canonicalForm": "pẹ̀lẹ́",
+      "adoptionTarget": "pẹ̀lẹ́",
+      "matchedPos": "intj",
+      "matchedGlosses": [
+        "sorry (used to apologize or express condolence)",
+        "how are you, specifically used a greeting used by an older person to a younger person."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "sorry (used to apologize or express condolence)",
+        "how are you, specifically used a greeting used by an older person to a younger person."
+      ],
+      "definitionSourceForm": "pẹ̀lẹ́",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "sorry (used to apologize or express condolence)",
+      "definitionProposed": "sorry (used to apologize or express condolence)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "pele_sorry"
+      ]
+    },
+    {
+      "wordId": "pepeye_duck",
+      "displayText": "pẹ́pẹ́yẹ",
+      "englishHint": "duck",
+      "status": "match",
+      "matchedForm": "pẹ́pẹ́yẹ",
+      "canonicalForm": "pẹ́pẹ́yẹ",
+      "adoptionTarget": "pẹ́pẹ́yẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "duck"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "duck"
+      ],
+      "definitionSourceForm": "pẹ́pẹ́yẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "duck",
+      "definitionProposed": "duck",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "pepeye_duck"
+      ]
+    },
+    {
+      "wordId": "ra_crawl",
+      "displayText": "rá",
+      "englishHint": "crawl",
+      "status": "match",
+      "matchedForm": "rá",
+      "canonicalForm": "rá",
+      "adoptionTarget": "rá",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to crawl"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to crawl"
+      ],
+      "definitionSourceForm": "rá",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "to crawl",
+      "definitionProposed": "to crawl",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ra_crawl"
+      ]
+    },
+    {
+      "wordId": "sare_run",
+      "displayText": "sáré",
+      "englishHint": "run",
+      "status": "match",
+      "matchedForm": "sáré",
+      "canonicalForm": "sáré",
+      "adoptionTarget": "sáré",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to run"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "sá",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "eré",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to run"
+      ],
+      "definitionSourceForm": "sáré",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "to run",
+      "definitionProposed": "to run",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "sá",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "Sir"
+          ],
+          "previewGlossesAreExactMatches": false
+        },
+        {
+          "kaikkiForm": "eré",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "physical play"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "sare_run"
+      ]
+    },
+    {
+      "wordId": "wa_come",
+      "displayText": "wá",
+      "englishHint": "come",
+      "status": "match",
+      "matchedForm": "wá",
+      "canonicalForm": "wá",
+      "adoptionTarget": "wá",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "come"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "come"
+      ],
+      "definitionSourceForm": "wá",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "come",
+      "definitionProposed": "come",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "wa_come"
+      ]
+    },
+    {
+      "wordId": "aya_chest",
+      "displayText": "àyà",
+      "englishHint": "chest",
+      "status": "match",
+      "matchedForm": "àyà",
+      "canonicalForm": "àyà",
+      "adoptionTarget": "àyà",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "chest",
+        "lungs, heart",
+        "bravery, courage"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "chest",
+        "lungs, heart",
+        "bravery, courage"
+      ],
+      "definitionSourceForm": "àyà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "chest",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "aya_chest"
+      ]
+    },
+    {
+      "wordId": "ebibi_may",
+      "displayText": "Èbìbí",
+      "englishHint": "may",
+      "status": "underdot_mismatch",
+      "matchedForm": "Ẹ̀bìbì",
+      "canonicalForm": "Ẹ̀bìbì",
+      "adoptionTarget": "Ẹ̀bìbì",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "a traditional festival celebrated by the Ìjẹ̀bú people of Ẹ̀pẹ́",
+        "May, the twelfth and final month in the Yoruba calendar, the Kọ́jọ́dá, during which the Ẹ̀bìbì festival is usually celebrated in."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "a traditional festival celebrated by the Ìjẹ̀bú people of Ẹ̀pẹ́",
+        "May, the twelfth and final month in the Yoruba calendar, the Kọ́jọ́dá, during which the Ẹ̀bìbì festival is usually celebrated in."
+      ],
+      "definitionSourceForm": "Ẹ̀bìbì",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "May, the twelfth and final month in the Yoruba calendar, the Kọ́jọ́dá, during which the Ẹ̀bìbì festival is usually celebrated in.",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ebibi_may"
+      ]
+    },
+    {
+      "wordId": "erele_february",
+      "displayText": "Èrèlé",
+      "englishHint": "february",
+      "status": "match",
+      "matchedForm": "Èrèlé",
+      "canonicalForm": "Èrèlé",
+      "adoptionTarget": "Èrèlé",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "February, the ninth month in the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "èrè",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "lé",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "February, the ninth month in the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Èrèlé",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "February, the ninth month in the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "èrè",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "advantage, reward"
+          ],
+          "previewGlossesAreExactMatches": true
+        },
+        {
+          "kaikkiForm": "lé",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "to exceed in number",
+            "to appear distinctly",
+            "on, on top of, after",
+            "to pursue, to chase",
+            "to become swollen"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "erele_february"
+      ]
+    },
+    {
+      "wordId": "ete_lip",
+      "displayText": "ètè",
+      "englishHint": "lip",
+      "status": "match",
+      "matchedForm": "ètè",
+      "canonicalForm": "ètè",
+      "adoptionTarget": "ètè",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "lip"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "lip"
+      ],
+      "definitionSourceForm": "ètè",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "lip",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ete_lip"
+      ]
+    },
+    {
+      "wordId": "ewa_beans",
+      "displayText": "èwà",
+      "englishHint": "beans",
+      "status": "underdot_mismatch",
+      "matchedForm": "ẹ̀wà",
+      "canonicalForm": "ẹ̀wà",
+      "adoptionTarget": "ẹ̀wà",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "The bean plant, usually referring to several members of the family Fabaceae and often specifically the cowpea plant",
+        "A general name for beans, peas, and legumes, often specifically referring to the black-eyed pea",
+        "cooked beans"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "The bean plant, usually referring to several members of the family Fabaceae and often specifically the cowpea plant",
+        "A general name for beans, peas, and legumes, often specifically referring to the black-eyed pea",
+        "cooked beans"
+      ],
+      "definitionSourceForm": "ẹ̀wà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "A general name for beans, peas, and legumes, often specifically referring to the black-eyed pea",
+      "definitionProposed": "A general name for beans, peas, and legumes, often specifically referring to the black-eyed pea",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ewa_beans"
+      ]
+    },
+    {
+      "wordId": "ilekun_door",
+      "displayText": "ìlẹ̀kùn",
+      "englishHint": "door",
+      "status": "matched_alternative_form",
+      "matchedForm": "ìlẹ̀kùn",
+      "canonicalForm": "ilẹ̀kùn",
+      "adoptionTarget": "ilẹ̀kùn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "door"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "ìlẹ̀",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "ẹ̀kùn",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "door"
+      ],
+      "definitionSourceForm": "ìlẹ̀kùn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "door",
+      "definitionProposed": "door",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "ìlẹ̀",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "land, earth, soil"
+          ],
+          "previewGlossesAreExactMatches": false
+        },
+        {
+          "kaikkiForm": "ẹ̀kùn",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "door, doorjamb"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "ilekun_door"
+      ]
+    },
+    {
+      "wordId": "irin_walk",
+      "displayText": "ìrìn",
+      "englishHint": "walk",
+      "status": "match",
+      "matchedForm": "ìrìn",
+      "canonicalForm": "ìrìn",
+      "adoptionTarget": "ìrìn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "walk; stroll",
+        "journey; trip"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "rìn",
+          "provenance": "derived_reciprocal"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "walk; stroll",
+        "journey; trip"
+      ],
+      "definitionSourceForm": "ìrìn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "walk; stroll",
+      "definitionProposed": "walk; stroll",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "rìn",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "derived_reciprocal",
+          "previewGlosses": [
+            "to walk",
+            "to tickle"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "irin_walk"
+      ]
+    },
+    {
+      "wordId": "ogun_august",
+      "displayText": "Ògún",
+      "englishHint": "august",
+      "status": "match",
+      "matchedForm": "Ògún",
+      "canonicalForm": "Ògún",
+      "adoptionTarget": "Ògún",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "Ogun (orisha of war, iron, metallurgy, and technology), patron of warriors, hunters, blacksmiths, and ironworkers.",
+        "August, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá; named in honor of Ògún. Many Ògún festivals are held during this month."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "Ogun (orisha of war, iron, metallurgy, and technology), patron of warriors, hunters, blacksmiths, and ironworkers.",
+        "August, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá; named in honor of Ògún. Many Ògún festivals are held during this month."
+      ],
+      "definitionSourceForm": "Ògún",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "August, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá; named in honor of Ògún. Many Ògún festivals are held during this month.",
+      "definitionProposed": "August, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá; named in honor of Ògún. Many Ògún festivals are held during this month.",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ogun_august"
+      ]
+    },
+    {
+      "wordId": "seere_january",
+      "displayText": "Ṣẹẹrẹ",
+      "englishHint": "january",
+      "status": "ambiguous_match",
+      "candidatesConsidered": [
+        {
+          "form": "ṣeré",
+          "pos": "verb",
+          "glosses": [
+            "to do a game, to play"
+          ]
+        },
+        {
+          "form": "Ṣẹ̀rẹ́",
+          "pos": "name",
+          "glosses": [
+            "January, the eighth month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+          ]
+        }
+      ],
+      "discoveredViaRelaxedMatch": true,
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "seere_january"
+      ]
+    },
+    {
+      "wordId": "e_joo_please",
+      "displayText": "ẹ jọ̀ọ́",
+      "status": "phrase",
+      "syllableSplitStatus": "skipped_multiword",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "pending_custom",
+      "definitionCurrent": null,
+      "definitionProposed": "Please",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "e_joo_please"
+      ]
+    },
+    {
+      "wordId": "erena_march",
+      "displayText": "Ẹrénà",
+      "englishHint": "march",
+      "status": "underdot_mismatch",
+      "matchedForm": "Ẹrẹ̀nà",
+      "canonicalForm": "Ẹ̀rẹ̀nà",
+      "adoptionTarget": "Ẹrẹ̀nà",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "March, the tenth month in the Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "March, the tenth month in the Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Ẹrẹ̀nà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "March, the tenth month in the Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "erena_march"
+      ]
+    },
+    {
+      "wordId": "ewa_beauty",
+      "displayText": "ẹwà",
+      "englishHint": "beauty",
+      "status": "match",
+      "matchedForm": "ẹwà",
+      "canonicalForm": "ẹwà",
+      "adoptionTarget": "ẹwà",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "beauty, attraction"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "beauty, attraction"
+      ],
+      "definitionSourceForm": "ẹwà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "beauty, attraction",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ewa_beauty"
+      ]
+    },
+    {
+      "wordId": "eye_bird",
+      "displayText": "ẹyẹ",
+      "englishHint": "bird",
+      "status": "match",
+      "matchedForm": "ẹyẹ",
+      "canonicalForm": "ẹyẹ",
+      "adoptionTarget": "ẹyẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "bird"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "bird"
+      ],
+      "definitionSourceForm": "ẹyẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "bird",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "eye_bird"
+      ]
+    },
+    {
+      "wordId": "ejo_snake",
+      "displayText": "ejò",
+      "englishHint": "snake",
+      "status": "match",
+      "matchedForm": "ejò",
+      "canonicalForm": "ejò",
+      "adoptionTarget": "ejò",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "snake"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "snake"
+      ],
+      "definitionSourceForm": "ejò",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "snake",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ejo_snake"
+      ]
+    },
+    {
+      "wordId": "eyin_back",
+      "displayText": "ẹ̀yìn",
+      "englishHint": "back",
+      "status": "match",
+      "matchedForm": "ẹ̀yìn",
+      "canonicalForm": "ẹ̀yìn",
+      "adoptionTarget": "ẹ̀yìn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "back",
+        "aftermath",
+        "end, final",
+        "absence"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "back",
+        "aftermath",
+        "end, final",
+        "absence"
+      ],
+      "definitionSourceForm": "ẹ̀yìn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "back",
+      "definitionProposed": "back",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "eyin_back"
+      ]
+    },
+    {
+      "wordId": "esin_horse",
+      "displayText": "ẹṣin",
+      "englishHint": "horse",
+      "status": "match",
+      "matchedForm": "ẹṣin",
+      "canonicalForm": "ẹṣin",
+      "adoptionTarget": "ẹṣin",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "horse"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "horse"
+      ],
+      "definitionSourceForm": "ẹṣin",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "horse",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "esin_horse"
+      ]
+    },
+    {
+      "wordId": "eekanna_nail",
+      "displayText": "èékánná",
+      "englishHint": "nail",
+      "status": "match",
+      "matchedForm": "èékánná",
+      "canonicalForm": "èékánná",
+      "adoptionTarget": "èékánná",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "nail (may refer to nails of either the toe or finger), claw",
+        "A term used to identify a diverse variety of plants and trees with typically thorny features."
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "nail (may refer to nails of either the toe or finger), claw",
+        "A term used to identify a diverse variety of plants and trees with typically thorny features."
+      ],
+      "definitionSourceForm": "èékánná",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "nail (may refer to nails of either the toe or finger), claw",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "eekanna_nail"
+      ]
+    },
+    {
+      "wordId": "ojo_day",
+      "displayText": "ọjọ́",
+      "englishHint": "day",
+      "status": "match",
+      "matchedForm": "ọjọ́",
+      "canonicalForm": "ọjọ́",
+      "adoptionTarget": "ọjọ́",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "day"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "day"
+      ],
+      "definitionSourceForm": "ọjọ́",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "day",
+      "definitionProposed": "day",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ojo_day"
+      ]
+    },
+    {
+      "wordId": "owewe_september",
+      "displayText": "Ọwẹ́wẹ",
+      "englishHint": "september",
+      "status": "underdot_mismatch",
+      "matchedForm": "Òwéwe",
+      "canonicalForm": "Òwéwe",
+      "adoptionTarget": "Òwéwe",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "September, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "September, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Òwéwe",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "September, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "definitionProposed": "September, the third month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "owewe_september"
+      ]
+    },
+    {
+      "wordId": "ope_december",
+      "displayText": "Ọ̀pẹ",
+      "englishHint": "december",
+      "status": "matched_alternative_form",
+      "matchedForm": "Ọ̀pẹ",
+      "canonicalForm": "Ọ̀pẹ̀",
+      "adoptionTarget": "Ọ̀pẹ̀",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "December, the seventh month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "December, the seventh month of the traditional Yoruba calendar, the Kọ́jọ́dá"
+      ],
+      "definitionSourceForm": "Ọ̀pẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "December, the seventh month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "definitionProposed": "December, the seventh month of the traditional Yoruba calendar, the Kọ́jọ́dá",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ope_december"
+      ]
+    },
+    {
+      "wordId": "owawa_october",
+      "displayText": "Ọ̀wàwà",
+      "englishHint": "october",
+      "status": "ambiguous_match",
+      "candidatesConsidered": [
+        {
+          "form": "ọ̀fàfà",
+          "pos": "noun",
+          "glosses": [
+            "Tree hyrax; (in particular) the Dendrohyrax interfluvialis"
+          ]
+        },
+        {
+          "form": "ọ̀hàhà",
+          "pos": "noun",
+          "glosses": [
+            "alternative form of ọ̀fàfà (“Tree hyrax”)"
+          ]
+        },
+        {
+          "form": "ọ̀wàwà",
+          "pos": "noun",
+          "glosses": [
+            "alternative form of ọ̀fàfà (“Tree hyrax”)"
+          ]
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "owawa_october"
+      ]
+    },
+    {
+      "wordId": "ile_home",
+      "displayText": "ilé",
+      "englishHint": "home",
+      "status": "match",
+      "matchedForm": "ilé",
+      "canonicalForm": "ilé",
+      "adoptionTarget": "ilé",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "home, house, abode",
+        "household",
+        "place, area",
+        "goal (an area into which the players attempt to put an object)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "home, house, abode",
+        "household",
+        "place, area",
+        "goal (an area into which the players attempt to put an object)"
+      ],
+      "definitionSourceForm": "ilé",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "home, house, abode",
+      "definitionProposed": "home, house, abode",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ile_home"
+      ]
+    },
+    {
+      "wordId": "oba_king",
+      "displayText": "ọba",
+      "englishHint": "king",
+      "status": "match",
+      "matchedForm": "ọba",
+      "canonicalForm": "ọba",
+      "adoptionTarget": "ọba",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "king, queen, monarch",
+        "father"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "king, queen, monarch",
+        "father"
+      ],
+      "definitionSourceForm": "ọba",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "king, queen, monarch",
+      "definitionProposed": "king, queen, monarch",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "oba_king"
+      ]
+    },
+    {
+      "wordId": "alubosa_onion",
+      "displayText": "àlùbọ́sà",
+      "englishHint": "onion",
+      "status": "match",
+      "matchedForm": "àlùbọ́sà",
+      "canonicalForm": "àlùbọ́sà",
+      "adoptionTarget": "àlùbọ́sà",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "onion"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "onion"
+      ],
+      "definitionSourceForm": "àlùbọ́sà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "onion",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "alubosa_onion"
+      ]
+    },
+    {
+      "wordId": "jokoo_sit",
+      "displayText": "jókòó",
+      "englishHint": "sit",
+      "status": "match",
+      "matchedForm": "jókòó",
+      "canonicalForm": "jókòó",
+      "adoptionTarget": "jókòó",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to sit (down)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "jó",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "òkó",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to sit (down)"
+      ],
+      "definitionSourceForm": "jókòó",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "to sit (down)",
+      "definitionProposed": "to sit (down)",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "jó",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "to dance",
+            "to burn"
+          ],
+          "previewGlossesAreExactMatches": true
+        },
+        {
+          "kaikkiForm": "òkó",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "farm, field",
+            "stone; projectile",
+            "penis",
+            "Oko (orisha), the orisha of farming and agriculture, in his male form, he is regarded as a sorcerer. The root, oṣó (“sorcerer”) in many names among the Ẹ̀gbá and Ìjẹ̀bú refers to Oko."
+          ],
+          "previewGlossesAreExactMatches": false
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "jokoo_sit"
+      ]
+    },
+    {
+      "wordId": "ose_soap",
+      "displayText": "ọṣẹ",
+      "englishHint": "soap",
+      "status": "match",
+      "matchedForm": "ọṣẹ",
+      "canonicalForm": "ọṣẹ",
+      "adoptionTarget": "ọṣẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "soap"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "soap"
+      ],
+      "definitionSourceForm": "ọṣẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "soap",
+      "definitionProposed": "soap",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ose_soap"
+      ]
+    },
+    {
+      "wordId": "digi_mirror",
+      "displayText": "dígí",
+      "englishHint": "mirror",
+      "status": "match",
+      "matchedForm": "dígí",
+      "canonicalForm": "dígí",
+      "adoptionTarget": "dígí",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "mirror, glass"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "mirror, glass"
+      ],
+      "definitionSourceForm": "dígí",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "mirror, glass",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "digi_mirror"
+      ]
+    },
+    {
+      "wordId": "ogede_banana",
+      "displayText": "ọ̀gẹ̀dè",
+      "englishHint": "banana",
+      "status": "underdot_mismatch",
+      "matchedForm": "ọ̀gẹ̀dẹ̀",
+      "canonicalForm": "ọ̀gẹ̀dẹ̀",
+      "adoptionTarget": "ọ̀gẹ̀dẹ̀",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "banana, plantain"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "banana, plantain"
+      ],
+      "definitionSourceForm": "ọ̀gẹ̀dẹ̀",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "banana, plantain",
+      "definitionProposed": "banana, plantain",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ogede_banana"
+      ]
+    },
+    {
+      "wordId": "moto_automobile",
+      "displayText": "mọ́tò",
+      "englishHint": "automobile",
+      "status": "match",
+      "matchedForm": "mọ́tò",
+      "canonicalForm": "mọ́tò",
+      "adoptionTarget": "mọ́tò",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "car"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "car"
+      ],
+      "definitionSourceForm": "mọ́tò",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "car",
+      "definitionProposed": "car",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "moto_automobile"
+      ]
+    },
+    {
+      "wordId": "ookan_one",
+      "displayText": "oókan",
+      "englishHint": "one",
+      "status": "match",
+      "matchedForm": "oókan",
+      "canonicalForm": "oókan",
+      "adoptionTarget": "oókan",
+      "matchedPos": "num",
+      "matchedGlosses": [
+        "one (used when counting)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "owó",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "ọ̀kan",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "one (used when counting)"
+      ],
+      "definitionSourceForm": "oókan",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "one (used when counting)",
+      "definitionProposed": "one (used when counting)",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "owó",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "money, cash"
+          ],
+          "previewGlossesAreExactMatches": true
+        },
+        {
+          "kaikkiForm": "ọ̀kan",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "one",
+            "Sorindeia juglandifolia"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "ookan_one"
+      ]
+    },
+    {
+      "wordId": "kalamu_pen",
+      "displayText": "kálàmú",
+      "englishHint": "pen",
+      "status": "tone_mismatch",
+      "matchedForm": "kálàmù",
+      "canonicalForm": "kálàmù",
+      "adoptionTarget": "kálàmù",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "pen (writing tool)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "pen (writing tool)"
+      ],
+      "definitionSourceForm": "kálàmù",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "pen (writing tool)",
+      "definitionProposed": "pen (writing tool)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "kalamu_pen"
+      ]
+    },
+    {
+      "wordId": "kasu_cashew",
+      "displayText": "kaṣú",
+      "englishHint": "cashew",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "kasu_cashew"
+      ]
+    },
+    {
+      "wordId": "irawo_star",
+      "displayText": "ìràwọ̀",
+      "englishHint": "star",
+      "status": "match",
+      "matchedForm": "ìràwọ̀",
+      "canonicalForm": "ìràwọ̀",
+      "adoptionTarget": "ìràwọ̀",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "star, celestial object, celestial body",
+        "asterisk (*)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "star, celestial object, celestial body",
+        "asterisk (*)"
+      ],
+      "definitionSourceForm": "ìràwọ̀",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "star, celestial object, celestial body",
+      "definitionProposed": "star, celestial object, celestial body",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "irawo_star"
+      ]
+    },
+    {
+      "wordId": "redio_radio",
+      "displayText": "rédíò",
+      "englishHint": "radio",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "redio_radio"
+      ]
+    },
+    {
+      "wordId": "ibepe_papaya",
+      "displayText": "ìbẹ́pẹ",
+      "englishHint": "papaya",
+      "status": "match",
+      "matchedForm": "ìbẹ́pẹ",
+      "canonicalForm": "ìbẹ́pẹ",
+      "adoptionTarget": "ìbẹ́pẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "papaya"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "papaya"
+      ],
+      "definitionSourceForm": "ìbẹ́pẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "papaya",
+      "definitionProposed": "papaya",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ibepe_papaya"
+      ]
+    },
+    {
+      "wordId": "agunfon_giraffe",
+      "displayText": "àgùnfon",
+      "englishHint": "giraffe",
+      "status": "underdot_mismatch",
+      "matchedForm": "àgùnfọn",
+      "canonicalForm": "àgùnfọn",
+      "adoptionTarget": "àgùnfọn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "a type of long-necked bird with a crest; black crowned crane",
+        "giraffe (traditionally, giraffes did not live in the range of Yorubaland)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "note": "Not a semantic mismatch - Kaikki's candidate lists both 'crested crane' AND 'giraffe' as senses of the same word (giraffes are noted as not traditionally native to Yorubaland, suggesting an extended/metaphorical use of the crane word). The only real question is the underdot: we have 'àgùnfon', Kaikki has 'àgùnfọn'. Still needs a decision on which spelling to use, just not for the reason first suspected.",
+      "syllableSplitStatus": "mismatch",
+      "syllableSplitManual": [
+        "à",
+        "gùn",
+        "fọn"
+      ],
+      "syllableSplitProgrammatic": [
+        "à",
+        "gùn",
+        "fon"
+      ],
+      "definitionCandidateGlosses": [
+        "a type of long-necked bird with a crest; black crowned crane",
+        "giraffe (traditionally, giraffes did not live in the range of Yorubaland)"
+      ],
+      "definitionSourceForm": "àgùnfọn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "giraffe (traditionally, giraffes did not live in the range of Yorubaland)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "agunfon_giraffe"
+      ]
+    },
+    {
+      "wordId": "olongbo_cat",
+      "displayText": "olóńgbò",
+      "englishHint": "cat",
+      "status": "matched_alternative_form",
+      "matchedForm": "olóńgbò",
+      "canonicalForm": "ológbò",
+      "adoptionTarget": "ológbò",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "cat"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "cat"
+      ],
+      "definitionSourceForm": "olóńgbò",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "cat",
+      "definitionProposed": "cat",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "olongbo_cat"
+      ]
+    },
+    {
+      "wordId": "okuta_stone",
+      "displayText": "òkúta",
+      "englishHint": "stone",
+      "status": "match",
+      "matchedForm": "òkúta",
+      "canonicalForm": "òkúta",
+      "adoptionTarget": "òkúta",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "rock, stone",
+        "grinding stone"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "rock, stone",
+        "grinding stone"
+      ],
+      "definitionSourceForm": "òkúta",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "rock, stone",
+      "definitionProposed": "rock, stone",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "okuta_stone"
+      ]
+    },
+    {
+      "wordId": "ogbon_wisdom",
+      "displayText": "ọgbọ́n",
+      "englishHint": "wisdom",
+      "status": "match",
+      "matchedForm": "ọgbọ́n",
+      "canonicalForm": "ọgbọ́n",
+      "adoptionTarget": "ọgbọ́n",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "wisdom; sense"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "wisdom; sense"
+      ],
+      "definitionSourceForm": "ọgbọ́n",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "wisdom; sense",
+      "definitionProposed": "wisdom; sense",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ogbon_wisdom"
+      ]
+    },
+    {
+      "wordId": "osan_orange",
+      "displayText": "ọsàn",
+      "englishHint": "orange",
+      "status": "match",
+      "matchedForm": "ọsàn",
+      "canonicalForm": "ọsàn",
+      "adoptionTarget": "ọsàn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "orange (fruit)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "orange (fruit)"
+      ],
+      "definitionSourceForm": "ọsàn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "orange (fruit)",
+      "definitionProposed": "orange (fruit)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "osan_orange"
+      ]
+    },
+    {
+      "wordId": "guafa_guava",
+      "displayText": "gúáfà",
+      "englishHint": "guava",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "guafa_guava"
+      ]
+    },
+    {
+      "wordId": "ifoyin_toothbrush",
+      "displayText": "ìfọyín",
+      "englishHint": "toothbrush",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ifoyin_toothbrush"
+      ]
+    },
+    {
+      "wordId": "pako_timber",
+      "displayText": "pákó",
+      "englishHint": "timber",
+      "status": "match",
+      "matchedForm": "pákó",
+      "canonicalForm": "pákó",
+      "adoptionTarget": "pákó",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "wood, plank, wooden board"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "resolvedBy": "manual_selection",
+      "note": "Wood/plank is clearly the timber sense; naive keyword search missed it since gloss says \"wood, plank\" not \"timber\".",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "wood, plank, wooden board"
+      ],
+      "definitionSourceForm": "pákó",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "wood, plank, wooden board",
+      "definitionProposed": "wood, plank, wooden board",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "pako_timber"
+      ]
+    },
+    {
+      "wordId": "adiye_chicken",
+      "displayText": "adìyẹ",
+      "englishHint": "chicken",
+      "status": "match",
+      "matchedForm": "adìyẹ",
+      "canonicalForm": "adìyẹ",
+      "adoptionTarget": "adìyẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "alternative form of adìẹ (“chicken”)"
+      ],
+      "matchedAltOfTargets": [
+        "adìẹ"
+      ],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "chicken"
+      ],
+      "definitionSourceForm": "adìẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": false,
+      "definitionStatus": "pending_custom",
+      "definitionCurrent": null,
+      "definitionProposed": "chicken",
+      "definitionNote": "Definition redirected from a Kaikki cross-reference (\"alternative form of adìẹ\") to its real entry.",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "adiye_chicken"
+      ]
+    },
+    {
+      "wordId": "buredi_bread",
+      "displayText": "búrẹ́dì",
+      "englishHint": "bread",
+      "status": "match",
+      "matchedForm": "búrẹ́dì",
+      "canonicalForm": "búrẹ́dì",
+      "adoptionTarget": "búrẹ́dì",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "bread"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "bread"
+      ],
+      "definitionSourceForm": "búrẹ́dì",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "bread",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "buredi_bread"
+      ]
+    },
+    {
+      "wordId": "ogun_twenty",
+      "displayText": "ogún",
+      "englishHint": "twenty",
+      "status": "match",
+      "matchedForm": "ogún",
+      "canonicalForm": "ogún",
+      "adoptionTarget": "ogún",
+      "matchedPos": "num",
+      "matchedGlosses": [
+        "twenty",
+        "twenty",
+        "twentieth"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "twenty",
+        "twenty",
+        "twentieth"
+      ],
+      "definitionSourceForm": "ogún",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "twenty",
+      "definitionProposed": "twenty",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ogun_twenty"
+      ]
+    },
+    {
+      "wordId": "esinsin_fly",
+      "displayText": "eṣinṣin",
+      "englishHint": "fly",
+      "status": "match",
+      "matchedForm": "eṣinṣin",
+      "canonicalForm": "eṣinṣin",
+      "adoptionTarget": "eṣinṣin",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "housefly, fly (insect)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "housefly, fly (insect)"
+      ],
+      "definitionSourceForm": "eṣinṣin",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "housefly, fly (insect)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "esinsin_fly"
+      ]
+    },
+    {
+      "wordId": "oduduwa_oduduwa",
+      "displayText": "odùduwà",
+      "englishHint": "oduduwa",
+      "status": "match",
+      "matchedForm": "Odùduwà",
+      "canonicalForm": "Odùduwà",
+      "adoptionTarget": "Odùduwà",
+      "matchedPos": "name",
+      "matchedGlosses": [
+        "The legendary ruler (Ọọ̀ni) of Ifẹ̀, he waged a war with Ọbàtálá and gained control of Ifẹ̀, where he became Ọọ̀ni. Because of this and his many descendants who founded modern Yoruba settlements, he is regarded as the father of the Yorùbá people",
+        "an ancestral deity associated with creation"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "odù",
+          "provenance": "derived_reciprocal"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "The legendary ruler (Ọọ̀ni) of Ifẹ̀, he waged a war with Ọbàtálá and gained control of Ifẹ̀, where he became Ọọ̀ni. Because of this and his many descendants who founded modern Yoruba settlements, he is regarded as the father of the Yorùbá people",
+        "an ancestral deity associated with creation"
+      ],
+      "definitionSourceForm": "Odùduwà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "The legendary ruler (Ọọ̀ni) of Ifẹ̀, he waged a war with Ọbàtálá and gained control of Ifẹ̀, where he became Ọọ̀ni. Because of this and his many descendants who founded modern Yoruba settlements, he is regarded as the father of the Yorùbá people",
+      "definitionProposed": "The legendary ruler (Ọọ̀ni) of Ifẹ̀, he waged a war with Ọbàtálá and gained control of Ifẹ̀, where he became Ọọ̀ni. Because of this and his many descendants who founded modern Yoruba settlements, he is regarded as the father of the Yorùbá people",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "odù",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "derived_reciprocal",
+          "previewGlosses": [
+            "cauldron, large clay pot, usually used for rituals or sacrifices",
+            "a sign of the Ifa divination system; of which there are 256"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "oduduwa_oduduwa"
+      ]
+    },
+    {
+      "wordId": "maluu_cow",
+      "displayText": "màlúù",
+      "englishHint": "cow",
+      "status": "match",
+      "matchedForm": "màlúù",
+      "canonicalForm": "màlúù",
+      "adoptionTarget": "màlúù",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "cow, ox, cattle; (in particular) zebu cow"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "cow, ox, cattle; (in particular) zebu cow"
+      ],
+      "definitionSourceForm": "màlúù",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "cow, ox, cattle; (in particular) zebu cow",
+      "definitionProposed": "cow, ox, cattle; (in particular) zebu cow",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "maluu_cow"
+      ]
+    },
+    {
+      "wordId": "sibi_spoon",
+      "displayText": "ṣíbí",
+      "englishHint": "spoon",
+      "status": "match",
+      "matchedForm": "ṣíbí",
+      "canonicalForm": "ṣíbí",
+      "adoptionTarget": "ṣíbí",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "spoon"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "spoon"
+      ],
+      "definitionSourceForm": "ṣíbí",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "spoon",
+      "definitionProposed": "spoon",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "sibi_spoon"
+      ]
+    },
+    {
+      "wordId": "osupa_moon",
+      "displayText": "òṣùpá",
+      "englishHint": "moon",
+      "status": "match",
+      "matchedForm": "òṣùpá",
+      "canonicalForm": "òṣùpá",
+      "adoptionTarget": "òṣùpá",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "moon"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "moon"
+      ],
+      "definitionSourceForm": "òṣùpá",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "moon",
+      "definitionProposed": "moon",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "osupa_moon"
+      ]
+    },
+    {
+      "wordId": "goomu_gum",
+      "displayText": "gọ́ọ̀mù",
+      "englishHint": "gum",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "goomu_gum"
+      ]
+    },
+    {
+      "wordId": "inura_towel",
+      "displayText": "ìnura",
+      "englishHint": "towel",
+      "status": "not_in_kaikki",
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [],
+      "definitionSourceForm": null,
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "missing",
+      "definitionCurrent": null,
+      "definitionProposed": null,
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "inura_towel"
+      ]
+    },
+    {
+      "wordId": "ina_fire",
+      "displayText": "iná",
+      "englishHint": "fire",
+      "status": "match",
+      "matchedForm": "iná",
+      "canonicalForm": "iná",
+      "adoptionTarget": "iná",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "fire, light"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "fire, light"
+      ],
+      "definitionSourceForm": "iná",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "fire, light",
+      "definitionProposed": "fire, light",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ina_fire"
+      ]
+    },
+    {
+      "wordId": "oja_market",
+      "displayText": "ọjà",
+      "englishHint": "market",
+      "status": "match",
+      "matchedForm": "ọjà",
+      "canonicalForm": "ọjà",
+      "adoptionTarget": "ọjà",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "village, town, homestead",
+        "market",
+        "market commodities, merchandise; products",
+        "marijuana"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "village, town, homestead",
+        "market",
+        "market commodities, merchandise; products",
+        "marijuana"
+      ],
+      "definitionSourceForm": "ọjà",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "market",
+      "definitionProposed": "market",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "oja_market"
+      ]
+    },
+    {
+      "wordId": "obe_knife",
+      "displayText": "ọ̀bẹ",
+      "englishHint": "knife",
+      "status": "match",
+      "matchedForm": "ọ̀bẹ",
+      "canonicalForm": "ọ̀bẹ",
+      "adoptionTarget": "ọ̀bẹ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "knife, blade"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "knife, blade"
+      ],
+      "definitionSourceForm": "ọ̀bẹ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "knife, blade",
+      "definitionProposed": "knife, blade",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "obe_knife"
+      ]
+    },
+    {
+      "wordId": "ese_leg",
+      "displayText": "ẹsẹ̀",
+      "englishHint": "leg",
+      "status": "match",
+      "matchedForm": "ẹsẹ̀",
+      "canonicalForm": "ẹsẹ̀",
+      "adoptionTarget": "ẹsẹ̀",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "foot, leg",
+        "foot (measurement)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "foot, leg",
+        "foot (measurement)"
+      ],
+      "definitionSourceForm": "ẹsẹ̀",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "confirmed",
+      "definitionCurrent": "foot, leg",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "ese_leg"
+      ]
+    },
+    {
+      "wordId": "aso_cloth",
+      "displayText": "aṣọ",
+      "englishHint": "cloth",
+      "status": "match",
+      "matchedForm": "aṣọ",
+      "canonicalForm": "aṣọ",
+      "adoptionTarget": "aṣọ",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "any cloth, fabric, textile",
+        "clothes, dress, garment"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "any cloth, fabric, textile",
+        "clothes, dress, garment"
+      ],
+      "definitionSourceForm": "aṣọ",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "any cloth, fabric, textile",
+      "definitionProposed": "any cloth, fabric, textile",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "aso_cloth"
+      ]
+    },
+    {
+      "wordId": "fo_break",
+      "displayText": "fọ́",
+      "englishHint": "break",
+      "status": "match",
+      "matchedForm": "fọ́",
+      "canonicalForm": "fọ́",
+      "adoptionTarget": "fọ́",
+      "matchedPos": "verb",
+      "matchedGlosses": [
+        "to break (a vessel)",
+        "to destroy (a town or nation by war)",
+        "to become broken, to explode, to collapse",
+        "to suffer from a headache or blindness"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "to break (a vessel)",
+        "to destroy (a town or nation by war)",
+        "to become broken, to explode, to collapse",
+        "to suffer from a headache or blindness"
+      ],
+      "definitionSourceForm": "fọ́",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": null,
+      "definitionProposed": "to break (a vessel)",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "fo_break"
+      ]
+    },
+    {
+      "wordId": "inu_inside",
+      "displayText": "inú",
+      "englishHint": "inside",
+      "status": "match",
+      "matchedForm": "inú",
+      "canonicalForm": "inú",
+      "adoptionTarget": "inú",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "stomach, abdomen",
+        "inside, interior",
+        "mind, heart",
+        "womb",
+        "secret"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "stomach, abdomen",
+        "inside, interior",
+        "mind, heart",
+        "womb",
+        "secret"
+      ],
+      "definitionSourceForm": "inú",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": null,
+      "definitionProposed": "inside, interior",
+      "componentsProposal": [],
+      "usedAsComponentOf": [],
+      "components": [
+        "inu_inside"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+[
+  {
+    "name": "ookan_one_owo_proposal_must_not_match_owo_hand",
+    "note": "componentsProposal item for kaikkiForm 'owó' must have wordId: null (not 'owo_hand') - the underdot boundary bug.",
+    "entry": {
+      "wordId": "ookan_one",
+      "displayText": "oókan",
+      "englishHint": "one",
+      "status": "match",
+      "matchedForm": "oókan",
+      "canonicalForm": "oókan",
+      "adoptionTarget": "oókan",
+      "matchedPos": "num",
+      "matchedGlosses": [
+        "one (used when counting)"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "owó",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "ọ̀kan",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "one (used when counting)"
+      ],
+      "definitionSourceForm": "oókan",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "one (used when counting)",
+      "definitionProposed": "one (used when counting)",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "owó",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "money, cash"
+          ],
+          "previewGlossesAreExactMatches": true
+        },
+        {
+          "kaikkiForm": "ọ̀kan",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "one",
+            "Sorindeia juglandifolia"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "ookan_one"
+      ]
+    }
+  },
+  {
+    "name": "ilekun_door_ile_component_must_not_resolve_to_ile_home",
+    "note": "componentsProposal item for kaikkiForm 'ìlẹ̀' must have wordId: null and previewGlosses referencing 'land/ground', not 'home' - the wrong-homograph gloss-pick bug.",
+    "entry": {
+      "wordId": "ilekun_door",
+      "displayText": "ìlẹ̀kùn",
+      "englishHint": "door",
+      "status": "matched_alternative_form",
+      "matchedForm": "ìlẹ̀kùn",
+      "canonicalForm": "ilẹ̀kùn",
+      "adoptionTarget": "ilẹ̀kùn",
+      "matchedPos": "noun",
+      "matchedGlosses": [
+        "door"
+      ],
+      "matchedAltOfTargets": [],
+      "matchedComponentCandidates": [
+        {
+          "form": "ìlẹ̀",
+          "provenance": "etymology_template"
+        },
+        {
+          "form": "ẹ̀kùn",
+          "provenance": "etymology_template"
+        }
+      ],
+      "syllableSplitStatus": "match",
+      "definitionCandidateGlosses": [
+        "door"
+      ],
+      "definitionSourceForm": "ìlẹ̀kùn",
+      "definitionSourceIsCrossReference": false,
+      "definitionLinkedSameAsSpelling": true,
+      "definitionStatus": "proposed",
+      "definitionCurrent": "door",
+      "definitionProposed": "door",
+      "componentsProposal": [
+        {
+          "kaikkiForm": "ìlẹ̀",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "land, earth, soil"
+          ],
+          "previewGlossesAreExactMatches": false
+        },
+        {
+          "kaikkiForm": "ẹ̀kùn",
+          "wordId": null,
+          "targetSpellingConfirmed": false,
+          "ambiguous": false,
+          "possibleMatches": [],
+          "provenance": "etymology_template",
+          "previewGlosses": [
+            "door, doorjamb"
+          ],
+          "previewGlossesAreExactMatches": true
+        }
+      ],
+      "usedAsComponentOf": [],
+      "components": [
+        "ilekun_door"
+      ]
+    }
+  }
+]

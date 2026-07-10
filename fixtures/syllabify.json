@@ -1,0 +1,1184 @@
+[
+  {
+    "wordId": "ejika_shoulder",
+    "displayText": "ejika",
+    "expectedSyllables": [
+      "e",
+      "ji",
+      "ka"
+    ],
+    "computedSyllables": [
+      "e",
+      "ji",
+      "ka"
+    ]
+  },
+  {
+    "wordId": "eti_ear",
+    "displayText": "etí",
+    "expectedSyllables": [
+      "e",
+      "tí"
+    ],
+    "computedSyllables": [
+      "e",
+      "tí"
+    ]
+  },
+  {
+    "wordId": "imu_nose",
+    "displayText": "imú",
+    "expectedSyllables": [
+      "i",
+      "mú"
+    ],
+    "computedSyllables": [
+      "i",
+      "mú"
+    ]
+  },
+  {
+    "wordId": "oju_eye",
+    "displayText": "ojú",
+    "expectedSyllables": [
+      "o",
+      "jú"
+    ],
+    "computedSyllables": [
+      "o",
+      "jú"
+    ]
+  },
+  {
+    "wordId": "ori_head",
+    "displayText": "orí",
+    "expectedSyllables": [
+      "o",
+      "rí"
+    ],
+    "computedSyllables": [
+      "o",
+      "rí"
+    ]
+  },
+  {
+    "wordId": "awo_plate",
+    "displayText": "àwo",
+    "expectedSyllables": [
+      "à",
+      "wo"
+    ],
+    "computedSyllables": [
+      "à",
+      "wo"
+    ]
+  },
+  {
+    "wordId": "ikun_stomach",
+    "displayText": "ikùn",
+    "expectedSyllables": [
+      "i",
+      "kùn"
+    ],
+    "computedSyllables": [
+      "i",
+      "kùn"
+    ]
+  },
+  {
+    "wordId": "ikoko_pot",
+    "displayText": "ìkòkò",
+    "expectedSyllables": [
+      "ì",
+      "kò",
+      "kò"
+    ],
+    "computedSyllables": [
+      "ì",
+      "kò",
+      "kò"
+    ]
+  },
+  {
+    "wordId": "enu_mouth",
+    "displayText": "ẹnu",
+    "expectedSyllables": [
+      "ẹ",
+      "nu"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "nu"
+    ]
+  },
+  {
+    "wordId": "orun_neck",
+    "displayText": "ọrùn",
+    "expectedSyllables": [
+      "ọ",
+      "rùn"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "rùn"
+    ]
+  },
+  {
+    "wordId": "owo_hand",
+    "displayText": "ọwọ",
+    "expectedSyllables": [
+      "ọ",
+      "wọ"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "wọ"
+    ]
+  },
+  {
+    "wordId": "agemo_july",
+    "displayText": "Agẹmọ",
+    "expectedSyllables": [
+      "a",
+      "gẹ",
+      "mọ"
+    ],
+    "computedSyllables": [
+      "a",
+      "gẹ",
+      "mọ"
+    ]
+  },
+  {
+    "wordId": "aja_dog",
+    "displayText": "ajá",
+    "expectedSyllables": [
+      "a",
+      "já"
+    ],
+    "computedSyllables": [
+      "a",
+      "já"
+    ]
+  },
+  {
+    "wordId": "alangba_lizard",
+    "displayText": "aláǹgbá",
+    "expectedSyllables": [
+      "a",
+      "lá",
+      "ǹ",
+      "gbá"
+    ],
+    "computedSyllables": [
+      "a",
+      "lá",
+      "ǹ",
+      "gbá"
+    ]
+  },
+  {
+    "wordId": "baluwe_bathroom",
+    "displayText": "balùwẹ̀",
+    "expectedSyllables": [
+      "ba",
+      "lù",
+      "wẹ̀"
+    ],
+    "computedSyllables": [
+      "ba",
+      "lù",
+      "wẹ̀"
+    ]
+  },
+  {
+    "wordId": "beelu_november",
+    "displayText": "Beélú",
+    "expectedSyllables": [
+      "be",
+      "é",
+      "lú"
+    ],
+    "computedSyllables": [
+      "be",
+      "é",
+      "lú"
+    ]
+  },
+  {
+    "wordId": "dide_stand",
+    "displayText": "dìde",
+    "expectedSyllables": [
+      "dì",
+      "de"
+    ],
+    "computedSyllables": [
+      "dì",
+      "de"
+    ]
+  },
+  {
+    "wordId": "ewe_leaf",
+    "displayText": "ewé",
+    "expectedSyllables": [
+      "e",
+      "wé"
+    ],
+    "computedSyllables": [
+      "e",
+      "wé"
+    ]
+  },
+  {
+    "wordId": "ibusun_bed",
+    "displayText": "ibùsùn",
+    "expectedSyllables": [
+      "i",
+      "bù",
+      "sùn"
+    ],
+    "computedSyllables": [
+      "i",
+      "bù",
+      "sùn"
+    ]
+  },
+  {
+    "wordId": "idodo_navel",
+    "displayText": "idodo",
+    "expectedSyllables": [
+      "i",
+      "do",
+      "do"
+    ],
+    "computedSyllables": [
+      "i",
+      "do",
+      "do"
+    ]
+  },
+  {
+    "wordId": "igbe_april",
+    "displayText": "Igbe",
+    "expectedSyllables": [
+      "i",
+      "gbe"
+    ],
+    "computedSyllables": [
+      "i",
+      "gbe"
+    ]
+  },
+  {
+    "wordId": "igbo_forest",
+    "displayText": "igbó",
+    "expectedSyllables": [
+      "i",
+      "gbó"
+    ],
+    "computedSyllables": [
+      "i",
+      "gbó"
+    ]
+  },
+  {
+    "wordId": "irin_iron",
+    "displayText": "irin",
+    "expectedSyllables": [
+      "i",
+      "rin"
+    ],
+    "computedSyllables": [
+      "i",
+      "rin"
+    ]
+  },
+  {
+    "wordId": "itan_thigh",
+    "displayText": "itan",
+    "expectedSyllables": [
+      "i",
+      "tan"
+    ],
+    "computedSyllables": [
+      "i",
+      "tan"
+    ]
+  },
+  {
+    "wordId": "jeun_eat",
+    "displayText": "jẹun",
+    "expectedSyllables": [
+      "jẹ",
+      "un"
+    ],
+    "computedSyllables": [
+      "jẹ",
+      "un"
+    ]
+  },
+  {
+    "wordId": "lo_go",
+    "displayText": "lọ",
+    "expectedSyllables": [
+      "lọ"
+    ],
+    "computedSyllables": [
+      "lọ"
+    ]
+  },
+  {
+    "wordId": "okudu_june",
+    "displayText": "Okúdù",
+    "expectedSyllables": [
+      "o",
+      "kú",
+      "dù"
+    ],
+    "computedSyllables": [
+      "o",
+      "kú",
+      "dù"
+    ]
+  },
+  {
+    "wordId": "pele_sorry",
+    "displayText": "pẹ̀lẹ́",
+    "expectedSyllables": [
+      "pẹ̀",
+      "lẹ́"
+    ],
+    "computedSyllables": [
+      "pẹ̀",
+      "lẹ́"
+    ]
+  },
+  {
+    "wordId": "pepeye_duck",
+    "displayText": "pẹ́pẹ́yẹ",
+    "expectedSyllables": [
+      "pẹ́",
+      "pẹ́",
+      "yẹ"
+    ],
+    "computedSyllables": [
+      "pẹ́",
+      "pẹ́",
+      "yẹ"
+    ]
+  },
+  {
+    "wordId": "ra_crawl",
+    "displayText": "rá",
+    "expectedSyllables": [
+      "rá"
+    ],
+    "computedSyllables": [
+      "rá"
+    ]
+  },
+  {
+    "wordId": "sare_run",
+    "displayText": "sáré",
+    "expectedSyllables": [
+      "sá",
+      "ré"
+    ],
+    "computedSyllables": [
+      "sá",
+      "ré"
+    ]
+  },
+  {
+    "wordId": "wa_come",
+    "displayText": "wá",
+    "expectedSyllables": [
+      "wá"
+    ],
+    "computedSyllables": [
+      "wá"
+    ]
+  },
+  {
+    "wordId": "aya_chest",
+    "displayText": "àyà",
+    "expectedSyllables": [
+      "à",
+      "yà"
+    ],
+    "computedSyllables": [
+      "à",
+      "yà"
+    ]
+  },
+  {
+    "wordId": "ebibi_may",
+    "displayText": "Èbìbí",
+    "expectedSyllables": [
+      "è",
+      "bì",
+      "bí"
+    ],
+    "computedSyllables": [
+      "è",
+      "bì",
+      "bí"
+    ]
+  },
+  {
+    "wordId": "erele_february",
+    "displayText": "Èrèlé",
+    "expectedSyllables": [
+      "è",
+      "rè",
+      "lé"
+    ],
+    "computedSyllables": [
+      "è",
+      "rè",
+      "lé"
+    ]
+  },
+  {
+    "wordId": "ete_lip",
+    "displayText": "ètè",
+    "expectedSyllables": [
+      "è",
+      "tè"
+    ],
+    "computedSyllables": [
+      "è",
+      "tè"
+    ]
+  },
+  {
+    "wordId": "ewa_beans",
+    "displayText": "èwà",
+    "expectedSyllables": [
+      "è",
+      "wà"
+    ],
+    "computedSyllables": [
+      "è",
+      "wà"
+    ]
+  },
+  {
+    "wordId": "ilekun_door",
+    "displayText": "ìlẹ̀kùn",
+    "expectedSyllables": [
+      "ì",
+      "lẹ̀",
+      "kùn"
+    ],
+    "computedSyllables": [
+      "ì",
+      "lẹ̀",
+      "kùn"
+    ]
+  },
+  {
+    "wordId": "irin_walk",
+    "displayText": "ìrìn",
+    "expectedSyllables": [
+      "ì",
+      "rìn"
+    ],
+    "computedSyllables": [
+      "ì",
+      "rìn"
+    ]
+  },
+  {
+    "wordId": "ogun_august",
+    "displayText": "Ògún",
+    "expectedSyllables": [
+      "ò",
+      "gún"
+    ],
+    "computedSyllables": [
+      "ò",
+      "gún"
+    ]
+  },
+  {
+    "wordId": "seere_january",
+    "displayText": "Ṣẹẹrẹ",
+    "expectedSyllables": [
+      "ṣẹ",
+      "ẹ",
+      "rẹ"
+    ],
+    "computedSyllables": [
+      "ṣẹ",
+      "ẹ",
+      "rẹ"
+    ]
+  },
+  {
+    "wordId": "e_joo_please",
+    "displayText": "ẹ jọ̀ọ́",
+    "expectedSyllables": [
+      "ẹ",
+      "jọ̀",
+      "ọ́"
+    ],
+    "computedSyllables": null
+  },
+  {
+    "wordId": "erena_march",
+    "displayText": "Ẹrénà",
+    "expectedSyllables": [
+      "ẹ",
+      "ré",
+      "nà"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "ré",
+      "nà"
+    ]
+  },
+  {
+    "wordId": "ewa_beauty",
+    "displayText": "ẹwà",
+    "expectedSyllables": [
+      "ẹ",
+      "wà"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "wà"
+    ]
+  },
+  {
+    "wordId": "eye_bird",
+    "displayText": "ẹyẹ",
+    "expectedSyllables": [
+      "ẹ",
+      "yẹ"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "yẹ"
+    ]
+  },
+  {
+    "wordId": "ejo_snake",
+    "displayText": "ejò",
+    "expectedSyllables": [
+      "e",
+      "jò"
+    ],
+    "computedSyllables": [
+      "e",
+      "jò"
+    ]
+  },
+  {
+    "wordId": "eyin_back",
+    "displayText": "ẹ̀yìn",
+    "expectedSyllables": [
+      "ẹ̀",
+      "yìn"
+    ],
+    "computedSyllables": [
+      "ẹ̀",
+      "yìn"
+    ]
+  },
+  {
+    "wordId": "esin_horse",
+    "displayText": "ẹṣin",
+    "expectedSyllables": [
+      "ẹ",
+      "ṣin"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "ṣin"
+    ]
+  },
+  {
+    "wordId": "eekanna_nail",
+    "displayText": "èékánná",
+    "expectedSyllables": [
+      "è",
+      "é",
+      "kán",
+      "ná"
+    ],
+    "computedSyllables": [
+      "è",
+      "é",
+      "kán",
+      "ná"
+    ]
+  },
+  {
+    "wordId": "ojo_day",
+    "displayText": "ọjọ́",
+    "expectedSyllables": [
+      "ọ",
+      "jọ́"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "jọ́"
+    ]
+  },
+  {
+    "wordId": "owewe_september",
+    "displayText": "Ọwẹ́wẹ",
+    "expectedSyllables": [
+      "ọ",
+      "wẹ́",
+      "wẹ"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "wẹ́",
+      "wẹ"
+    ]
+  },
+  {
+    "wordId": "ope_december",
+    "displayText": "Ọ̀pẹ",
+    "expectedSyllables": [
+      "ọ̀",
+      "pẹ"
+    ],
+    "computedSyllables": [
+      "ọ̀",
+      "pẹ"
+    ]
+  },
+  {
+    "wordId": "owawa_october",
+    "displayText": "Ọ̀wàwà",
+    "expectedSyllables": [
+      "ọ̀",
+      "wà",
+      "wà"
+    ],
+    "computedSyllables": [
+      "ọ̀",
+      "wà",
+      "wà"
+    ]
+  },
+  {
+    "wordId": "ile_home",
+    "displayText": "ilé",
+    "expectedSyllables": [
+      "i",
+      "lé"
+    ],
+    "computedSyllables": [
+      "i",
+      "lé"
+    ]
+  },
+  {
+    "wordId": "oba_king",
+    "displayText": "ọba",
+    "expectedSyllables": [
+      "ọ",
+      "ba"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "ba"
+    ]
+  },
+  {
+    "wordId": "alubosa_onion",
+    "displayText": "àlùbọ́sà",
+    "expectedSyllables": [
+      "à",
+      "lù",
+      "bọ́",
+      "sà"
+    ],
+    "computedSyllables": [
+      "à",
+      "lù",
+      "bọ́",
+      "sà"
+    ]
+  },
+  {
+    "wordId": "jokoo_sit",
+    "displayText": "jókòó",
+    "expectedSyllables": [
+      "jó",
+      "kò",
+      "ó"
+    ],
+    "computedSyllables": [
+      "jó",
+      "kò",
+      "ó"
+    ]
+  },
+  {
+    "wordId": "ose_soap",
+    "displayText": "ọṣẹ",
+    "expectedSyllables": [
+      "ọ",
+      "ṣẹ"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "ṣẹ"
+    ]
+  },
+  {
+    "wordId": "digi_mirror",
+    "displayText": "dígí",
+    "expectedSyllables": [
+      "dí",
+      "gí"
+    ],
+    "computedSyllables": [
+      "dí",
+      "gí"
+    ]
+  },
+  {
+    "wordId": "ogede_banana",
+    "displayText": "ọ̀gẹ̀dè",
+    "expectedSyllables": [
+      "ọ̀",
+      "gẹ̀",
+      "dè"
+    ],
+    "computedSyllables": [
+      "ọ̀",
+      "gẹ̀",
+      "dè"
+    ]
+  },
+  {
+    "wordId": "moto_automobile",
+    "displayText": "mọ́tò",
+    "expectedSyllables": [
+      "mọ́",
+      "tò"
+    ],
+    "computedSyllables": [
+      "mọ́",
+      "tò"
+    ]
+  },
+  {
+    "wordId": "ookan_one",
+    "displayText": "oókan",
+    "expectedSyllables": [
+      "o",
+      "ó",
+      "kan"
+    ],
+    "computedSyllables": [
+      "o",
+      "ó",
+      "kan"
+    ]
+  },
+  {
+    "wordId": "kalamu_pen",
+    "displayText": "kálàmú",
+    "expectedSyllables": [
+      "ká",
+      "là",
+      "mú"
+    ],
+    "computedSyllables": [
+      "ká",
+      "là",
+      "mú"
+    ]
+  },
+  {
+    "wordId": "kasu_cashew",
+    "displayText": "kaṣú",
+    "expectedSyllables": [
+      "ka",
+      "ṣú"
+    ],
+    "computedSyllables": [
+      "ka",
+      "ṣú"
+    ]
+  },
+  {
+    "wordId": "irawo_star",
+    "displayText": "ìràwọ̀",
+    "expectedSyllables": [
+      "ì",
+      "rà",
+      "wọ̀"
+    ],
+    "computedSyllables": [
+      "ì",
+      "rà",
+      "wọ̀"
+    ]
+  },
+  {
+    "wordId": "redio_radio",
+    "displayText": "rédíò",
+    "expectedSyllables": [
+      "ré",
+      "dí",
+      "ò"
+    ],
+    "computedSyllables": [
+      "ré",
+      "dí",
+      "ò"
+    ]
+  },
+  {
+    "wordId": "ibepe_papaya",
+    "displayText": "ìbẹ́pẹ",
+    "expectedSyllables": [
+      "ì",
+      "bẹ́",
+      "pẹ"
+    ],
+    "computedSyllables": [
+      "ì",
+      "bẹ́",
+      "pẹ"
+    ]
+  },
+  {
+    "wordId": "agunfon_giraffe",
+    "displayText": "àgùnfon",
+    "expectedSyllables": [
+      "à",
+      "gùn",
+      "fọn"
+    ],
+    "computedSyllables": [
+      "à",
+      "gùn",
+      "fon"
+    ]
+  },
+  {
+    "wordId": "olongbo_cat",
+    "displayText": "olóńgbò",
+    "expectedSyllables": [
+      "o",
+      "ló",
+      "ń",
+      "gbò"
+    ],
+    "computedSyllables": [
+      "o",
+      "ló",
+      "ń",
+      "gbò"
+    ]
+  },
+  {
+    "wordId": "okuta_stone",
+    "displayText": "òkúta",
+    "expectedSyllables": [
+      "ò",
+      "kú",
+      "ta"
+    ],
+    "computedSyllables": [
+      "ò",
+      "kú",
+      "ta"
+    ]
+  },
+  {
+    "wordId": "ogbon_wisdom",
+    "displayText": "ọgbọ́n",
+    "expectedSyllables": [
+      "ọ",
+      "gbọ́n"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "gbọ́n"
+    ]
+  },
+  {
+    "wordId": "osan_orange",
+    "displayText": "ọsàn",
+    "expectedSyllables": [
+      "ọ",
+      "sàn"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "sàn"
+    ]
+  },
+  {
+    "wordId": "guafa_guava",
+    "displayText": "gúáfà",
+    "expectedSyllables": [
+      "gú",
+      "á",
+      "fà"
+    ],
+    "computedSyllables": [
+      "gú",
+      "á",
+      "fà"
+    ]
+  },
+  {
+    "wordId": "ifoyin_toothbrush",
+    "displayText": "ìfọyín",
+    "expectedSyllables": [
+      "ì",
+      "fọ",
+      "yín"
+    ],
+    "computedSyllables": [
+      "ì",
+      "fọ",
+      "yín"
+    ]
+  },
+  {
+    "wordId": "pako_timber",
+    "displayText": "pákó",
+    "expectedSyllables": [
+      "pá",
+      "kó"
+    ],
+    "computedSyllables": [
+      "pá",
+      "kó"
+    ]
+  },
+  {
+    "wordId": "adiye_chicken",
+    "displayText": "adìyẹ",
+    "expectedSyllables": [
+      "a",
+      "dì",
+      "yẹ"
+    ],
+    "computedSyllables": [
+      "a",
+      "dì",
+      "yẹ"
+    ]
+  },
+  {
+    "wordId": "buredi_bread",
+    "displayText": "búrẹ́dì",
+    "expectedSyllables": [
+      "bú",
+      "rẹ́",
+      "dì"
+    ],
+    "computedSyllables": [
+      "bú",
+      "rẹ́",
+      "dì"
+    ]
+  },
+  {
+    "wordId": "ogun_twenty",
+    "displayText": "ogún",
+    "expectedSyllables": [
+      "o",
+      "gún"
+    ],
+    "computedSyllables": [
+      "o",
+      "gún"
+    ]
+  },
+  {
+    "wordId": "esinsin_fly",
+    "displayText": "eṣinṣin",
+    "expectedSyllables": [
+      "e",
+      "ṣin",
+      "ṣin"
+    ],
+    "computedSyllables": [
+      "e",
+      "ṣin",
+      "ṣin"
+    ]
+  },
+  {
+    "wordId": "oduduwa_oduduwa",
+    "displayText": "odùduwà",
+    "expectedSyllables": [
+      "o",
+      "dù",
+      "du",
+      "wà"
+    ],
+    "computedSyllables": [
+      "o",
+      "dù",
+      "du",
+      "wà"
+    ]
+  },
+  {
+    "wordId": "maluu_cow",
+    "displayText": "màlúù",
+    "expectedSyllables": [
+      "mà",
+      "lú",
+      "ù"
+    ],
+    "computedSyllables": [
+      "mà",
+      "lú",
+      "ù"
+    ]
+  },
+  {
+    "wordId": "sibi_spoon",
+    "displayText": "ṣíbí",
+    "expectedSyllables": [
+      "ṣí",
+      "bí"
+    ],
+    "computedSyllables": [
+      "ṣí",
+      "bí"
+    ]
+  },
+  {
+    "wordId": "osupa_moon",
+    "displayText": "òṣùpá",
+    "expectedSyllables": [
+      "ò",
+      "ṣù",
+      "pá"
+    ],
+    "computedSyllables": [
+      "ò",
+      "ṣù",
+      "pá"
+    ]
+  },
+  {
+    "wordId": "goomu_gum",
+    "displayText": "gọ́ọ̀mù",
+    "expectedSyllables": [
+      "gọ́",
+      "ọ̀",
+      "mù"
+    ],
+    "computedSyllables": [
+      "gọ́",
+      "ọ̀",
+      "mù"
+    ]
+  },
+  {
+    "wordId": "inura_towel",
+    "displayText": "ìnura",
+    "expectedSyllables": [
+      "ì",
+      "nu",
+      "ra"
+    ],
+    "computedSyllables": [
+      "ì",
+      "nu",
+      "ra"
+    ]
+  },
+  {
+    "wordId": "ina_fire",
+    "displayText": "iná",
+    "expectedSyllables": [
+      "i",
+      "ná"
+    ],
+    "computedSyllables": [
+      "i",
+      "ná"
+    ]
+  },
+  {
+    "wordId": "oja_market",
+    "displayText": "ọjà",
+    "expectedSyllables": [
+      "ọ",
+      "jà"
+    ],
+    "computedSyllables": [
+      "ọ",
+      "jà"
+    ]
+  },
+  {
+    "wordId": "obe_knife",
+    "displayText": "ọ̀bẹ",
+    "expectedSyllables": [
+      "ọ̀",
+      "bẹ"
+    ],
+    "computedSyllables": [
+      "ọ̀",
+      "bẹ"
+    ]
+  },
+  {
+    "wordId": "ese_leg",
+    "displayText": "ẹsẹ̀",
+    "expectedSyllables": [
+      "ẹ",
+      "sẹ̀"
+    ],
+    "computedSyllables": [
+      "ẹ",
+      "sẹ̀"
+    ]
+  },
+  {
+    "wordId": "aso_cloth",
+    "displayText": "aṣọ",
+    "expectedSyllables": [
+      "a",
+      "ṣọ"
+    ],
+    "computedSyllables": [
+      "a",
+      "ṣọ"
+    ]
+  },
+  {
+    "wordId": "fo_break",
+    "displayText": "fọ́",
+    "expectedSyllables": [
+      "fọ́"
+    ],
+    "computedSyllables": [
+      "fọ́"
+    ]
+  },
+  {
+    "wordId": "inu_inside",
+    "displayText": "inú",
+    "expectedSyllables": [
+      "i",
+      "nú"
+    ],
+    "computedSyllables": [
+      "i",
+      "nú"
+    ]
+  }
+]

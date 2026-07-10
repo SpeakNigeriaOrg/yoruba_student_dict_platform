@@ -1,0 +1,89 @@
+[
+  {
+    "query": "ile",
+    "results": [
+      {
+        "wordId": "ile_home",
+        "displayText": "ilé",
+        "syllables": [
+          "i",
+          "lé"
+        ],
+        "definition": "home, house, abode",
+        "baseSpelling": "ile",
+        "matchedVia": "yoruba_tone"
+      },
+      {
+        "wordId": "ilekun_door",
+        "displayText": "ìlẹ̀kùn",
+        "syllables": [
+          "ì",
+          "lẹ̀",
+          "kùn"
+        ],
+        "definition": "door",
+        "baseSpelling": "ilekun",
+        "matchedVia": "yoruba_prefix"
+      },
+      {
+        "wordId": "moto_automobile",
+        "displayText": "mọ́tò",
+        "syllables": [
+          "mọ́",
+          "tò"
+        ],
+        "definition": "car",
+        "baseSpelling": "moto",
+        "matchedVia": "word_id"
+      }
+    ]
+  },
+  {
+    "query": "house",
+    "results": [
+      {
+        "wordId": "ile_home",
+        "displayText": "ilé",
+        "syllables": [
+          "i",
+          "lé"
+        ],
+        "definition": "home, house, abode",
+        "baseSpelling": "ile",
+        "matchedVia": "english"
+      }
+    ]
+  },
+  {
+    "query": "owo",
+    "results": [
+      {
+        "wordId": "owo_hand",
+        "displayText": "ọwọ",
+        "syllables": [
+          "ọ",
+          "wọ"
+        ],
+        "definition": "hand",
+        "baseSpelling": "owo",
+        "matchedVia": "yoruba_ortho"
+      }
+    ]
+  },
+  {
+    "query": "moto",
+    "results": [
+      {
+        "wordId": "moto_automobile",
+        "displayText": "mọ́tò",
+        "syllables": [
+          "mọ́",
+          "tò"
+        ],
+        "definition": "car",
+        "baseSpelling": "moto",
+        "matchedVia": "yoruba_ortho"
+      }
+    ]
+  }
+]

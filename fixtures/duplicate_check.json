@@ -1,0 +1,36 @@
+[
+  {
+    "name": "cross_reference_chain_finds_existing_word",
+    "candidateSpelling": "ẹdìyẹ",
+    "candidateAltOfTargets": [
+      "adìẹ"
+    ],
+    "matches": [
+      {
+        "wordId": "adiye_chicken",
+        "displayText": "adìyẹ",
+        "reason": "same Kaikki entry, different spelling"
+      }
+    ]
+  },
+  {
+    "name": "homograph_base_spelling_must_not_false_match",
+    "candidateSpelling": "owó",
+    "candidateAltOfTargets": [],
+    "matches": []
+  },
+  {
+    "name": "identical_spelling_always_flagged",
+    "candidateSpelling": "adìyẹ",
+    "candidateAltOfTargets": [
+      "adìẹ"
+    ],
+    "matches": [
+      {
+        "wordId": "adiye_chicken",
+        "displayText": "adìyẹ",
+        "reason": "identical spelling"
+      }
+    ]
+  }
+]

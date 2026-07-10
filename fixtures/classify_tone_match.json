@@ -1,0 +1,38 @@
+[
+  {
+    "name": "owo_money_vs_owo_hand_underdot_boundary",
+    "ourText": "owó",
+    "theirText": "ọwọ́",
+    "expectedStatus": "underdot_mismatch"
+  },
+  {
+    "name": "ile_ground_vs_ile_home_underdot_boundary",
+    "ourText": "ìlẹ̀",
+    "theirText": "ilé",
+    "expectedStatus": "underdot_mismatch"
+  },
+  {
+    "name": "ile_ground_exact_match",
+    "ourText": "ìlẹ̀",
+    "theirText": "ilẹ̀",
+    "expectedStatus": "tone_mismatch"
+  },
+  {
+    "name": "exact_match_example",
+    "ourText": "ilé",
+    "theirText": "ilé",
+    "expectedStatus": "match"
+  },
+  {
+    "name": "tone_mismatch_example",
+    "ourText": "kásù",
+    "theirText": "kàsú",
+    "expectedStatus": "tone_mismatch"
+  },
+  {
+    "name": "consonant_underdot_mismatch_example",
+    "ourText": "kaṣu",
+    "theirText": "kajú",
+    "expectedStatus": "underdot_mismatch"
+  }
+]

@@ -1,0 +1,676 @@
+[
+  {
+    "query": "ile",
+    "results": [
+      {
+        "form": "ilé",
+        "pos": "noun",
+        "glosses": [
+          "home, house, abode",
+          "household",
+          "place, area",
+          "goal (an area into which the players attempt to put an object)"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé"
+        ]
+      },
+      {
+        "form": "alẹ̀",
+        "pos": "noun",
+        "glosses": [
+          "land, earth, soil",
+          "country, homeland"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "alẹ̀",
+          "ilẹ̀",
+          "ulẹ̀"
+        ]
+      },
+      {
+        "form": "ilẹ̀",
+        "pos": "noun",
+        "glosses": [
+          "land, earth, soil",
+          "country, homeland",
+          "trash, garbage",
+          "daylight, day"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "alẹ̀",
+          "ilẹ̀",
+          "ulẹ̀"
+        ]
+      },
+      {
+        "form": "ìlérí",
+        "pos": "noun",
+        "glosses": [
+          "promise"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ìlérí"
+        ]
+      },
+      {
+        "form": "Iléṣà",
+        "pos": "name",
+        "glosses": [
+          "Ilesa (a city in Nigeria), the capital city of the Ijesha people."
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "Iléṣà",
+          "Uléṣà"
+        ]
+      },
+      {
+        "form": "ilé-ìwé",
+        "pos": "noun",
+        "glosses": [
+          "school"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé ìwé",
+          "ilé-ìwé",
+          "iléèwé"
+        ]
+      },
+      {
+        "form": "ilé-ìkàwé",
+        "pos": "noun",
+        "glosses": [
+          "library",
+          "reading room"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé ìkàwé",
+          "ilé-ìkàwé"
+        ]
+      },
+      {
+        "form": "ilé ìkàwé",
+        "pos": "noun",
+        "glosses": [
+          "alternative form of ilé-ìkàwé (“library”)"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [
+          "ilé-ìkàwé"
+        ],
+        "standardForms": [
+          "ilé ìkàwé"
+        ]
+      },
+      {
+        "form": "ilé-ìtàwé",
+        "pos": "noun",
+        "glosses": [
+          "bookstore, bookshop"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé ìtàwé",
+          "ilé-ìtàwé"
+        ]
+      },
+      {
+        "form": "Ilẹ̀ káàárọ̀-oòjíire",
+        "pos": "name",
+        "glosses": [
+          "Yorubaland, Homeland of the Yoruba"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "Ilẹ̀ káàárọ̀-oòjíire"
+        ]
+      },
+      {
+        "form": "ilé àwòṣífìlà",
+        "pos": "noun",
+        "glosses": [
+          "skyscraper, high-rise"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé àwòṣífìlà"
+        ]
+      },
+      {
+        "form": "Ilẹ̀ Adúláwọ̀",
+        "pos": "name",
+        "glosses": [
+          "Africa (the continent south of Europe and between the Atlantic and Indian Oceans)"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "Ilẹ̀ Adúláwọ̀"
+        ]
+      },
+      {
+        "form": "ìlera",
+        "pos": "noun",
+        "glosses": [
+          "health"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ìlera"
+        ]
+      },
+      {
+        "form": "ilé ẹ̀kọ́",
+        "pos": "noun",
+        "glosses": [
+          "school"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé ẹ̀kọ́"
+        ]
+      },
+      {
+        "form": "ilé ayé",
+        "pos": "noun",
+        "glosses": [
+          "Earth"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé ayé"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "house",
+    "results": [
+      {
+        "form": "ọwá",
+        "pos": "noun",
+        "glosses": [
+          "the parlor or inner courtyard of a home",
+          "palace, great house",
+          "palace, great house",
+          "king, monarch"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọwá"
+        ]
+      },
+      {
+        "form": "Ọbàtálá",
+        "pos": "name",
+        "glosses": [
+          "the title of the leader of the ancient Ufẹ̀ mega-house polity, Ìdèta. One of these leaders was later made king of the Ufẹ̀ confederacy of houses and deified as the deity Ọbàtálá",
+          "the title of the leader of the ancient Ufẹ̀ mega-house polity, Ìdèta. One of these leaders was later made king of the Ufẹ̀ confederacy of houses and deified as the deity Ọbàtálá",
+          "the legendary leader of ancient Ufẹ̀ between the 9th-11th centuries AD, deified as an orisha",
+          "Ọbatala, a powerful irúnmọlẹ̀ and divinity of creation, the sky, heaven, purity, the creator of the Earth (beginning with the town of Ufẹ̀). He is the oldest of the orisha, with the term orisha originally referring to him. He is the husband of the orisha Yemòwó (Mawu in other West African religions)."
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "Ọbàtálá"
+        ]
+      },
+      {
+        "form": "ilékílé",
+        "pos": "noun",
+        "glosses": [
+          "any house, bad house"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilékílé"
+        ]
+      },
+      {
+        "form": "ulíkúlí",
+        "pos": "noun",
+        "glosses": [
+          "Ikalẹ form of ilékílé (“any house; bad house”)"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ulíkúlí"
+        ]
+      },
+      {
+        "form": "òrùlé",
+        "pos": "noun",
+        "glosses": [
+          "roof (of a house)",
+          "house"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "òrùlé",
+          "òwùlé",
+          "òòlé",
+          "òùlí"
+        ]
+      },
+      {
+        "form": "ilé",
+        "pos": "noun",
+        "glosses": [
+          "home, house, abode",
+          "household",
+          "place, area",
+          "goal (an area into which the players attempt to put an object)"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé"
+        ]
+      },
+      {
+        "form": "ulé",
+        "pos": "noun",
+        "glosses": [
+          "home, house, household"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ulé"
+        ]
+      },
+      {
+        "form": "èkúté",
+        "pos": "noun",
+        "glosses": [
+          "rat, specifically the black rat",
+          "A general name for rodents found in the house as opposed to the wild, including the asín and ọ̀fọ́n-ọ̀n"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "èkúté"
+        ]
+      },
+      {
+        "form": "ulí",
+        "pos": "noun",
+        "glosses": [
+          "house, home"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ulí"
+        ]
+      },
+      {
+        "form": "àgánrándì",
+        "pos": "noun",
+        "glosses": [
+          "gate, a short door used to farm animals from entering a house"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "àgándì",
+          "àgánrándì",
+          "àgọ́nrọ́ndì"
+        ]
+      },
+      {
+        "form": "ọrọ́wá",
+        "pos": "noun",
+        "glosses": [
+          "a central large inward-facing, typically open roof, hall or courtyard that serves as the main connective and activity space for a dwelling.",
+          "The center location of a traditional Èkìtì/Central Yorùbá home, consisting of a bathtub structure that is over an open hole in the house that collects water. Analogous to the Roman impluvium."
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọrọ́wá"
+        ]
+      },
+      {
+        "form": "Àrágberí",
+        "pos": "name",
+        "glosses": [
+          "a surname, from the chieftaincy title Àrágberí",
+          "The title of the traditional ruler of the town of Ìrágberí",
+          "a Yoruba chieftaincy title",
+          "an ancient clan within the Aresa royal house of the Oyo Empire. Leaders who came from this clan were noted for their deep knowledge in Yoruba herbal medicine and magic."
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "Àrágberí"
+        ]
+      },
+      {
+        "form": "ọdán",
+        "pos": "noun",
+        "glosses": [
+          "A class of deciduous trees usually planted around a house to provide shade, consisting of members of the Moraceae family"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọdán"
+        ]
+      },
+      {
+        "form": "ìṣílé",
+        "pos": "noun",
+        "glosses": [
+          "house warming ceremony"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ìṣílé"
+        ]
+      },
+      {
+        "form": "ilé kíkọ́",
+        "pos": "noun",
+        "glosses": [
+          "house building; construction"
+        ],
+        "matchedVia": "english",
+        "altOfTargets": [],
+        "standardForms": [
+          "ilé kíkọ́"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "owo",
+    "results": [
+      {
+        "form": "òò",
+        "pos": "noun",
+        "glosses": [
+          "business, trade"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "òwò",
+          "òò"
+        ]
+      },
+      {
+        "form": "óo",
+        "pos": "verb",
+        "glosses": [
+          "to be heavy"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "wó",
+          "wówo",
+          "wúwo",
+          "òwò",
+          "óo"
+        ]
+      },
+      {
+        "form": "òwò",
+        "pos": "noun",
+        "glosses": [
+          "business, trade, commerce",
+          "commercial enterprise"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "òwò"
+        ]
+      },
+      {
+        "form": "ió",
+        "pos": "noun",
+        "glosses": [
+          "money, cowry"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "eghó",
+          "ió",
+          "oghó",
+          "owó"
+        ]
+      },
+      {
+        "form": "owó",
+        "pos": "noun",
+        "glosses": [
+          "money, cash",
+          "cowrie"
+        ],
+        "matchedVia": "yoruba_tone",
+        "altOfTargets": [],
+        "standardForms": [
+          "owó"
+        ]
+      },
+      {
+        "form": "ọọ̀",
+        "pos": "noun",
+        "glosses": [
+          "broom"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọghọ̀",
+          "ọwọ̀",
+          "ọọ̀"
+        ]
+      },
+      {
+        "form": "ọwọ̀",
+        "pos": "noun",
+        "glosses": [
+          "broom"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọwọ̀",
+          "ọọ̀"
+        ]
+      },
+      {
+        "form": "ọ̀wọ̀",
+        "pos": "noun",
+        "glosses": [
+          "respect, honor, dignity"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọ̀ghọ̀",
+          "ọ̀wọ̀",
+          "ọọ̀"
+        ]
+      },
+      {
+        "form": "ọ̀wọ̀",
+        "pos": "noun",
+        "glosses": [
+          "a name for several herbs in the genus Brillantaisia, including Brillantaisia lamium, Brillantaisia owariensis, and Brillantaisia nitens."
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọ̀ghọ̀",
+          "ọ̀wọ̀",
+          "ọọ̀"
+        ]
+      },
+      {
+        "form": "ọwọ́",
+        "pos": "noun",
+        "glosses": [
+          "hand",
+          "direction, location, side; either right or left",
+          "one hundred naira",
+          "impact, influence, effect",
+          "handwriting, penmanship",
+          "care, handling",
+          "time of action or event; current",
+          "possession (literally, \"in the hand of someone\")",
+          "active engagement, endorsement",
+          "grip, power, force",
+          "applause"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọwọ́",
+          "ọọ̀",
+          "ọọ́"
+        ]
+      },
+      {
+        "form": "ọ̀wọ́",
+        "pos": "noun",
+        "glosses": [
+          "patterned group, a homogeneous entity, caravan, series, class"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọ̀wọ́",
+          "ọọ̀"
+        ]
+      },
+      {
+        "form": "Ọ̀wọ̀",
+        "pos": "name",
+        "glosses": [
+          "Owo (a city in Nigeria)",
+          "Owo (a historical kingdom in Nigeria)",
+          "The Ọwọ dialect of the Yoruba language",
+          "The Ọwọ subethnic group of the Yoruba people"
+        ],
+        "matchedVia": "yoruba_ortho",
+        "altOfTargets": [],
+        "standardForms": [
+          "Ọ̀ghọ̀",
+          "Ọ̀wọ̀"
+        ]
+      },
+      {
+        "form": "ọ̀wọn",
+        "pos": "pron",
+        "glosses": [
+          "us (first-person plural object pronoun)"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "ọ̀wọn"
+        ]
+      },
+      {
+        "form": "Ọ̀wọ́nrín",
+        "pos": "name",
+        "glosses": [
+          "The sixth principal sign of the Ifa divination system",
+          "The sixth of the àpólà or sixteen categories in the Odù Ifá, consisting of the sixth principal chapter, (Ọ̀wọ́nrín méjì) and the other fifteen chapters of Ọ̀wọ́nrín",
+          "The sixth chapter of the Odù Ifá corpus, and one of the major ojú odù",
+          "The spirit associated with the Ọ̀wọ́nrín sign, believed to have been born in the Kétu region."
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [],
+        "standardForms": [
+          "Ọ̀wọ́nrín",
+          "Ọ̀wọ́rín",
+          "Ọ̀ọ́nrín"
+        ]
+      },
+      {
+        "form": "Ọ̀wọ́rín",
+        "pos": "name",
+        "glosses": [
+          "alternative form of Ọ̀wọ́nrín (“The sixth chapter of the odù Ifá”)"
+        ],
+        "matchedVia": "yoruba_prefix",
+        "altOfTargets": [
+          "Ọ̀wọ́nrín"
+        ],
+        "standardForms": [
+          "Ọ̀wọ́rín"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "kaṣu",
+    "results": []
+  },
+  {
+    "query": "ẹdìyẹ",
+    "results": [
+      {
+        "form": "ẹdìyẹ",
+        "pos": "noun",
+        "glosses": [
+          "alternative form of adìẹ (“chicken”)"
+        ],
+        "matchedVia": "yoruba_exact",
+        "altOfTargets": [
+          "adìẹ"
+        ],
+        "standardForms": [
+          "adìyẹ",
+          "ẹdìyẹ",
+          "ẹdùwẹ",
+          "ẹdị̀yẹ"
+        ]
+      },
+      {
+        "form": "ẹdùwẹ",
+        "pos": "noun",
+        "glosses": [
+          "chicken"
+        ],
+        "matchedVia": "yoruba_exact",
+        "altOfTargets": [],
+        "standardForms": [
+          "ẹdìyẹ",
+          "ẹdùwẹ"
+        ]
+      }
+    ]
+  }
+]
