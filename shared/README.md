@@ -27,5 +27,22 @@ representing a previously-fixed bug must be present as its own named test
 case, not just folded into an aggregate diff of the whole diagnostics
 report.
 
-Not yet scaffolded with actual TypeScript/Vitest tooling - placeholder
-pending the first real implementation pass.
+## Status
+
+- `orthography.ts` - ported, 20/20 fixture tests passing. Close to a direct
+  port of yorubadict's `orthography.mjs` as expected (same combining-mark
+  codepoints as `yoruba_orthography.py`), not a fresh translation.
+- `syllabify.ts` - ported, 113/113 fixture tests passing across all 92
+  vocab words (multi-word/phrase entries correctly excluded from parity
+  checks, same as the Python export script does - there's no
+  Python-computed value to compare against for those).
+- Not yet ported: `generate_diagnostics.py`'s classification/scoring
+  functions (`diagnose_entry`, `classify_tone_match`,
+  `components_axis_fields`, etc.), `kaikki_search.py`, `vocab_search.py`,
+  `duplicate_check.py` - these are next, building up from this now-verified
+  foundation rather than porting everything in one pass.
+
+`npm run test --workspace=shared` and `npm run build --workspace=shared`
+both run clean locally (`tsc` type-checks the library source; test files
+are excluded from the `dist/` build so Vitest doesn't pick up compiled
+duplicates alongside the `.ts` originals).
