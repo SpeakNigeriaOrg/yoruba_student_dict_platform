@@ -58,11 +58,30 @@ report.
   per-entry pipeline), plus both named regression fixtures and direct unit
   tests of `resolveDefinitionSource`'s explicit-`definitionSourceForm`
   branch (not currently exercised by any real override).
-- Not yet ported: `generate_diagnostics.py`'s remaining axis
-  (`check_syllable_split`, `components_axis_fields`), `kaikki_search.py`,
-  `vocab_search.py`, `duplicate_check.py` - these are next, building up
-  from this now-verified foundation rather than porting everything in one
-  pass.
+- `syllableSplit.ts` - ported (`resolveEffectiveDisplayText`/
+  `checkSyllableSplit`), verified against all 92 real vocab entries chained
+  through `diagnoseEntry`, including the one real mismatch in the data set
+  (`agunfon_giraffe`: hand-curated syllables carry an underdot the
+  displayText itself doesn't have). No real override currently sets
+  `syllableAction`, so both resolution branches and the moot-override/
+  pending-adoption notes are covered by direct unit tests instead.
+- `componentsAxis.ts` - ported (`componentsAxisFields` and its supporting
+  `buildVocabSpellingIndex`/`buildComponentOwnersIndex`/
+  `previewGlossesForForm`), verified against all 92 real vocab entries,
+  including the real tied-candidate gloss-preview cases (`jokoo_sit`'s "jó"
+  ties dance/burn; its "òkó" ties three unrelated senses with no exact
+  spelling match at all). No real component candidate currently resolves to
+  a confident exact vocab match, is ambiguous, or hits the tone-insensitive
+  `possibleMatches` fallback - those branches, plus `invalidComponents`
+  (never present in well-formed real data), are covered by direct unit
+  tests instead.
+- Not yet ported: `kaikki_search.py`, `vocab_search.py`, `duplicate_check.py`
+  - these are next, building up from this now-verified foundation rather
+  than porting everything in one pass. With these three axes ported,
+  `generate_diagnostics.py`'s own per-entry pipeline (`diagnoseEntry` ->
+  `resolveEffectiveDisplayText`/`checkSyllableSplit` ->
+  `resolveDefinitionSource`/`checkDefinition` -> `componentsAxisFields`) is
+  now fully replicated in TypeScript.
 
 `npm run test --workspace=shared` and `npm run build --workspace=shared`
 both run clean locally (`tsc` type-checks the library source; test files

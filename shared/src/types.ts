@@ -49,8 +49,10 @@ export interface DiagnoseOverride {
   definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
   definitionSourceForm?: string;
-  syllableAction?: string;
+  syllableAction?: 'keep_manual' | 'accept_programmatic';
+  syllableNote?: string;
   componentsAction?: string;
+  components?: string[];
 }
 
 export type DiagnosticsOverrides = Record<string, DiagnoseOverride>;
