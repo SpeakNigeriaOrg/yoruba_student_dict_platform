@@ -87,6 +87,40 @@ create index idx_golden_record_components_component on golden_record_components(
 -- `exists (select 1 from golden_record_components where word_id = ?)`.
 
 -- ---------------------------------------------------------------------
+-- Vocabulary review decisions (replaces dictionary_overrides.json)
+--
+-- Three independent per-word review axes - spelling/tone, definition, and
+-- etymology/components - each always resolving to one of: accept Kaikki's
+-- version, a human-authored custom override, or (when Kaikki has nothing
+-- to compare against) a mandatory custom entry. Deliberately separate from
+-- golden_record/golden_record_components: a decision record should never
+-- be the only place real content lives - applying a decision that changes
+-- content (adopting Kaikki's spelling, accepting a proposed component,
+-- writing custom definition text) updates golden_record(_components) in
+-- the same transaction that upserts the row here.
+-- ---------------------------------------------------------------------
+
+create table word_decisions (
+  word_id    text not null references golden_record(word_id) on delete cascade,
+  axis       text not null check (axis in ('spelling', 'definition', 'etymology')),
+  decision   jsonb not null, -- same field vocabulary as contributions.proposed_value per
+                              -- axis (action/candidateForm, definitionAction/definitionText/
+                              -- definitionSourceForm, componentsAction/components) - see
+                              -- yoruba-student-dict's generate_diagnostics.py for the source
+                              -- vocabulary of shapes.
+  note       text,
+  decided_by uuid not null references users(user_id),
+  decided_at timestamptz not null default now(),
+  primary key (word_id, axis)
+);
+-- A freshly-added word (via POST /words or an approved new_entry
+-- contribution) starts with zero rows here, exactly like a word added via
+-- today's local tool starts absent from dictionary_overrides.json - "which
+-- words still need a spelling/definition/etymology decision" becomes
+-- `select word_id from golden_record where not exists (select 1 from
+-- word_decisions wd where wd.word_id = golden_record.word_id and wd.axis = ?)`.
+
+-- ---------------------------------------------------------------------
 -- Assignment and volunteer review queue
 -- ---------------------------------------------------------------------
 
@@ -102,12 +136,24 @@ create index idx_assignments_user on assignments(user_id);
 
 create table contributions (
   contribution_id uuid primary key default gen_random_uuid(),
-  word_id         text not null references golden_record(word_id) on delete cascade,
-  axis            text not null check (axis in ('spelling', 'definition', 'etymology')),
-  proposed_value  jsonb not null, -- shape mirrors the existing override shapes per axis
+  -- Nullable: a 'new_entry' proposal (below) authors a word that doesn't
+  -- exist in golden_record yet, so there's no word_id to reference until a
+  -- curator approves it and it's actually inserted. Every other axis still
+  -- requires a real, already-existing word.
+  word_id         text references golden_record(word_id) on delete cascade,
+  axis            text not null check (axis in ('spelling', 'definition', 'etymology', 'new_entry')),
+  -- Ties word_id's nullability to axis so the two can never drift apart -
+  -- 'new_entry' always has a null word_id, every other axis always has a
+  -- real one.
+  constraint contributions_new_entry_word_id_null
+    check ((axis = 'new_entry') = (word_id is null)),
+  proposed_value  jsonb not null, -- shape mirrors word_decisions.decision per axis
                                   -- (action/candidateForm, definitionAction/definitionText,
-                                  -- componentsAction/components) - see yoruba-student-dict's
-                                  -- generate_diagnostics.py for the source vocabulary of shapes.
+                                  -- componentsAction/components); for 'new_entry', mirrors
+                                  -- vocab.json's own entry shape instead (proposedWordId/
+                                  -- displayText/syllables/type/components) - see
+                                  -- yoruba-student-dict's generate_diagnostics.py for the
+                                  -- source vocabulary of the per-axis shapes.
   note            text,
   submitted_by    uuid not null references users(user_id),
   submitted_at    timestamptz not null default now(),
