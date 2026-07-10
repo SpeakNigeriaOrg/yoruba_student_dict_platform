@@ -1,0 +1,25 @@
+# Node
+node_modules/
+dist/
+build/
+.vite/
+*.log
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+local.settings.json
+
+# Python (vad-service)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Azure SWA CLI
+.swa/
+
+# OS
+.DS_Store

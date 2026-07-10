@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+
+  "routes": [
+    { "route": "/api/decisions", "allowedRoles": ["curator"] },
+    { "route": "/api/contributions/*/approve", "allowedRoles": ["curator"] },
+    { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
+
+    { "route": "/api/contributions", "allowedRoles": ["authenticated"] },
+    { "route": "/api/utterances", "allowedRoles": ["authenticated"] },
+    { "route": "/api/assignments/me", "allowedRoles": ["authenticated"] },
+
+    { "route": "/login", "redirect": "/.auth/login/github" },
+    { "route": "/logout", "redirect": "/.auth/logout" }
+  ],
+
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/api/*", "/*.{png,jpg,jpeg,gif,svg,ico,css,js,map,wav}"]
+  },
+
+  "responseOverrides": {
+    "401": { "redirect": "/login", "statusCode": 302 }
+  },
+
+  "auth": {
+    "rolesSource": "/api/GetRoles"
+  }
+}
