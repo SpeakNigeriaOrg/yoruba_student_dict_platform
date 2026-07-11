@@ -12,6 +12,18 @@ script's disposable, never-git-tracked `kaikki_lexicon.json` with real,
 queryable tables `/api` can use directly (see the approved plan's "Kaikki
 lexicon" section for the full rationale).
 
+**`componentCandidates` now reads kaikki-yoruba's own `etymologyMorphemes`**
+(`deriveComponentCandidateForms` in `deriveSenses.ts`) instead of
+re-deriving from raw `etymologyTemplates` with its own template-name
+allowlist and hyphen check. Those two rules were identical to (and shared
+the same two bugs as) `generate_kaikki_lexicon.py`'s original Python -
+missing `af`/`affix`/`prefix` templates entirely, and discarding an
+entire template's forms if even one was hyphenated - both fixed once,
+upstream, in kaikki-yoruba (see its README). Real, confirmed impact: 34+ of
+this project's own curriculum vocab words (e.g. `ibùsùn` "bed", `Agẹmọ`)
+were missing genuine multi-word component structure before this; both now
+resolve correctly.
+
 ## Pipeline
 
 ```

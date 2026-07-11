@@ -22,6 +22,25 @@ export interface EtymologyTemplate {
   args: Record<string, string>;
 }
 
+/** kaikki-yoruba's own corrected, pre-resolved etymology-morpheme
+ * decomposition - see its README's "Etymology-morpheme resolution"
+ * section. `entryIds` is already tonal-exact + gloss-overlap ranked;
+ * `resolved` is false for bound morphemes (never looked up) and for free
+ * morphemes with no match in the corpus. */
+export interface EtymologyMorpheme {
+  form: string;
+  gloss: string | null;
+  bound: boolean;
+  resolved: boolean;
+  entryIds: string[];
+}
+
+export interface UsedInCompound {
+  entryId: string;
+  text: string;
+  provenance: string;
+}
+
 export interface SenseAltOf {
   word: string | null;
   extra: string | null;
@@ -54,6 +73,8 @@ export interface CanonicalEntry {
   etymologyNumber: string | null;
   etymologyText: string | null;
   etymologyTemplates: EtymologyTemplate[];
+  etymologyMorphemes: EtymologyMorpheme[];
+  usedInCompounds: UsedInCompound[];
   canonicalForm: CanonicalFormInfo;
   altForms: AltForm[];
   ipa: Array<{ ipa: string; tags: string[]; note: string | null }>;

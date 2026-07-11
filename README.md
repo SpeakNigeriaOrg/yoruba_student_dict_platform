@@ -19,6 +19,11 @@ local tool) this repo implements.
   `yoruba-student-dict/scripts/generate_diagnostics.py` and friends. Runs
   client-side in `app/` for read-only diagnosis/search (no Function call
   needed), and is imported by `api/` for server-side validation of writes.
+- `ingest/` - this platform's downstream derivation over the canonical
+  artifact published by [`kaikki-yoruba`](https://github.com/SpeakNigeriaOrg/kaikki-yoruba)
+  (`componentCandidates`, `altOfTargets`, `standardForms`, lookup keys),
+  written into Postgres (`db/migrations/0002_kaikki_lexicon.sql`) for `api/`
+  to query directly. See its own README for the full pipeline.
 - `vad-service/` - Python Container App: Silero VAD syllable segmentation,
   ported from `yoruba-student-dict/content/parse_word_syllable_audio.py`
   with its logic unchanged, writing to the database instead of local files.

@@ -27,14 +27,6 @@ const STANDARD_FORM_TAGS = new Set(['canonical', 'alternative', 'lowercase', 'up
 // spellings.
 const NONSTANDARD_SENSE_TAGS = new Set(['Ekiti', 'archaic', 'historical', 'obsolete', 'dated', 'rare']);
 
-// Only templates that decompose a word into other real, same-language
-// Yoruba words. Excludes affix/af/prefix (bound morphemes - their args are
-// literally hyphenated, e.g. "a-", not independent words) and
-// cross-language cognate/borrowing templates like cog/bor/inh/der/
-// doublet/calque (their numeric arg is a language code, not a Yoruba
-// spelling).
-const COMPONENT_TEMPLATE_NAMES = new Set(['compound', 'com', 'compound+', 'reduplication', 'blend']);
-
 function isStandardForm(form: AltForm): boolean {
   return form.tags.every((t) => STANDARD_FORM_TAGS.has(t));
 }
@@ -74,29 +66,28 @@ export function deriveAltOfTargets(entry: CanonicalEntry): string[] {
   return targets;
 }
 
-/** Component word spellings from this entry's own etymologyTemplates -
+/** Component word spellings from this entry's own etymologyMorphemes -
  * the forward direction only (this word -> the words it's built from).
- * See COMPONENT_TEMPLATE_NAMES for which templates are trusted. Returns
- * plain spellings, not yet {form, provenance} - that wrapping (and the
- * reciprocal "derived_reciprocal" entries) happens in
+ * Reads kaikki-yoruba's own pre-extracted, pre-filtered
+ * `etymologyMorphemes` instead of re-deriving from raw
+ * `etymologyTemplates` - the template-name allowlist and hyphen/bound
+ * check used to live here (and in generate_kaikki_lexicon.py's identical
+ * copy), missing af/affix/prefix and discarding an entire template's forms
+ * if even one was hyphenated. kaikki-yoruba's corrected, per-morpheme
+ * version fixes both (see its README's "Etymology-morpheme resolution"
+ * section) - real corpus impact: 34+ of this project's own curriculum
+ * words were missing genuine multi-word component structure because of
+ * the old bugs. Returns plain spellings, not yet {form, provenance} - that
+ * wrapping (and the reciprocal "derived_reciprocal" entries) happens in
  * synthesizeComponentReciprocals, mirroring generate_kaikki_lexicon.py's
  * own two-phase shape exactly (componentCandidates starts as list[str] in
  * build_lexicon, only becomes list[dict] inside
  * synthesize_component_relationships). */
 export function deriveComponentCandidateForms(entry: CanonicalEntry): string[] {
   const candidates: string[] = [];
-  for (const t of entry.etymologyTemplates) {
-    if (!t.name || !COMPONENT_TEMPLATE_NAMES.has(t.name)) continue;
-    const args = t.args ?? {};
-    if (args['1'] !== 'yo') continue;
-    const numericKeys = Object.keys(args)
-      .filter((k) => /^\d+$/.test(k) && k !== '1')
-      .sort((a, b) => Number(a) - Number(b));
-    const forms = numericKeys.map((k) => args[k]).filter((f): f is string => Boolean(f));
-    if (forms.some((f) => f.startsWith('-') || f.endsWith('-'))) continue;
-    for (const f of forms) {
-      if (!candidates.includes(f)) candidates.push(f);
-    }
+  for (const m of entry.etymologyMorphemes) {
+    if (m.bound || !m.form) continue;
+    if (!candidates.includes(m.form)) candidates.push(m.form);
   }
   return candidates;
 }

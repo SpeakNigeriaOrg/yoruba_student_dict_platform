@@ -30,6 +30,8 @@ function makeEntry(overrides: Partial<CanonicalEntry>): CanonicalEntry {
     etymologyNumber: null,
     etymologyText: null,
     etymologyTemplates: [],
+    etymologyMorphemes: [],
+    usedInCompounds: [],
     canonicalForm: { value: 'x', inferenceMethod: 'fallback_headword', confidence: 0.5, originalValue: 'x' },
     altForms: [],
     ipa: [],
@@ -112,40 +114,48 @@ describe('deriveAltOfTargets', () => {
 });
 
 describe('deriveComponentCandidateForms', () => {
-  it('extracts numeric args (excluding "1", the language code) from a same-language compound template', () => {
+  // Which template names count, and per-morpheme bound/free filtering, now
+  // live upstream in kaikki-yoruba's own extractEtymologyMorphemes (see its
+  // normalizer.test.mjs) - this function's only remaining job is reading
+  // that pre-filtered list and excluding bound morphemes.
+  it('extracts free (non-bound) morpheme forms, preserving order', () => {
     const entry = makeEntry({
-      etymologyTemplates: [{ name: 'compound', args: { '1': 'yo', '2': 'di', '3': 'odò', t1: 'to become', t2: 'river' } }],
+      etymologyMorphemes: [
+        { form: 'di', gloss: 'to become', bound: false, resolved: true, entryIds: ['x'] },
+        { form: 'odò', gloss: 'river', bound: false, resolved: true, entryIds: ['y'] },
+      ],
     });
     expect(deriveComponentCandidateForms(entry)).toEqual(['di', 'odò']);
   });
 
   it("real data: 'dodò' (dodo) decomposes into 'di' + 'odò'", () => {
     const entry = realEntries['en-dodo-yo-verb-TzbxtbnG'];
-    expect(entry.etymologyTemplates[0].name).toBe('compound');
     expect(deriveComponentCandidateForms(entry)).toEqual(['di', 'odò']);
   });
 
-  it('ignores templates not in the trusted component-template list (e.g. "clipping")', () => {
+  it('real data: "o" has no component candidates (its one etymology template, "clipping", isn\'t a recognized decomposition)', () => {
     const entry = realEntries['en-o-yo-verb-rtjhekLI'];
-    expect(entry.etymologyTemplates[0].name).toBe('clipping');
+    expect(entry.etymologyMorphemes).toEqual([]);
     expect(deriveComponentCandidateForms(entry)).toEqual([]);
   });
 
-  it('skips cross-language templates (numeric arg "1" is not "yo")', () => {
-    const entry = makeEntry({ etymologyTemplates: [{ name: 'compound', args: { '1': 'en', '2': 'foo' } }] });
-    expect(deriveComponentCandidateForms(entry)).toEqual([]);
-  });
-
-  it('drops a template whose forms include a bound morpheme (leading/trailing hyphen)', () => {
-    const entry = makeEntry({ etymologyTemplates: [{ name: 'compound', args: { '1': 'yo', '2': 'a-', '3': 'kan' } }] });
-    expect(deriveComponentCandidateForms(entry)).toEqual([]);
-  });
-
-  it('dedupes repeated forms across templates, preserving first-seen order', () => {
+  it('excludes bound morphemes (leading/trailing hyphen)', () => {
     const entry = makeEntry({
-      etymologyTemplates: [
-        { name: 'compound', args: { '1': 'yo', '2': 'a', '3': 'b' } },
-        { name: 'blend', args: { '1': 'yo', '2': 'b', '3': 'c' } },
+      etymologyMorphemes: [
+        { form: 'à-', gloss: 'nominalizing prefix', bound: true, resolved: false, entryIds: [] },
+        { form: 'kan', gloss: null, bound: false, resolved: true, entryIds: ['x'] },
+      ],
+    });
+    expect(deriveComponentCandidateForms(entry)).toEqual(['kan']);
+  });
+
+  it('dedupes repeated forms, preserving first-seen order', () => {
+    const entry = makeEntry({
+      etymologyMorphemes: [
+        { form: 'a', gloss: null, bound: false, resolved: true, entryIds: [] },
+        { form: 'b', gloss: null, bound: false, resolved: true, entryIds: [] },
+        { form: 'b', gloss: null, bound: false, resolved: true, entryIds: [] },
+        { form: 'c', gloss: null, bound: false, resolved: true, entryIds: [] },
       ],
     });
     expect(deriveComponentCandidateForms(entry)).toEqual(['a', 'b', 'c']);
