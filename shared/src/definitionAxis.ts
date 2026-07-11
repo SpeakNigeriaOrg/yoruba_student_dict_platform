@@ -7,9 +7,9 @@
 // vocab.json's "definition" field, the third axis alongside spelling and
 // etymology). Never writes to golden_record itself - only reports.
 
-import { orthographyInsensitiveForm } from './orthography';
-import { ALTERNATIVE_FORM_PATTERN, escapeRegExp, findCandidateByForm, isAlternativeFormOnly } from './diagnoseEntry';
-import type { DiagnoseOverride, KaikkiLexicon, VocabEntry } from './types';
+import { orthographyInsensitiveForm } from './orthography.js';
+import { ALTERNATIVE_FORM_PATTERN, escapeRegExp, findCandidateByForm, isAlternativeFormOnly } from './diagnoseEntry.js';
+import type { DiagnoseOverride, KaikkiLexicon, VocabEntry } from './types.js';
 
 /** A candidate's glosses, minus any bare "alternative form of X"
  * cross-reference lines. A record can legitimately mix genuine senses with

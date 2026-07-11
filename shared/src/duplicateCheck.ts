@@ -13,9 +13,9 @@
 // "owo" senses (hand, money, business, a city name, ...) as a duplicate of
 // every other one.
 
-import { diagnoseEntry } from './diagnoseEntry';
-import { orthographyInsensitiveForm } from './orthography';
-import type { DiagnosticsOverrides, KaikkiLexicon, Vocab } from './types';
+import { diagnoseEntry } from './diagnoseEntry.js';
+import { orthographyInsensitiveForm } from './orthography.js';
+import type { DiagnosticsOverrides, KaikkiLexicon, Vocab } from './types.js';
 
 export interface DuplicateMatch {
   wordId: string;

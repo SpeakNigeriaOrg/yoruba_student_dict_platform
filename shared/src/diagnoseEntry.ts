@@ -15,9 +15,9 @@
 // See yoruba-student-dict/REMOTE_ACCESS_DISCUSSION.md §4 for the specific
 // bugs this logic was built to fix.
 
-import { orthographyInsensitiveForm } from './orthography';
-import { classifyAgainstForms, formsEqual, type ToneMatchStatus } from './toneMatching';
-import type { DiagnoseOverride, KaikkiLexicon, KaikkiSense, VocabEntry, ComponentCandidate } from './types';
+import { orthographyInsensitiveForm } from './orthography.js';
+import { classifyAgainstForms, formsEqual, type ToneMatchStatus } from './toneMatching.js';
+import type { DiagnoseOverride, KaikkiLexicon, KaikkiSense, VocabEntry, ComponentCandidate } from './types.js';
 
 export function deriveEnglishHint(wordId: string, displayText: string): string {
   const baseKey = orthographyInsensitiveForm(displayText).replace(/ /g, '_');

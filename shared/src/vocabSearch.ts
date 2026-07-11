@@ -7,9 +7,9 @@
 // separate homograph-sense handling is needed (one vocab entry, one
 // result, unlike Kaikki's per-sense records).
 
-import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography';
-import { looksLikeYoruba, tokenizeEnglish } from './searchShared';
-import type { Vocab } from './types';
+import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
+import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
+import type { Vocab } from './types.js';
 
 export type VocabSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'word_id' | 'english';
 

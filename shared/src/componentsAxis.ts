@@ -8,10 +8,10 @@
 // builds the reverse index (which other entries list THIS entry as a
 // component).
 
-import { realGlosses } from './definitionAxis';
-import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography';
-import { classifyAgainstForms, formsEqualKey, STATUS_RANK, type ToneMatchStatus } from './toneMatching';
-import type { ComponentCandidate, DiagnosticsOverrides, KaikkiLexicon, KaikkiSense, Vocab } from './types';
+import { realGlosses } from './definitionAxis.js';
+import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
+import { classifyAgainstForms, formsEqualKey, STATUS_RANK, type ToneMatchStatus } from './toneMatching.js';
+import type { ComponentCandidate, DiagnosticsOverrides, KaikkiLexicon, KaikkiSense, Vocab } from './types.js';
 
 function pushToMap(map: Map<string, string[]>, key: string, value: string): void {
   const existing = map.get(key);

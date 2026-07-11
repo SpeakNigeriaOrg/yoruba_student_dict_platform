@@ -9,9 +9,9 @@
 // over glosses), not a literal port of any indexing machinery - this
 // project's corpus is small enough that a linear scan suffices.
 
-import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography';
-import { looksLikeYoruba, tokenizeEnglish } from './searchShared';
-import type { KaikkiLexicon, KaikkiSense } from './types';
+import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
+import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
+import type { KaikkiLexicon, KaikkiSense } from './types.js';
 
 export interface KaikkiSearchRecord {
   form: string;

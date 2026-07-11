@@ -111,3 +111,34 @@ surface.
 both run clean locally (`tsc` type-checks the library source; test files
 are excluded from the `dist/` build so Vitest doesn't pick up compiled
 duplicates alongside the `.ts` originals).
+
+## `package.json`'s `main`/`types` point at compiled `dist/`, not `src/`
+
+This changed from the original design (`main`/`types` pointing directly at
+`./src/index.ts`, "no build needed for consumption"). That worked for
+Vitest (which transpiles TS and tolerates extensionless relative imports),
+but real plain-Node execution needs neither of those things to be true -
+and this package's own relative imports were extensionless throughout,
+which is exactly what broke once `ingest/`'s CLI script (a real, plain-Node
+entry point, not a Vitest-mediated one) tried to `import` this package.
+Confirmed the same failure would hit `/api`'s actual deployed Azure
+Function too, since `applySpellingDecision.ts` imports `syllabifyWord` from
+here at runtime - this was a real, latent production bug, not just an
+`ingest/`-specific inconvenience.
+
+Fixed by adding `.js` extensions to every relative import in `shared/src`
+(the standard TS-for-ESM convention: `tsc` resolves `./orthography.js` to
+`./orthography.ts` at compile time; the emitted `dist/orthography.js`
+genuinely exists at that path afterward) and pointing `main`/`types` at
+`dist/index.js`/`dist/index.d.ts`. Confirmed both the direct fix
+(`node -e "import('@yoruba-student-dict-platform/shared')"`) and the
+concrete real-world case (`api/dist/handlers/applySpellingDecision.js`
+loading successfully) work under plain Node now.
+
+**Cost of this fix**: consumers (`api/`, `ingest/`) now resolve `shared` via
+its compiled `dist/`, not live source - a `shared/src` edit needs
+`npm run build --workspace=shared` (or the root `npm run build:shared`)
+before a dependent package's tests/build will see it. The root
+`test:api`/`test:ingest`/`build:api`/`build:ingest` scripts already do this
+automatically; running a workspace's own `npm test`/`npm run build`
+directly does not.

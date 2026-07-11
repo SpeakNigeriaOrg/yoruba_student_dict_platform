@@ -7,7 +7,7 @@
 // function that encodes that distinction: underdot_mismatch is treated as
 // a more serious discrepancy than tone_mismatch, never collapsed together.
 
-import { toneInsensitiveForm } from './orthography';
+import { toneInsensitiveForm } from './orthography.js';
 
 export type ToneMatchStatus = 'match' | 'tone_mismatch' | 'underdot_mismatch';
 

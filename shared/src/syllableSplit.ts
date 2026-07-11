@@ -6,9 +6,9 @@
 // independent of Kaikki. Never auto-corrects on its own; a human decides
 // via syllableAction: "keep_manual" or "accept_programmatic".
 
-import { syllabifyWord } from './syllabify';
-import type { DiagnoseEntryResult } from './diagnoseEntry';
-import type { DiagnoseOverride, VocabEntry } from './types';
+import { syllabifyWord } from './syllabify.js';
+import type { DiagnoseEntryResult } from './diagnoseEntry.js';
+import type { DiagnoseOverride, VocabEntry } from './types.js';
 
 export interface ResolvedEffectiveDisplayText {
   displayText: string;

@@ -5,7 +5,7 @@
 // original imports these two helpers directly from kaikki_search.py rather
 // than duplicating them).
 
-import { TONE_MARKS, UNDERDOT_MARKS } from './orthography';
+import { TONE_MARKS, UNDERDOT_MARKS } from './orthography.js';
 
 const STOPWORDS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'is', 'or', 'and', 'for']);
 
