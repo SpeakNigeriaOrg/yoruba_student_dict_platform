@@ -92,6 +92,23 @@ export function deriveComponentCandidateForms(entry: CanonicalEntry): string[] {
   return candidates;
 }
 
+/** Spellings of other words that kaikki-yoruba's own etymology-driven
+ * resolution says use THIS entry as a component - the reverse of
+ * `deriveComponentCandidateForms`. Trivial pass-through of
+ * `entry.usedInCompounds` (kaikki-yoruba already resolved and computed
+ * this - see its `src/lib/morphemeResolution.mjs`); confirmed real and
+ * substantial (mọ̀ "to know" has 34 real entries here), and - unlike the
+ * forward direction - was never ingested into this project's Postgres
+ * tables at all until now, so nothing here or in `api/` could surface it
+ * to a curator for reconciliation. */
+export function deriveUsedInCandidateForms(entry: CanonicalEntry): string[] {
+  const forms: string[] = [];
+  for (const u of entry.usedInCompounds) {
+    if (u.text && !forms.includes(u.text)) forms.push(u.text);
+  }
+  return forms;
+}
+
 /** Raw spellings this entry's own `derivedTerms` names (Kaikki's
  * editor-curated "derived terms" list) - only ever the reverse direction
  * (this word -> compounds built from it), resolved into reciprocal
@@ -141,6 +158,9 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     altOfTargets: deriveAltOfTargets(entry),
     componentCandidates: deriveComponentCandidateForms(entry).map(
       (form): ComponentCandidate => ({ form, provenance: 'etymology_template' }),
+    ),
+    usedInCandidates: deriveUsedInCandidateForms(entry).map(
+      (form): ComponentCandidate => ({ form, provenance: 'synthesized_from_etymology' }),
     ),
     indexKeys: deriveIndexKeys(entry),
     derivedFormTexts: deriveDerivedFormTexts(entry),

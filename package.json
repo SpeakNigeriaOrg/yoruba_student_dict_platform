@@ -17,8 +17,9 @@
     "test:shared": "npm run test --workspace=shared",
     "test:api": "npm run build:shared && npm run test --workspace=api",
     "test:ingest": "npm run build:shared && npm run test --workspace=ingest",
-    "dev:app": "npm run dev --workspace=app",
-    "build:app": "npm run build --workspace=app",
+    "dev:app": "npm run build:shared && npm run dev --workspace=app",
+    "build:app": "npm run build:shared && npm run build --workspace=app",
+    "test:app": "npm run build:shared && npm run test --workspace=app",
     "build:api": "npm run build:shared && npm run build --workspace=api",
     "build:ingest": "npm run build:shared && npm run build --workspace=ingest",
     "db:migrate": "npm run migrate --workspace=db"

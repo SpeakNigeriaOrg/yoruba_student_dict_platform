@@ -92,7 +92,7 @@ export type CanonicalEntries = Record<string, CanonicalEntry>;
 
 export interface ComponentCandidate {
   form: string;
-  provenance: 'etymology_template' | 'derived_reciprocal';
+  provenance: 'etymology_template' | 'derived_reciprocal' | 'synthesized_from_etymology';
 }
 
 /** This project's own derivation over one canonical entry - mirrors
@@ -100,7 +100,12 @@ export interface ComponentCandidate {
  * `pos`/etc. duplication concerns since those come straight from the
  * canonical entry. `derivedFormTexts` is only ever an input to
  * componentCandidate reciprocal synthesis (deriveSenses.ts) - never
- * persisted, same as the Python original never persists `derivedForms`. */
+ * persisted, same as the Python original never persists `derivedForms`.
+ * `usedInCandidates` is the reverse of `componentCandidates` - other
+ * words' spellings that kaikki-yoruba's own etymology-driven resolution
+ * says use this word as a component (see kaikki-yoruba's
+ * usedInCompounds) - trivial pass-through, kaikki-yoruba already computed
+ * the hard part. */
 export interface DerivedKaikkiSense {
   entryId: string;
   pos: string | null;
@@ -111,6 +116,7 @@ export interface DerivedKaikkiSense {
   glosses: string[];
   altOfTargets: string[];
   componentCandidates: ComponentCandidate[];
+  usedInCandidates: ComponentCandidate[];
   indexKeys: string[];
   derivedFormTexts: string[];
 }

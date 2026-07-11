@@ -1,0 +1,42 @@
+{
+  "wordId": "fixturegencompound_madeupword",
+  "displayText": "fixturegencompoundspelling",
+  "componentsProposal": [
+    {
+      "kaikkiForm": "fixturegenpartonespelling",
+      "wordId": "fixturegenpartone_madeuppart",
+      "targetSpellingConfirmed": false,
+      "ambiguous": false,
+      "possibleMatches": [],
+      "provenance": "etymology_template",
+      "previewGlosses": [],
+      "previewGlossesAreExactMatches": false
+    },
+    {
+      "kaikkiForm": "fixturegenparttwospelling",
+      "wordId": "fixturegenparttwo_madeuppart",
+      "targetSpellingConfirmed": false,
+      "ambiguous": false,
+      "possibleMatches": [],
+      "provenance": "etymology_template",
+      "previewGlosses": [],
+      "previewGlossesAreExactMatches": false
+    }
+  ],
+  "usedInProposal": [
+    {
+      "kaikkiForm": "fixturegenusedintargetspelling",
+      "wordId": "fixturegenusedintarget_otherword",
+      "targetSpellingConfirmed": false,
+      "ambiguous": false,
+      "possibleMatches": [],
+      "provenance": "synthesized_from_etymology",
+      "previewGlosses": [],
+      "previewGlossesAreExactMatches": false
+    }
+  ],
+  "usedAsComponentOf": [],
+  "components": [
+    "fixturegencompound_madeupword"
+  ]
+}

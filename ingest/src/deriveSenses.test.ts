@@ -11,6 +11,7 @@ import {
   deriveSense,
   deriveSenses,
   deriveStandardForms,
+  deriveUsedInCandidateForms,
   hasNonstandardSense,
 } from './deriveSenses.js';
 import type { CanonicalEntries, CanonicalEntry } from './types.js';
@@ -162,6 +163,34 @@ describe('deriveComponentCandidateForms', () => {
   });
 });
 
+describe('deriveUsedInCandidateForms', () => {
+  it('extracts distinct compound spellings from usedInCompounds, preserving order', () => {
+    const entry = makeEntry({
+      usedInCompounds: [
+        { entryId: 'a', text: 'àmọ̀tẹ́kùn', provenance: 'synthesized_from_etymology' },
+        { entryId: 'b', text: 'Ọ̀rúnmìlà', provenance: 'synthesized_from_etymology' },
+        { entryId: 'c', text: 'àmọ̀tẹ́kùn', provenance: 'synthesized_from_etymology' },
+      ],
+    });
+    expect(deriveUsedInCandidateForms(entry)).toEqual(['àmọ̀tẹ́kùn', 'Ọ̀rúnmìlà']);
+  });
+
+  it('is empty when the entry has no usedInCompounds', () => {
+    const entry = makeEntry({ usedInCompounds: [] });
+    expect(deriveUsedInCandidateForms(entry)).toEqual([]);
+  });
+
+  it("real data: mọ̀ (\"to know\") has 33 distinct usedInCandidates spellings (34 real kaikki-yoruba entries, minus one exact-spelling duplicate - gbajúmọ̀ appears as both a noun and a verb homograph)", () => {
+    const mo = realEntries['en-mọ-yo-verb-Vk7G5aRj'];
+    expect(mo).toBeDefined();
+    expect(mo.usedInCompounds).toHaveLength(34);
+    const sense = deriveSense(mo);
+    expect(sense.usedInCandidates).toHaveLength(33);
+    expect(sense.usedInCandidates.every((c) => c.provenance === 'synthesized_from_etymology')).toBe(true);
+    expect(sense.usedInCandidates.map((c) => c.form)).toContain('àmọ̀tẹ́kùn');
+  });
+});
+
 describe('deriveDerivedFormTexts', () => {
   it('extracts text from term-type relation items', () => {
     const entry = realEntries['en-fa-yo-verb-OFVmd8R8'];
@@ -215,14 +244,19 @@ describe('deriveSense / deriveSenses on the real corpus', () => {
 
     const withComponents = senses.filter((s) => s.componentCandidates.length > 0);
     const withAltOf = senses.filter((s) => s.altOfTargets.length > 0);
+    const withUsedIn = senses.filter((s) => s.usedInCandidates.length > 0);
     expect(withComponents.length).toBeGreaterThan(0);
     expect(withAltOf.length).toBeGreaterThan(0);
+    expect(withUsedIn.length).toBeGreaterThan(0);
 
     // Every componentCandidate at this stage (pre-reciprocal-synthesis) is
     // tagged etymology_template - derived_reciprocal only appears after
     // synthesizeComponentReciprocals runs.
     for (const s of withComponents) {
       expect(s.componentCandidates.every((c) => c.provenance === 'etymology_template')).toBe(true);
+    }
+    for (const s of withUsedIn) {
+      expect(s.usedInCandidates.every((c) => c.provenance === 'synthesized_from_etymology')).toBe(true);
     }
   });
 

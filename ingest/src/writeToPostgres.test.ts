@@ -40,6 +40,7 @@ function makeSense(overrides: Partial<DerivedKaikkiSense> = {}): DerivedKaikkiSe
     glosses: ['a thing'],
     altOfTargets: [],
     componentCandidates: [],
+    usedInCandidates: [],
     indexKeys: ['x'],
     derivedFormTexts: [],
     ...overrides,
@@ -56,6 +57,7 @@ describe('writeSensesToPostgres', () => {
         glosses: ['home', 'house'],
         indexKeys: ['ile'],
         componentCandidates: [{ form: 'foo', provenance: 'etymology_template' }],
+        usedInCandidates: [{ form: 'iléeṣẹ́', provenance: 'synthesized_from_etymology' }],
       }),
       makeSense({
         headword: 'dodo',
@@ -94,6 +96,11 @@ describe('writeSensesToPostgres', () => {
       { form: 'foo', provenance: 'etymology_template', position: 0 },
       { form: 'odò', provenance: 'etymology_template', position: 1 },
     ]);
+
+    const usedInRows = await pool.query<{ form: string; provenance: string; position: number }>(
+      'select form, provenance, position from kaikki_used_in_candidates order by form',
+    );
+    expect(usedInRows.rows).toEqual([{ form: 'iléeṣẹ́', provenance: 'synthesized_from_etymology', position: 0 }]);
 
     const runRows = await pool.query<{ source_date: string; sense_count: number; content_hash: string }>(
       'select source_date, sense_count, content_hash from kaikki_ingestion_runs',

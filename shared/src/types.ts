@@ -37,6 +37,12 @@ export interface KaikkiSense {
   glosses: string[];
   altOfTargets: string[] | null;
   componentCandidates: ComponentCandidate[] | null;
+  /** The reverse of componentCandidates - other words' spellings that
+   * kaikki-yoruba's own etymology-driven resolution says use this sense as
+   * a component (see kaikki-yoruba's usedInCompounds). Optional/nullable
+   * since callers that only need the forward direction (e.g. tests using
+   * older fixtures) don't need to supply it. */
+  usedInCandidates?: ComponentCandidate[] | null;
   derivedForms: unknown[];
 }
 

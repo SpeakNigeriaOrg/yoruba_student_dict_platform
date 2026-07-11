@@ -122,6 +122,7 @@ export interface DiagnoseEntryResult {
   matchedGlosses?: string[];
   matchedAltOfTargets?: string[];
   matchedComponentCandidates?: ComponentCandidate[];
+  matchedUsedInCandidates?: ComponentCandidate[];
   resolvedBy?: 'manual_selection_via_search' | 'manual_selection' | 'keep_ours' | 'adopt_kaikki_pending';
   candidatesConsidered?: CandidateConsidered[];
   discoveredViaRelaxedMatch?: true;
@@ -276,6 +277,7 @@ export function diagnoseEntry(
     matchedGlosses: chosen.glosses,
     matchedAltOfTargets: chosen.altOfTargets ?? [],
     matchedComponentCandidates: chosen.componentCandidates ?? [],
+    matchedUsedInCandidates: chosen.usedInCandidates ?? [],
   };
   if (manuallySelected) {
     result.resolvedBy = foundViaSearch ? 'manual_selection_via_search' : 'manual_selection';

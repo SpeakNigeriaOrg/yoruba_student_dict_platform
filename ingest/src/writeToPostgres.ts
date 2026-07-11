@@ -107,6 +107,28 @@ async function insertComponentCandidates(client: Queryable, senses: DerivedKaikk
   }
 }
 
+async function insertUsedInCandidates(client: Queryable, senses: DerivedKaikkiSense[], senseIds: string[]): Promise<void> {
+  const rows: Array<{ senseId: string; position: number; form: string; provenance: string }> = [];
+  senses.forEach((sense, i) => {
+    sense.usedInCandidates.forEach((c, position) => {
+      rows.push({ senseId: senseIds[i], position, form: c.form, provenance: c.provenance });
+    });
+  });
+  for (const batch of chunk(rows, FLAT_BATCH_SIZE)) {
+    const placeholders: string[] = [];
+    const values: unknown[] = [];
+    batch.forEach((row, i) => {
+      const base = i * 4;
+      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
+      values.push(row.senseId, row.position, row.form, row.provenance);
+    });
+    await client.query(
+      `insert into kaikki_used_in_candidates (sense_id, position, form, provenance) values ${placeholders.join(', ')}`,
+      values,
+    );
+  }
+}
+
 export interface IngestionRunMetadata {
   sourceDate: string | null;
   contentHash: string | null;
@@ -127,6 +149,7 @@ export async function writeSensesToPostgres(
   await insertSenses(client, senses, senseIds);
   await insertSenseKeys(client, senses, senseIds);
   await insertComponentCandidates(client, senses, senseIds);
+  await insertUsedInCandidates(client, senses, senseIds);
 
   await client.query(
     'insert into kaikki_ingestion_runs (source_date, sense_count, content_hash) values ($1, $2, $3)',

@@ -107,73 +107,97 @@ export interface ComponentsProposalItem {
   previewGlossesAreExactMatches: boolean;
 }
 
+/** Resolves one Kaikki-proposed spelling (a forward component candidate,
+ * or - equally - a reverse "used in" candidate, same shape either way)
+ * against real vocab: exact spelling -> confident wordId match,
+ * tone-insensitive-only coincidence -> possibleMatches hint (never
+ * auto-resolved - tone is as meaning-bearing as an underdot in Yoruba),
+ * plus a gloss preview when there's nothing already-confirmed to prefer
+ * instead. Shared by both directions in componentsAxisFields so the
+ * resolution logic isn't duplicated. */
+function resolveProposalItem(
+  candidate: ComponentCandidate,
+  lexicon: KaikkiLexicon,
+  overrides: DiagnosticsOverrides,
+  index: VocabSpellingIndex,
+): ComponentsProposalItem {
+  const kaikkiForm = candidate.form;
+
+  // Exact spelling only counts as a confident resolution - a
+  // tone-insensitive coincidence is surfaced as possibleMatches instead:
+  // a hint for a human to look at and decide, never auto-accepted.
+  const exactMatches = index.byDisplayText.get(formsEqualKey(kaikkiForm)) ?? [];
+  const wordIdMatch = exactMatches.length === 1 ? exactMatches[0] : null;
+  const possibleMatches =
+    exactMatches.length > 0 ? [] : (index.byToneInsensitive.get(toneInsensitiveForm(kaikkiForm)) ?? []);
+
+  // An exact match against a word whose OWN spelling hasn't been
+  // confirmed yet is only as trustworthy as "matches whatever we
+  // currently have written down" - not the same confidence as matching
+  // an already-vetted word.
+  const targetConfirmed = wordIdMatch !== null && Boolean((overrides[wordIdMatch] ?? {}).action);
+
+  let previewGlosses: string[];
+  let previewGlossesAreExactMatches: boolean;
+  if (wordIdMatch && targetConfirmed) {
+    // Once it's a real, spelling-confirmed vocab word its own definition
+    // axis is the source of truth, not a Kaikki gloss preview.
+    previewGlosses = [];
+    previewGlossesAreExactMatches = false;
+  } else {
+    const preview = previewGlossesForForm(kaikkiForm, lexicon);
+    previewGlosses = preview.glosses;
+    previewGlossesAreExactMatches = preview.isExactMatch;
+  }
+
+  return {
+    kaikkiForm,
+    wordId: wordIdMatch,
+    targetSpellingConfirmed: targetConfirmed,
+    ambiguous: exactMatches.length > 1,
+    possibleMatches,
+    provenance: candidate.provenance,
+    previewGlosses,
+    previewGlossesAreExactMatches,
+  };
+}
+
 export interface ComponentsAxisFieldsResult {
   componentsProposal: ComponentsProposalItem[];
+  usedInProposal: ComponentsProposalItem[];
   usedAsComponentOf: string[];
   components: string[];
   invalidComponents?: string[];
 }
 
 /** componentsProposal (this entry's Kaikki-proposed decomposition,
- * resolved against golden_record), usedAsComponentOf (the reverse index),
- * and invalidComponents (a dangling component reference) - the full set of
- * etymology/components-axis fields for one entry. */
+ * resolved against golden_record), usedInProposal (the reverse -
+ * kaikki-yoruba's own etymology-driven "which other words use this one as
+ * a component," resolved the same way - NOT yet reconciled by a curator,
+ * unlike usedAsComponentOf below), usedAsComponentOf (the CONFIRMED
+ * reverse index - only reflects relationships a curator already accepted
+ * elsewhere), and invalidComponents (a dangling component reference) -
+ * the full set of etymology/components-axis fields for one entry. */
 export function componentsAxisFields(
   wordId: string,
   vocab: Vocab,
   matchedComponentCandidates: ComponentCandidate[] | null | undefined,
+  matchedUsedInCandidates: ComponentCandidate[] | null | undefined,
   lexicon: KaikkiLexicon,
   overrides: DiagnosticsOverrides,
   index: VocabSpellingIndex,
   componentOwners: Map<string, string[]>,
 ): ComponentsAxisFieldsResult {
-  const proposal: ComponentsProposalItem[] = [];
-  for (const candidate of matchedComponentCandidates ?? []) {
-    const kaikkiForm = candidate.form;
-
-    // Exact spelling only counts as a confident resolution - a
-    // tone-insensitive coincidence is surfaced as possibleMatches instead:
-    // a hint for a human to look at and decide, never auto-accepted.
-    const exactMatches = index.byDisplayText.get(formsEqualKey(kaikkiForm)) ?? [];
-    const wordIdMatch = exactMatches.length === 1 ? exactMatches[0] : null;
-    const possibleMatches =
-      exactMatches.length > 0 ? [] : (index.byToneInsensitive.get(toneInsensitiveForm(kaikkiForm)) ?? []);
-
-    // An exact match against a word whose OWN spelling hasn't been
-    // confirmed yet is only as trustworthy as "matches whatever we
-    // currently have written down" - not the same confidence as matching
-    // an already-vetted word.
-    const targetConfirmed = wordIdMatch !== null && Boolean((overrides[wordIdMatch] ?? {}).action);
-
-    let previewGlosses: string[];
-    let previewGlossesAreExactMatches: boolean;
-    if (wordIdMatch && targetConfirmed) {
-      // Once it's a real, spelling-confirmed vocab word its own definition
-      // axis is the source of truth, not a Kaikki gloss preview.
-      previewGlosses = [];
-      previewGlossesAreExactMatches = false;
-    } else {
-      const preview = previewGlossesForForm(kaikkiForm, lexicon);
-      previewGlosses = preview.glosses;
-      previewGlossesAreExactMatches = preview.isExactMatch;
-    }
-
-    proposal.push({
-      kaikkiForm,
-      wordId: wordIdMatch,
-      targetSpellingConfirmed: targetConfirmed,
-      ambiguous: exactMatches.length > 1,
-      possibleMatches,
-      provenance: candidate.provenance,
-      previewGlosses,
-      previewGlossesAreExactMatches,
-    });
-  }
+  const componentsProposal = (matchedComponentCandidates ?? []).map((c) =>
+    resolveProposalItem(c, lexicon, overrides, index),
+  );
+  const usedInProposal = (matchedUsedInCandidates ?? []).map((c) => resolveProposalItem(c, lexicon, overrides, index));
 
   const entry = vocab[wordId];
   const ownComponents = entry.components ?? [];
   const fields: ComponentsAxisFieldsResult = {
-    componentsProposal: proposal,
+    componentsProposal,
+    usedInProposal,
     usedAsComponentOf: componentOwners.get(wordId) ?? [],
     components: ownComponents.length > 0 ? ownComponents : [wordId],
   };

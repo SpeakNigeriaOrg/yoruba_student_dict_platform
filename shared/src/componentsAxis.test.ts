@@ -40,7 +40,10 @@ const componentOwners = buildComponentOwnersIndex(vocab);
 const COMPONENTS_FIELDS = ['componentsProposal', 'usedAsComponentOf', 'components', 'invalidComponents'] as const;
 
 function pickComponentsFields(entry: FullDiagnosticsReportEntry): Partial<ComponentsAxisFieldsResult> {
-  const picked: Partial<ComponentsAxisFieldsResult> = {};
+  // usedInProposal predates this fixture entirely (the Python original
+  // never computed it) - always [] here since computeComponentsFields
+  // always passes no matched used-in candidates for this real-fixture pass.
+  const picked: Partial<ComponentsAxisFieldsResult> = { usedInProposal: [] };
   for (const key of COMPONENTS_FIELDS) {
     if (key in entry) (picked as Record<string, unknown>)[key] = entry[key];
   }
@@ -53,10 +56,14 @@ function pickComponentsFields(entry: FullDiagnosticsReportEntry): Partial<Compon
 function computeComponentsFields(wordId: string): ComponentsAxisFieldsResult {
   const entry = vocab[wordId];
   const diagnosis = diagnoseEntry(wordId, entry, lexicon, overrides[wordId]);
+  // The Python original (and these real fixtures) predate usedInProposal -
+  // that's a new field, not something to parity-check against here, so no
+  // matched used-in candidates for this real-fixture pass.
   return componentsAxisFields(
     wordId,
     vocab,
     diagnosis.matchedComponentCandidates,
+    [],
     lexicon,
     overrides,
     index,
@@ -101,6 +108,7 @@ describe('componentsAxisFields direct unit tests', () => {
       'okan_heart',
       smallVocab,
       [{ form: 'ọwọ́', provenance: 'etymology_template' }],
+      [],
       {},
       {},
       smallIndex,
@@ -124,6 +132,7 @@ describe('componentsAxisFields direct unit tests', () => {
       'okan_heart',
       uniqueVocab,
       [{ form: 'ọwọ́', provenance: 'etymology_template' }],
+      [],
       {},
       {},
       uniqueIndex,
@@ -145,6 +154,7 @@ describe('componentsAxisFields direct unit tests', () => {
       'okan_heart',
       uniqueVocab,
       [{ form: 'ọwọ́', provenance: 'etymology_template' }],
+      [],
       {},
       { owo_hand: { action: 'keep_ours' } },
       uniqueIndex,
@@ -168,6 +178,7 @@ describe('componentsAxisFields direct unit tests', () => {
       'other_word',
       { ...toneVocab, other_word: { displayText: 'x', syllables: ['x'] } },
       [{ form: 'ọkán', provenance: 'etymology_template' }],
+      [],
       {},
       {},
       toneIndex,
@@ -178,20 +189,66 @@ describe('componentsAxisFields direct unit tests', () => {
   });
 
   it('reports invalidComponents for a dangling component reference', () => {
-    const result = componentsAxisFields('dangling_ref', smallVocab, [], {}, {}, smallIndex, smallOwners);
+    const result = componentsAxisFields('dangling_ref', smallVocab, [], [], {}, {}, smallIndex, smallOwners);
     expect(result.invalidComponents).toEqual(['nonexistent_word']);
     expect(result.components).toEqual(['nonexistent_word']);
   });
 
   it('defaults an atomic word (no components field) to a self-referencing components list', () => {
-    const result = componentsAxisFields('okan_heart', smallVocab, [], {}, {}, smallIndex, smallOwners);
+    const result = componentsAxisFields('okan_heart', smallVocab, [], [], {}, {}, smallIndex, smallOwners);
     expect(result.components).toEqual(['okan_heart']);
     expect(result.invalidComponents).toBeUndefined();
   });
 
   it('builds the reverse usedAsComponentOf index from other entries’ own components lists', () => {
-    const result = componentsAxisFields('owo_hand', smallVocab, [], {}, {}, smallIndex, smallOwners);
+    const result = componentsAxisFields('owo_hand', smallVocab, [], [], {}, {}, smallIndex, smallOwners);
     expect(result.usedAsComponentOf).toEqual(['ile_kunle_phrase']);
+  });
+
+  it('resolves usedInProposal (kaikki-yoruba\'s proposed reverse "used in" candidates) the same way as componentsProposal - confident exact match, unconfirmed gloss preview', () => {
+    const uniqueVocab: Vocab = {
+      owo_hand: { displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'] },
+      okan_heart: { displayText: 'ọkàn', syllables: ['ọ', 'kàn'] },
+    };
+    const uniqueIndex = buildVocabSpellingIndex(uniqueVocab);
+    const uniqueOwners = buildComponentOwnersIndex(uniqueVocab);
+    const result = componentsAxisFields(
+      'owo_hand',
+      uniqueVocab,
+      [],
+      [{ form: 'ọkàn', provenance: 'synthesized_from_etymology' }],
+      {},
+      {},
+      uniqueIndex,
+      uniqueOwners,
+    );
+    expect(result.componentsProposal).toEqual([]);
+    expect(result.usedInProposal[0]).toMatchObject({
+      kaikkiForm: 'ọkàn',
+      wordId: 'okan_heart',
+      targetSpellingConfirmed: false,
+      ambiguous: false,
+      provenance: 'synthesized_from_etymology',
+    });
+  });
+
+  it('usedInProposal is not yet reconciled - distinct from usedAsComponentOf, which only reflects confirmed relationships', () => {
+    // ile_kunle_phrase already confirms owo_hand as a real component
+    // (smallVocab's own fixture setup) - usedAsComponentOf reflects that.
+    // usedInProposal is a SEPARATE, Kaikki-suggested signal that doesn't
+    // depend on any curator having reconciled anything yet.
+    const result = componentsAxisFields(
+      'owo_hand',
+      smallVocab,
+      [],
+      [{ form: 'ọkàn', provenance: 'synthesized_from_etymology' }],
+      {},
+      {},
+      smallIndex,
+      smallOwners,
+    );
+    expect(result.usedAsComponentOf).toEqual(['ile_kunle_phrase']);
+    expect(result.usedInProposal[0].wordId).toBe('okan_heart');
   });
 });
 

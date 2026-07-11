@@ -6,20 +6,17 @@
 // dictionary_overrides.json[wordId] entry carries both action/
 // candidateForm and syllableAction/syllableNote as sibling fields.
 //
-// Known gap: 'adopt_kaikki' requires the caller to supply newDisplayText
-// directly rather than this handler re-deriving it from the Kaikki
-// lexicon itself (the way diagnoseEntry would). The client already runs
-// diagnoseEntry against its own held copy of the lexicon to show the
-// curator what "adopt Kaikki's spelling" means before they click it, so
-// this trusts that computed value rather than re-verifying it server-side
-// - the Function app has no established way to load the (multi-MB) Kaikki
-// lexicon at runtime yet. Revisit once that's decided; until then this is
-// no less trusting of the client than createWord/createPhrase already are
-// for displayText/syllables in general.
+// 'adopt_kaikki' requires the caller to supply newDisplayText directly,
+// but this now verifies it server-side against ingest/'s Postgres-backed
+// Kaikki data (kaikkiData.ts) rather than trusting it outright - reuses
+// diagnoseEntry's own adoptionTarget computation (scoped to a single-entry
+// lexicon for just this word) instead of a second implementation of
+// "which Kaikki sense does this word match."
 
 import type pg from 'pg';
-import { syllabifyWord } from '@yoruba-student-dict-platform/shared';
+import { diagnoseEntry, orthographyInsensitiveForm, syllabifyWord, type KaikkiLexicon } from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
+import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { WordNotFoundError } from './errors.js';
 
 export interface ApplySpellingDecisionInput {
@@ -43,6 +40,17 @@ export class NewDisplayTextRequiredError extends Error {
   constructor() {
     super("newDisplayText is required when action is 'adopt_kaikki'");
     this.name = 'NewDisplayTextRequiredError';
+  }
+}
+
+export class KaikkiVerificationMismatchError extends Error {
+  constructor(supplied: string, expected: string | undefined) {
+    super(
+      expected
+        ? `newDisplayText '${supplied}' does not match what Kaikki data says this word should adopt ('${expected}')`
+        : `newDisplayText '${supplied}' was supplied, but this word no longer resolves to any Kaikki sense worth adopting`,
+    );
+    this.name = 'KaikkiVerificationMismatchError';
   }
 }
 
@@ -71,8 +79,8 @@ export async function applySpellingDecisionInTransaction(
   input: ApplySpellingDecisionInput,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query<{ display_text: string }>(
-    'select display_text from golden_record where word_id = $1',
+  const existing = await client.query<{ display_text: string; syllables: string[]; entry_type: string | null }>(
+    'select display_text, syllables, entry_type from golden_record where word_id = $1',
     [wordId],
   );
   const currentRow = existing.rows[0];
@@ -89,6 +97,19 @@ export async function applySpellingDecisionInTransaction(
   let effectiveDisplayText = currentRow.display_text;
 
   if (input.action === 'adopt_kaikki' && input.newDisplayText) {
+    const key = orthographyInsensitiveForm(currentRow.display_text);
+    const senses = await loadKaikkiSensesForKey(client, key);
+    const lexicon: KaikkiLexicon = senses.length > 0 ? { [key]: senses } : {};
+    const vocabEntry = {
+      displayText: currentRow.display_text,
+      syllables: currentRow.syllables,
+      ...(currentRow.entry_type === 'phrase' ? { type: 'phrase' as const } : {}),
+    };
+    const diagnosis = diagnoseEntry(wordId, vocabEntry, lexicon);
+    if (diagnosis.adoptionTarget !== input.newDisplayText) {
+      throw new KaikkiVerificationMismatchError(input.newDisplayText, diagnosis.adoptionTarget);
+    }
+
     effectiveDisplayText = input.newDisplayText;
     await client.query('update golden_record set display_text = $1, updated_at = now(), updated_by = $2 where word_id = $3', [
       input.newDisplayText,
