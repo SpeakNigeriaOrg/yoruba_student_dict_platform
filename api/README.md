@@ -150,7 +150,10 @@ start`) requires the Azure Functions Core Tools, not installed in this
 environment.
 
 Imports `@yoruba-student-dict-platform/shared` for server-side validation
-of incoming writes once the decision/contribution endpoints need it (e.g.
-confirming a submitted component word_id actually exists, or reusing the
-same tone/orthography normalization the client already ran) - never
-duplicates logic that already lives there.
+of incoming writes (e.g. `applySpellingDecision.ts`'s use of
+`syllabifyWord`) - never duplicates logic that already lives there. `shared`
+resolves via its compiled `dist/`, not live source (see `shared/README.md`
+for why - a real runtime bug was found and fixed here), so a `shared/src`
+edit needs `npm run build --workspace=shared` before this package's tests
+see it; prefer the root `npm run test:api`/`build:api` scripts, which do
+this automatically.
