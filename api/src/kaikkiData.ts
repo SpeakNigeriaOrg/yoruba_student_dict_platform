@@ -9,7 +9,7 @@
 // rather than loading the whole lexicon into memory - the "real, queryable
 // tables" this migration exists for, not another full in-memory load.
 
-import type { ComponentCandidate, KaikkiSense } from '@yoruba-student-dict-platform/shared';
+import type { ComponentCandidate, KaikkiLexicon, KaikkiSense } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from './db.js';
 
 interface KaikkiSenseRow {
@@ -73,4 +73,40 @@ export async function loadKaikkiSensesForKey(client: Queryable, orthographyInsen
     [orthographyInsensitiveKey],
   );
   return rows.map(rowToKaikkiSense);
+}
+
+/** Loads the whole Kaikki corpus into memory, keyed by
+ * orthography-insensitive key - unlike loadKaikkiSensesForKey, which
+ * looks up one known key at query time. A free-text search (searchKaikki)
+ * needs to scan across every key/spelling at once, and this project's
+ * corpus (a few thousand senses) is small enough that a linear scan
+ * suffices - see kaikkiSearch.ts's own header comment for the same
+ * tradeoff already accepted there. */
+export async function loadFullKaikkiLexicon(client: Queryable): Promise<KaikkiLexicon> {
+  const { rows } = await client.query<KaikkiSenseRow & { orthography_insensitive_key: string }>(
+    `select k.orthography_insensitive_key,
+            s.pos, s.etymology_number, s.headword, s.canonical_value,
+            s.canonical_inference_method, s.canonical_confidence,
+            s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
+            coalesce(
+              (select json_agg(json_build_object('form', c.form, 'provenance', c.provenance) order by c.position)
+               from kaikki_component_candidates c where c.sense_id = s.sense_id),
+              '[]'::json
+            ) as component_candidates,
+            coalesce(
+              (select json_agg(json_build_object('form', u.form, 'provenance', u.provenance) order by u.position)
+               from kaikki_used_in_candidates u where u.sense_id = s.sense_id),
+              '[]'::json
+            ) as used_in_candidates
+     from kaikki_senses s
+     join kaikki_sense_keys k on k.sense_id = s.sense_id`,
+  );
+  const lexicon: KaikkiLexicon = {};
+  for (const row of rows) {
+    const sense = rowToKaikkiSense(row);
+    const existing = lexicon[row.orthography_insensitive_key];
+    if (existing) existing.push(sense);
+    else lexicon[row.orthography_insensitive_key] = [sense];
+  }
+  return lexicon;
 }

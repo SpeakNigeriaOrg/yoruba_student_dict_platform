@@ -6,27 +6,50 @@
 // not_in_kaikki/ambiguous_match/matched_alternative_form/already-decided
 // verified_keep_ours/decided_adopt_kaikki) - rendered directly rather than
 // re-deriving anything client-side.
+//
+// Picking among ambiguous candidates, a manual Kaikki search fallback, a
+// note field, and the syllable-split sub-check were all previously
+// missing here - the old tool's resolver.js supported all four
+// (candidate radios, a search box, a note textarea, and a manual-vs-
+// programmatic syllable comparison respectively).
 
 import { useEffect, useState } from 'react';
-import { getSpellingReview, postSpellingDecision, type SpellingReviewResult } from '../api.js';
+import {
+  getSpellingReview,
+  postSpellingDecision,
+  searchKaikki,
+  submitSpellingContribution,
+  type ApplySpellingDecisionInput,
+  type SpellingReviewResult,
+} from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { SearchBox } from './SearchBox.js';
 
 export interface SpellingReviewProps {
   wordId: string;
+  /** Curators decide directly (POST /decisions/spelling); everyone else
+   * proposes a contribution instead (POST /contributions), pending a
+   * curator's approval - same data shape either way. */
+  isCurator: boolean;
 }
 
-export function SpellingReview({ wordId }: SpellingReviewProps) {
+export function SpellingReview({ wordId, isCurator }: SpellingReviewProps) {
   const [review, setReview] = useState<SpellingReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setReview(null);
     setError(null);
+    setSelectedCandidate(null);
     getSpellingReview(wordId)
       .then((result) => {
-        if (!cancelled) setReview(result);
+        if (cancelled) return;
+        setReview(result);
+        setNote(result.note ?? '');
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -36,27 +59,62 @@ export function SpellingReview({ wordId }: SpellingReviewProps) {
     };
   }, [wordId]);
 
-  async function keepOurs() {
+  async function submit(input: ApplySpellingDecisionInput, successMessage: string) {
     try {
-      await postSpellingDecision(wordId, { action: 'keep_ours' });
-      setStatus('Kept our own spelling.');
+      if (isCurator) {
+        await postSpellingDecision(wordId, input);
+        setStatus(successMessage);
+      } else {
+        await submitSpellingContribution(wordId, input);
+        setStatus(`Proposed: ${successMessage}`);
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  async function keepOurs() {
+    await submit({ action: 'keep_ours', note: note || undefined }, 'Kept our own spelling.');
   }
 
   async function adoptKaikki() {
     if (!review?.adoptionTarget) return;
-    try {
-      await postSpellingDecision(wordId, { action: 'adopt_kaikki', newDisplayText: review.adoptionTarget });
-      setStatus(`Adopted Kaikki's spelling: ${review.adoptionTarget}`);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+    await submit(
+      { action: 'adopt_kaikki', newDisplayText: review.adoptionTarget, note: note || undefined },
+      `Adopted Kaikki's spelling: ${review.adoptionTarget}`,
+    );
+  }
+
+  async function confirmSelectedCandidate() {
+    if (!selectedCandidate) {
+      setStatus('Select a candidate first.');
+      return;
     }
+    await submit(
+      { action: 'select_candidate', candidateForm: selectedCandidate, note: note || undefined },
+      `Confirmed candidate: ${selectedCandidate}`,
+    );
+  }
+
+  async function useSearchResultAsCandidate(form: string) {
+    await submit({ action: 'select_candidate', candidateForm: form, note: note || undefined }, `Confirmed candidate: ${form}`);
+  }
+
+  async function keepManualSyllables() {
+    await submit({ syllableAction: 'keep_manual', syllableNote: note || undefined }, 'Kept the manual syllable split.');
+  }
+
+  async function acceptProgrammaticSyllables() {
+    await submit(
+      { syllableAction: 'accept_programmatic', syllableNote: note || undefined },
+      `Accepted programmatic split: ${review?.syllableSplitProgrammatic?.join(' · ')}`,
+    );
   }
 
   if (error) return <p role="alert">Couldn't load spelling data: {error}</p>;
   if (!review) return <p>Loading spelling data...</p>;
+
+  const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
 
   return (
     <section aria-label="Spelling review">
@@ -90,19 +148,70 @@ export function SpellingReview({ wordId }: SpellingReviewProps) {
           <ul aria-label="Candidates considered">
             {review.candidatesConsidered.map((c, i) => (
               <li key={i}>
-                <strong>{c.form}</strong> ({c.pos}) - {c.glosses.join('; ')}
+                <label>
+                  <input
+                    type="radio"
+                    name="candidate"
+                    value={c.form}
+                    checked={selectedCandidate === c.form}
+                    onChange={() => setSelectedCandidate(c.form)}
+                  />
+                  <strong>{c.form}</strong> ({c.pos}) - {c.glosses.join('; ')}
+                </label>
               </li>
             ))}
           </ul>
+          <button type="button" onClick={confirmSelectedCandidate}>
+            {label('Confirm selected candidate')}
+          </button>
+        </>
+      ) : null}
+
+      <h3>Search Kaikki manually</h3>
+      <SearchBox
+        search={searchKaikki}
+        renderResult={(r) => (
+          <>
+            <strong>{r.form}</strong> ({r.pos}) - {r.glosses.join('; ')}
+          </>
+        )}
+        onSelect={(r) => useSearchResultAsCandidate(r.form)}
+        selectLabel={label('Use this')}
+        placeholder="Search Kaikki..."
+        resultsAriaLabel="Kaikki search results"
+      />
+
+      {review.syllableSplitStatus === 'mismatch' ? (
+        <>
+          <h3>Syllable split</h3>
+          <p aria-label="Syllable split comparison">
+            Manual: <strong>{review.syllableSplitManual?.join(' · ')}</strong>
+            <br />
+            Programmatic: <strong>{review.syllableSplitProgrammatic?.join(' · ')}</strong>
+          </p>
+          <div>
+            <button type="button" onClick={keepManualSyllables}>
+              {label('Keep manual split')}
+            </button>
+            <button type="button" onClick={acceptProgrammaticSyllables}>
+              {label('Accept programmatic split')}
+            </button>
+          </div>
         </>
       ) : null}
 
       <div>
+        <label htmlFor="spelling-note-field">Note</label>
+        <br />
+        <textarea id="spelling-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+      </div>
+
+      <div>
         <button type="button" onClick={keepOurs}>
-          Keep our spelling
+          {label('Keep our spelling')}
         </button>
         <button type="button" onClick={adoptKaikki} disabled={!review.adoptionTarget}>
-          Adopt Kaikki's spelling
+          {label("Adopt Kaikki's spelling")}
         </button>
       </div>
       {status ? <p role="status">{status}</p> : null}

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { applyDefinitionDecision, MissingDefinitionTextError } from './applyDefinitionDecision.js';
+import { getDefinitionReview } from './getDefinitionReview.js';
 import { WordNotFoundError } from './errors.js';
 
 const NS = 'testdef_';
 const pool = getTestPool();
 let curatorUserId: string;
+const seededKaikkiSenseIds: string[] = [];
 
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
@@ -18,6 +20,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanUpTestData(pool, NS);
+  if (seededKaikkiSenseIds.length > 0) {
+    await pool.query('delete from kaikki_senses where sense_id = any($1)', [seededKaikkiSenseIds]);
+  }
   await pool.end();
 });
 
@@ -93,5 +98,46 @@ describe('applyDefinitionDecision', () => {
     ]);
     expect(rows.rowCount).toBe(1);
     expect(rows.rows[0].decision).toEqual({ definitionAction: 'custom', definitionText: 'revised' });
+  });
+
+  it('a definitionSourceForm decision round-trips through getDefinitionReview', async () => {
+    const wordId = `${NS}sourceform_word`;
+    await insertWord(wordId, 'old text');
+    // resolveDefinitionSource only honors an explicit definitionSourceForm
+    // override if it actually resolves to a real Kaikki record - a real
+    // sense needs seeding for this to be a genuine round-trip, not just a
+    // "typo, ignored" no-op.
+    const senseResult = await pool.query<{ sense_id: string }>(
+      `insert into kaikki_senses
+         (pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses)
+       values ('noun', $1, $1, 'explicit_canonical_tag', 1.0, $1, $2, $3)
+       returning sense_id`,
+      [`${NS}someothersourceform`, [`${NS}someothersourceform`], ['redirected gloss']],
+    );
+    seededKaikkiSenseIds.push(senseResult.rows[0].sense_id);
+    await pool.query('insert into kaikki_sense_keys (sense_id, orthography_insensitive_key) values ($1, $2)', [
+      senseResult.rows[0].sense_id,
+      `${NS}someothersourceform`,
+    ]);
+
+    await applyDefinitionDecision(
+      pool,
+      wordId,
+      { definitionAction: 'custom', definitionText: 'redirected text', definitionSourceForm: `${NS}someothersourceform` },
+      curatorUserId,
+    );
+
+    const decision = await pool.query<{ decision: unknown }>(
+      "select decision from word_decisions where word_id = $1 and axis = 'definition'",
+      [wordId],
+    );
+    expect(decision.rows[0].decision).toEqual({
+      definitionAction: 'custom',
+      definitionText: 'redirected text',
+      definitionSourceForm: `${NS}someothersourceform`,
+    });
+
+    const review = await getDefinitionReview(pool, wordId);
+    expect(review.definitionSourceForm).toBe(`${NS}someothersourceform`);
   });
 });

@@ -1,0 +1,30 @@
+[
+  {
+    "wordId": "fixturegenallwords_worda",
+    "displayText": "fixturegenallwords_wordaspelling",
+    "syllables": [
+      "fixturegenallwords_wordaspelling"
+    ],
+    "definition": "a definition",
+    "entryType": null,
+    "axisDecided": {
+      "spelling": false,
+      "definition": true,
+      "etymology": false
+    }
+  },
+  {
+    "wordId": "fixturegenallwords_wordb",
+    "displayText": "fixturegenallwords_wordbspelling",
+    "syllables": [
+      "fixturegenallwords_wordbspelling"
+    ],
+    "definition": null,
+    "entryType": null,
+    "axisDecided": {
+      "spelling": false,
+      "definition": false,
+      "etymology": false
+    }
+  }
+]

@@ -3,7 +3,7 @@
 
   "routes": [
     { "route": "/api/words", "allowedRoles": ["curator"] },
-    { "route": "/api/words/*", "allowedRoles": ["curator"] },
+    { "route": "/api/words/*", "allowedRoles": ["authenticated"] },
     { "route": "/api/phrases", "allowedRoles": ["curator"] },
     { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
     { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
@@ -11,8 +11,13 @@
     { "route": "/api/assignments/me", "allowedRoles": ["authenticated"] },
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
 
-    { "route": "/api/contributions", "allowedRoles": ["authenticated"] },
+    { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
+    { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["authenticated"] },
     { "route": "/api/utterances/*", "allowedRoles": ["authenticated"] },
+
+    { "route": "/api/kaikki-search", "allowedRoles": ["authenticated"] },
+    { "route": "/api/vocab-search", "allowedRoles": ["authenticated"] },
+    { "route": "/api/duplicate-check", "allowedRoles": ["curator"] },
 
     { "route": "/login", "redirect": "/.auth/login/github" },
     { "route": "/logout", "redirect": "/.auth/logout" }

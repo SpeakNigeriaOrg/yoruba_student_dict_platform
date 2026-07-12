@@ -8,7 +8,14 @@
 // shared/ is, so these are hand-kept in sync, same as identity.ts already
 // does for ClientPrincipal).
 
-import type { CheckDefinitionResult, ComponentsAxisFieldsResult, DiagnoseEntryResult } from '@yoruba-student-dict-platform/shared';
+import type {
+  CheckDefinitionResult,
+  CheckSyllableSplitResult,
+  ComponentsAxisFieldsResult,
+  DiagnoseEntryResult,
+  KaikkiSearchResult,
+  VocabSearchResult,
+} from '@yoruba-student-dict-platform/shared';
 
 export class ApiError extends Error {
   constructor(
@@ -83,7 +90,7 @@ export function postEtymologyDecision(wordId: string, input: ApplyEtymologyDecis
 }
 
 // Mirrors api/src/handlers/getSpellingReview.ts's SpellingReviewResult.
-export interface SpellingReviewResult extends DiagnoseEntryResult {
+export interface SpellingReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult {
   syllables: string[];
   definition: string | null;
   axisDecided: AxisDecided;
@@ -127,6 +134,7 @@ export function getDefinitionReview(wordId: string): Promise<DefinitionReviewRes
 export interface ApplyDefinitionDecisionInput {
   definitionAction: 'confirm' | 'custom';
   definitionText?: string;
+  definitionSourceForm?: string;
   note?: string;
 }
 
@@ -136,4 +144,131 @@ export function postDefinitionDecision(wordId: string, input: ApplyDefinitionDec
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wordId, ...input }),
   });
+}
+
+// Mirrors api/src/functions/kaikkiSearch.ts / api/src/functions/vocabSearch.ts.
+export function searchKaikki(query: string): Promise<KaikkiSearchResult[]> {
+  return fetchJson<{ results: KaikkiSearchResult[] }>(`/api/kaikki-search?q=${encodeURIComponent(query)}`).then(
+    (r) => r.results,
+  );
+}
+
+export function searchVocab(query: string): Promise<VocabSearchResult[]> {
+  return fetchJson<{ results: VocabSearchResult[] }>(`/api/vocab-search?q=${encodeURIComponent(query)}`).then(
+    (r) => r.results,
+  );
+}
+
+// Mirrors api/src/handlers/listAllWords.ts's AllWordsListItem.
+export interface AllWordsListItem {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  entryType: 'phrase' | null;
+  axisDecided: AxisDecided;
+}
+
+export function getAllWords(): Promise<AllWordsListItem[]> {
+  return fetchJson<{ words: AllWordsListItem[] }>('/api/words').then((r) => r.words);
+}
+
+// Mirrors api/src/handlers/checkDuplicates.ts's DuplicateMatch (from shared/).
+export interface DuplicateMatch {
+  wordId: string;
+  displayText: string;
+  reason: string;
+}
+
+export function getDuplicateCheck(spelling: string, altOfTargets: string[]): Promise<DuplicateMatch[]> {
+  const params = new URLSearchParams({ spelling });
+  if (altOfTargets.length > 0) params.set('altOfTargets', altOfTargets.join(','));
+  return fetchJson<{ matches: DuplicateMatch[] }>(`/api/duplicate-check?${params}`).then((r) => r.matches);
+}
+
+// Mirrors api/src/handlers/createWord.ts's CreateWordInput.
+export interface CreateWordInput {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition?: string | null;
+}
+
+export function createWord(input: CreateWordInput): Promise<{ wordId: string }> {
+  return fetchJson('/api/words', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+// Mirrors api/src/handlers/createPhrase.ts's CreatePhraseInput.
+export interface CreatePhraseInput {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  components: string[];
+}
+
+export function createPhrase(input: CreatePhraseInput): Promise<{ wordId: string }> {
+  return fetchJson('/api/phrases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+// Mirrors api/src/handlers/submitContribution.ts's SubmitContributionInput -
+// a volunteer's (or curator's) proposed decision, applied only once a
+// curator approves it. Same flat per-axis field shape as the direct
+// decision endpoints (POST /api/decisions/{axis}), plus axis + wordId.
+export function submitSpellingContribution(wordId: string, input: ApplySpellingDecisionInput): Promise<{ contributionId: string }> {
+  return fetchJson('/api/contributions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ axis: 'spelling', wordId, ...input }),
+  });
+}
+
+export function submitDefinitionContribution(wordId: string, input: ApplyDefinitionDecisionInput): Promise<{ contributionId: string }> {
+  return fetchJson('/api/contributions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ axis: 'definition', wordId, ...input }),
+  });
+}
+
+export function submitEtymologyContribution(wordId: string, input: ApplyEtymologyDecisionInput): Promise<{ contributionId: string }> {
+  return fetchJson('/api/contributions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ axis: 'etymology', wordId, ...input }),
+  });
+}
+
+// Mirrors api/src/handlers/listContributions.ts's ContributionListItem.
+export interface ContributionListItem {
+  contributionId: string;
+  wordId: string | null;
+  wordDisplayText: string | null;
+  axis: 'spelling' | 'definition' | 'etymology' | 'new_entry';
+  proposedValue: unknown;
+  note: string | null;
+  submittedBy: string;
+  submittedAt: string;
+  status: string;
+}
+
+export function getContributions(status = 'pending'): Promise<ContributionListItem[]> {
+  return fetchJson<{ contributions: ContributionListItem[] }>(`/api/contributions?status=${encodeURIComponent(status)}`).then(
+    (r) => r.contributions,
+  );
+}
+
+export function approveContribution(contributionId: string): Promise<void> {
+  return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/approve`, { method: 'POST' });
+}
+
+export function rejectContribution(contributionId: string): Promise<void> {
+  return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/reject`, { method: 'POST' });
 }

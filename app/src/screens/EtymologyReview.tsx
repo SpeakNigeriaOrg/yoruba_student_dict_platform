@@ -7,14 +7,30 @@
 // session, see getEtymologyReview.ts). Neither is auto-applied - a
 // curator explicitly accepts/rejects, same as componentsAxisFields's own
 // "proposal, not fact" design.
+//
+// A manual component search/add/remove draft, confirm_existing/
+// reject_proposed, and a note field were all previously missing here -
+// only accept_proposed (all-or-nothing on the auto-proposal) and
+// confirm_atomic were wired. The old tool's resolver.js supported a full
+// manual component picker (etymologyManualPickerHtml) independent of
+// whatever the automatic proposal suggested.
 
 import { useEffect, useState } from 'react';
-import type { ComponentsProposalItem } from '@yoruba-student-dict-platform/shared';
-import { getEtymologyReview, postEtymologyDecision, type EtymologyReviewResult } from '../api.js';
+import type { ComponentsProposalItem, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
+import {
+  getEtymologyReview,
+  postEtymologyDecision,
+  searchVocab,
+  submitEtymologyContribution,
+  type ApplyEtymologyDecisionInput,
+  type EtymologyReviewResult,
+} from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { SearchBox } from './SearchBox.js';
 
 export interface EtymologyReviewProps {
   wordId: string;
+  isCurator: boolean;
 }
 
 function ProposalItemRow({ item }: { item: ComponentsProposalItem }) {
@@ -35,18 +51,27 @@ function ProposalItemRow({ item }: { item: ComponentsProposalItem }) {
   );
 }
 
-export function EtymologyReview({ wordId }: EtymologyReviewProps) {
+export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
   const [review, setReview] = useState<EtymologyReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [draftComponents, setDraftComponents] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setReview(null);
     setError(null);
+    setDraftComponents([]);
     getEtymologyReview(wordId)
       .then((result) => {
-        if (!cancelled) setReview(result);
+        if (cancelled) return;
+        setReview(result);
+        // Atomic words report components as [wordId] itself (see
+        // getEtymologyReview.ts) - not a real manual pick, start the
+        // draft empty in that case rather than pre-seeding a self-chip.
+        const isAtomic = result.components.length === 1 && result.components[0] === wordId;
+        setDraftComponents(isAtomic ? [] : result.components);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -56,6 +81,20 @@ export function EtymologyReview({ wordId }: EtymologyReviewProps) {
     };
   }, [wordId]);
 
+  async function submit(input: ApplyEtymologyDecisionInput, successMessage: string) {
+    try {
+      if (isCurator) {
+        await postEtymologyDecision(wordId, input);
+        setStatus(successMessage);
+      } else {
+        await submitEtymologyContribution(wordId, input);
+        setStatus(`Proposed: ${successMessage}`);
+      }
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function acceptProposedComponents() {
     if (!review) return;
     const resolvedIds = review.componentsProposal.map((p) => p.wordId).filter((id): id is string => id !== null);
@@ -63,25 +102,43 @@ export function EtymologyReview({ wordId }: EtymologyReviewProps) {
       setStatus("Can't accept yet - some proposed components don't resolve to a confirmed word_id.");
       return;
     }
-    try {
-      await postEtymologyDecision(wordId, { componentsAction: 'accept_proposed', components: resolvedIds });
-      setStatus('Accepted proposed components.');
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
-    }
+    await submit({ componentsAction: 'accept_proposed', components: resolvedIds, note: note || undefined }, 'Accepted proposed components.');
   }
 
   async function confirmAtomic() {
-    try {
-      await postEtymologyDecision(wordId, { componentsAction: 'confirm_atomic' });
-      setStatus('Confirmed as atomic (no real components).');
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
-    }
+    await submit({ componentsAction: 'confirm_atomic', note: note || undefined }, 'Confirmed as atomic (no real components).');
   }
+
+  async function confirmExisting() {
+    await submit({ componentsAction: 'confirm_existing', note: note || undefined }, 'Confirmed the existing components.');
+  }
+
+  async function rejectProposed() {
+    await submit({ componentsAction: 'reject_proposed', note: note || undefined }, 'Rejected the proposed etymology - stays atomic.');
+  }
+
+  async function saveCustomComponents() {
+    await submit(
+      { componentsAction: 'custom', components: draftComponents, note: note || undefined },
+      `Saved custom components: ${draftComponents.join(', ')}`,
+    );
+  }
+
+  function addManualComponent(result: VocabSearchResult) {
+    setDraftComponents((prev) => (prev.includes(result.wordId) ? prev : [...prev, result.wordId]));
+  }
+
+  function removeManualComponent(componentWordId: string) {
+    setDraftComponents((prev) => prev.filter((id) => id !== componentWordId));
+  }
+
+  const hasRealExistingComponents =
+    review !== null && review.components.length > 0 && !(review.components.length === 1 && review.components[0] === wordId);
 
   if (error) return <p role="alert">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
+
+  const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
 
   return (
     <section aria-label="Etymology review">
@@ -126,12 +183,55 @@ export function EtymologyReview({ wordId }: EtymologyReviewProps) {
         </ul>
       )}
 
+      <h3>Manually build the component list</h3>
+      {draftComponents.length === 0 ? (
+        <p>No components picked yet.</p>
+      ) : (
+        <ul aria-label="Draft components">
+          {draftComponents.map((componentWordId) => (
+            <li key={componentWordId}>
+              {componentWordId}{' '}
+              <button type="button" onClick={() => removeManualComponent(componentWordId)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <SearchBox
+        search={searchVocab}
+        renderResult={(r) => (
+          <>
+            <strong>{r.wordId}</strong> - {r.displayText}
+          </>
+        )}
+        onSelect={addManualComponent}
+        selectLabel="Add"
+        placeholder="Search existing vocabulary..."
+        resultsAriaLabel="Vocab search results"
+      />
+      <button type="button" onClick={saveCustomComponents}>
+        {label('Save custom components')}
+      </button>
+
+      <div>
+        <label htmlFor="etymology-note-field">Note</label>
+        <br />
+        <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+      </div>
+
       <div>
         <button type="button" onClick={acceptProposedComponents}>
-          Accept proposed components
+          {label('Accept proposed components')}
         </button>
         <button type="button" onClick={confirmAtomic}>
-          Confirm atomic (no components)
+          {label('Confirm atomic (no components)')}
+        </button>
+        <button type="button" onClick={confirmExisting} disabled={!hasRealExistingComponents}>
+          {label('Confirm components')}
+        </button>
+        <button type="button" onClick={rejectProposed} disabled={review.componentsProposal.length === 0}>
+          {label('Reject this etymology')}
         </button>
       </div>
       {status ? <p role="status">{status}</p> : null}

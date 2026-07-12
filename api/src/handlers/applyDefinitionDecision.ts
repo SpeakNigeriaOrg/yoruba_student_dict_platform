@@ -14,6 +14,14 @@ import { WordNotFoundError } from './errors.js';
 export interface ApplyDefinitionDecisionInput {
   definitionAction: 'confirm' | 'custom';
   definitionText?: string;
+  /** Which Kaikki record's glosses this definition is sourced from - lets
+   * a curator manually override resolveDefinitionSource's automatic
+   * choice (e.g. redirecting away from a cross-reference record, or
+   * picking an entirely different Kaikki entry via manual search) rather
+   * than only ever accepting whatever it auto-resolved. Read back by
+   * getDefinitionReview.ts's loadAxisOverride - this was previously a
+   * read-only field with no way to actually set it. */
+  definitionSourceForm?: string;
   note?: string;
 }
 
@@ -59,7 +67,11 @@ export async function applyDefinitionDecisionInTransaction(
     ]);
   }
 
-  const decision = { definitionAction: input.definitionAction, definitionText: input.definitionText };
+  const decision = {
+    definitionAction: input.definitionAction,
+    definitionText: input.definitionText,
+    definitionSourceForm: input.definitionSourceForm,
+  };
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by)
      values ($1, 'definition', $2, $3, $4)

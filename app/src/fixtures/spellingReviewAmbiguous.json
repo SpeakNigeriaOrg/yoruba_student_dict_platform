@@ -1,0 +1,50 @@
+{
+  "wordId": "fixturegenambig_ambigword_somehint",
+  "displayText": "fixturegenambig_ambigspelling",
+  "englishHint": "ambigword somehint",
+  "status": "ambiguous_match",
+  "candidatesConsidered": [
+    {
+      "form": "fixturegenambig_ambigspelling",
+      "pos": "noun",
+      "glosses": [
+        "unrelated gloss one"
+      ]
+    },
+    {
+      "form": "fixturegenambig_ambigspelling",
+      "pos": "verb",
+      "glosses": [
+        "unrelated gloss two"
+      ]
+    }
+  ],
+  "syllableSplitStatus": "mismatch",
+  "syllableSplitManual": [
+    "fixturegenambig_ambigspelling"
+  ],
+  "syllableSplitProgrammatic": [
+    "fi",
+    "tu",
+    "re",
+    "ge",
+    "na",
+    "m",
+    "bi",
+    "ga",
+    "m",
+    "bi",
+    "gspe",
+    "llin",
+    "g"
+  ],
+  "syllables": [
+    "fixturegenambig_ambigspelling"
+  ],
+  "definition": null,
+  "axisDecided": {
+    "spelling": false,
+    "definition": false,
+    "etymology": false
+  }
+}

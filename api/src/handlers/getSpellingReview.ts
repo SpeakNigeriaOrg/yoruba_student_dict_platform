@@ -9,13 +9,20 @@
 // its own resolved status (e.g. 'verified_keep_ours'), not a fresh
 // re-proposal as if nothing had been decided.
 
-import { diagnoseEntry, orthographyInsensitiveForm, type DiagnoseEntryResult } from '@yoruba-student-dict-platform/shared';
+import {
+  checkSyllableSplit,
+  diagnoseEntry,
+  orthographyInsensitiveForm,
+  resolveEffectiveDisplayText,
+  type CheckSyllableSplitResult,
+  type DiagnoseEntryResult,
+} from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { loadAxisDecided, loadAxisOverride, loadDefinition, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
-export interface SpellingReviewResult extends DiagnoseEntryResult {
+export interface SpellingReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult {
   syllables: string[];
   definition: string | null;
   axisDecided: AxisDecided;
@@ -37,8 +44,17 @@ export async function getSpellingReview(client: Queryable, wordId: string): Prom
 
   const diagnosis = diagnoseEntry(wordId, entry, lexicon, override);
 
+  // Checks the syllable split against the spelling this word is BECOMING,
+  // not necessarily the one on record - if adopt_kaikki has already been
+  // decided, resolveEffectiveDisplayText substitutes the adopted spelling
+  // (matches applySpellingDecision.ts's own inlined version of this same
+  // rationale for the write side).
+  const effective = resolveEffectiveDisplayText(entry, diagnosis, override);
+  const syllableSplit = checkSyllableSplit(effective.displayText, entry.syllables, override, effective.wasSubstituted);
+
   return {
     ...diagnosis,
+    ...syllableSplit,
     syllables: entry.syllables,
     definition,
     axisDecided,

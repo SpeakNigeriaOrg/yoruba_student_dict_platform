@@ -1,0 +1,19 @@
+{
+  "wordId": "fixturegenconfirmed_compound_word",
+  "displayText": "fixturegenconfirmed_compoundspelling",
+  "syllables": [
+    "fixturegenconfirmed_compoundspelling"
+  ],
+  "definition": null,
+  "axisDecided": {
+    "spelling": false,
+    "definition": false,
+    "etymology": false
+  },
+  "componentsProposal": [],
+  "usedInProposal": [],
+  "usedAsComponentOf": [],
+  "components": [
+    "fixturegenconfirmed_part_word"
+  ]
+}

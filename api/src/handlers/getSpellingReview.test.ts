@@ -109,4 +109,32 @@ describe('getSpellingReview', () => {
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
     expect(result.definition).toBe('a definition for context testing');
   });
+
+  it('reports a syllable split match when the manual and programmatic splits agree', async () => {
+    const wordId = `${NS}syllablematch`;
+    await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
+      wordId,
+      'kasu',
+      ['ka', 'su'],
+    ]);
+
+    const result = await getSpellingReview(pool, wordId);
+
+    expect(result.syllableSplitStatus).toBe('match');
+  });
+
+  it('reports a syllable split mismatch, with both splits, when they disagree', async () => {
+    const wordId = `${NS}syllablemismatch`;
+    await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
+      wordId,
+      'kasu',
+      ['kasu'],
+    ]);
+
+    const result = await getSpellingReview(pool, wordId);
+
+    expect(result.syllableSplitStatus).toBe('mismatch');
+    expect(result.syllableSplitManual).toEqual(['kasu']);
+    expect(result.syllableSplitProgrammatic).toEqual(['ka', 'su']);
+  });
 });

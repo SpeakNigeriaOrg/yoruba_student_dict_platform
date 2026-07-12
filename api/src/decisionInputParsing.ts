@@ -37,6 +37,7 @@ export function parseDefinitionInput(b: Record<string, unknown>): ApplyDefinitio
   return {
     definitionAction: b.definitionAction,
     definitionText: typeof b.definitionText === 'string' ? b.definitionText : undefined,
+    definitionSourceForm: typeof b.definitionSourceForm === 'string' ? b.definitionSourceForm : undefined,
     note: typeof b.note === 'string' ? b.note : undefined,
   };
 }

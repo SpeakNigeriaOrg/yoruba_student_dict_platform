@@ -12,12 +12,11 @@
 import {
   checkDefinition,
   diagnoseEntry,
-  orthographyInsensitiveForm,
   resolveDefinitionSource,
   type CheckDefinitionResult,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
-import { loadKaikkiSensesForKey } from '../kaikkiData.js';
+import { loadFullKaikkiLexicon } from '../kaikkiData.js';
 import { loadAxisDecided, loadAxisOverride, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
@@ -37,9 +36,13 @@ export async function getDefinitionReview(client: Queryable, wordId: string): Pr
   const axisDecided = await loadAxisDecided(client, wordId);
   const override = await loadAxisOverride(client, wordId, 'definition');
 
-  const key = orthographyInsensitiveForm(entry.displayText);
-  const senses = await loadKaikkiSensesForKey(client, key);
-  const lexicon = senses.length > 0 ? { [key]: senses } : {};
+  // The full corpus (not just this word's own orthography key) is loaded
+  // here - unlike the narrower per-key lookups elsewhere, an explicit
+  // definitionSourceForm override needs to resolve against ANY Kaikki
+  // record, not just ones sharing this word's own spelling (that's the
+  // whole point of a manual search-and-redirect override). Same accepted
+  // small-corpus tradeoff as kaikkiSearch.ts.
+  const lexicon = await loadFullKaikkiLexicon(client);
 
   const diagnosis = diagnoseEntry(wordId, entry, lexicon);
   const source = resolveDefinitionSource(diagnosis.matchedForm, diagnosis.matchedGlosses, diagnosis.matchedAltOfTargets, lexicon, override);

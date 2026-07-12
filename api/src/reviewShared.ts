@@ -5,7 +5,7 @@
 // factored out once a second and third consumer needed the exact same
 // full-vocab load and per-word axis-decided lookup.
 
-import type { DiagnoseOverride, Vocab } from '@yoruba-student-dict-platform/shared';
+import type { DiagnoseOverride, DiagnosticsOverrides, Vocab } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from './db.js';
 
 export async function loadVocab(client: Queryable): Promise<Vocab> {
@@ -84,4 +84,20 @@ export async function loadAxisOverride(
   const row = result.rows[0];
   if (!row) return null;
   return { ...row.decision, ...(row.note ? { note: row.note } : {}) };
+}
+
+/** Every word's spelling-axis decision at once, keyed by word_id - unlike
+ * loadAxisOverride (one word at a time), this is for callers that need to
+ * run diagnoseEntry across the WHOLE vocab (e.g. checkDuplicates.ts's
+ * duplicate scan, which needs each existing word's own resolved
+ * canonicalForm/matchedAltOfTargets to compare a new candidate against). */
+export async function loadAllSpellingOverrides(client: Queryable): Promise<DiagnosticsOverrides> {
+  const rows = await client.query<{ word_id: string; decision: DiagnoseOverride; note: string | null }>(
+    "select word_id, decision, note from word_decisions where axis = 'spelling'",
+  );
+  const overrides: DiagnosticsOverrides = {};
+  for (const row of rows.rows) {
+    overrides[row.word_id] = { ...row.decision, ...(row.note ? { note: row.note } : {}) };
+  }
+  return overrides;
 }

@@ -1,17 +1,19 @@
 // functions/etymologyReview.ts
 //
-// GET /api/words/{wordId}/etymology - curator-gated, same as the write-side
-// decision on this axis (POST /decisions/etymology).
+// GET /api/words/{wordId}/etymology - any authenticated user can read
+// (volunteers propose contributions on this axis; curators decide
+// directly). Writing a decision (POST /decisions/etymology) stays
+// curator-only.
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
-import { ForbiddenError, requireCurator, UnauthenticatedError } from '../httpAuth.js';
+import { ForbiddenError, requireUser, UnauthenticatedError } from '../httpAuth.js';
 import { getEtymologyReview } from '../handlers/getEtymologyReview.js';
 import { WordNotFoundError } from '../handlers/errors.js';
 
 export async function etymologyReviewFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
-    await requireCurator(request);
+    await requireUser(request);
     const wordId = request.params.wordId;
     const result = await getEtymologyReview(getPool(), wordId);
     return { status: 200, jsonBody: result };

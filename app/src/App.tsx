@@ -9,7 +9,10 @@
 // built" list.
 
 import { useEffect, useState } from 'react';
+import { AddWord } from './screens/AddWord.js';
+import { AllWordsList } from './screens/AllWordsList.js';
 import { AssignmentsList } from './screens/AssignmentsList.js';
+import { ContributionQueue } from './screens/ContributionQueue.js';
 import { DefinitionReview } from './screens/DefinitionReview.js';
 import { EtymologyReview } from './screens/EtymologyReview.js';
 import { SpellingReview } from './screens/SpellingReview.js';
@@ -22,8 +25,11 @@ const AXES: Array<{ key: Axis; label: string }> = [
   { key: 'etymology', label: 'Etymology' },
 ];
 
+type MainView = 'assignments' | 'allWords' | 'addWord' | 'contributions';
+
 export default function App() {
   const [principal, setPrincipal] = useState<ClientPrincipal | null | undefined>(undefined);
+  const [mainView, setMainView] = useState<MainView>('assignments');
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
   const [selectedAxis, setSelectedAxis] = useState<Axis>('spelling');
 
@@ -35,6 +41,8 @@ export default function App() {
     setSelectedWordId(wordId);
     setSelectedAxis('spelling');
   }
+
+  const isCurator = principal?.userRoles.includes('curator') ?? false;
 
   return (
     <main>
@@ -54,7 +62,7 @@ export default function App() {
           {selectedWordId ? (
             <>
               <button type="button" onClick={() => setSelectedWordId(null)}>
-                ← Back to assignments
+                ← Back
               </button>
               <nav aria-label="Review axis tabs">
                 {AXES.map((axis) => (
@@ -68,12 +76,54 @@ export default function App() {
                   </button>
                 ))}
               </nav>
-              {selectedAxis === 'spelling' ? <SpellingReview wordId={selectedWordId} /> : null}
-              {selectedAxis === 'definition' ? <DefinitionReview wordId={selectedWordId} /> : null}
-              {selectedAxis === 'etymology' ? <EtymologyReview wordId={selectedWordId} /> : null}
+              {selectedAxis === 'spelling' ? <SpellingReview wordId={selectedWordId} isCurator={isCurator} /> : null}
+              {selectedAxis === 'definition' ? <DefinitionReview wordId={selectedWordId} isCurator={isCurator} /> : null}
+              {selectedAxis === 'etymology' ? <EtymologyReview wordId={selectedWordId} isCurator={isCurator} /> : null}
             </>
           ) : (
-            <AssignmentsList onSelect={selectWord} />
+            <>
+              {isCurator ? (
+                <nav aria-label="Main navigation">
+                  <button
+                    type="button"
+                    aria-current={mainView === 'assignments' ? 'page' : undefined}
+                    onClick={() => setMainView('assignments')}
+                  >
+                    My assignments
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={mainView === 'allWords' ? 'page' : undefined}
+                    onClick={() => setMainView('allWords')}
+                  >
+                    Browse all words
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={mainView === 'addWord' ? 'page' : undefined}
+                    onClick={() => setMainView('addWord')}
+                  >
+                    Add a word
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={mainView === 'contributions' ? 'page' : undefined}
+                    onClick={() => setMainView('contributions')}
+                  >
+                    Review contributions
+                  </button>
+                </nav>
+              ) : null}
+              {mainView === 'allWords' && isCurator ? (
+                <AllWordsList onSelect={selectWord} />
+              ) : mainView === 'addWord' && isCurator ? (
+                <AddWord />
+              ) : mainView === 'contributions' && isCurator ? (
+                <ContributionQueue />
+              ) : (
+                <AssignmentsList onSelect={selectWord} />
+              )}
+            </>
           )}
         </>
       )}
