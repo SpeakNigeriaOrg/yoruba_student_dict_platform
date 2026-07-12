@@ -14,6 +14,7 @@
     { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
     { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["authenticated"] },
     { "route": "/api/utterances/*", "allowedRoles": ["authenticated"] },
+    { "route": "/api/syllables/*", "allowedRoles": ["authenticated"] },
 
     { "route": "/api/kaikki-search", "allowedRoles": ["authenticated"] },
     { "route": "/api/vocab-search", "allowedRoles": ["authenticated"] },

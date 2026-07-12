@@ -61,7 +61,7 @@ describe('getDefinitionReview', () => {
     expect(result.definitionStatus).toBe('proposed');
     expect(result.definitionProposed).toBe('leopard');
     expect(result.definitionCurrent).toBeNull();
-    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
   });
 
   it('reports missing (not proposed) when there is no current definition and no Kaikki match', async () => {
@@ -91,7 +91,7 @@ describe('getDefinitionReview', () => {
 
     expect(result.definitionStatus).toBe('confirmed');
     expect(result.definitionCurrent).toBe('an already-confirmed definition');
-    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false, audio: false });
   });
 
   it('surfaces syllables as context alongside the diagnosis', async () => {

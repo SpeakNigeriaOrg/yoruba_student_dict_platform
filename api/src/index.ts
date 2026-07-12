@@ -19,3 +19,6 @@ import './functions/duplicateCheck.js';
 import './functions/rejectContribution.js';
 import './functions/utteranceSasToken.js';
 import './functions/utterances.js';
+import './functions/axisStatus.js';
+import './functions/utteranceList.js';
+import './functions/syllableObservations.js';

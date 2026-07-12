@@ -45,6 +45,7 @@
   "axisDecided": {
     "spelling": false,
     "definition": false,
-    "etymology": false
+    "etymology": false,
+    "audio": false
   }
 }

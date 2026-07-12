@@ -16,6 +16,7 @@ import { ContributionQueue } from './screens/ContributionQueue.js';
 import { DefinitionReview } from './screens/DefinitionReview.js';
 import { EtymologyReview } from './screens/EtymologyReview.js';
 import { SpellingReview } from './screens/SpellingReview.js';
+import { getAxisStatus, type AxisDecided } from './api.js';
 import { getClientPrincipal, type ClientPrincipal } from './identity.js';
 
 type Axis = 'spelling' | 'definition' | 'etymology' | 'audio';
@@ -39,10 +40,33 @@ export default function App() {
   const [mainView, setMainView] = useState<MainView>('assignments');
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
   const [selectedAxis, setSelectedAxis] = useState<Axis>('spelling');
+  const [axisStatus, setAxisStatus] = useState<AxisDecided | null>(null);
 
   useEffect(() => {
     getClientPrincipal().then(setPrincipal);
   }, []);
+
+  // Re-fetched on every axis switch (not just word selection) so the tab
+  // colors pick up a decision just made on another axis as soon as the
+  // curator switches away from it - cheap, and avoids threading a
+  // "decision changed" callback through every review screen.
+  useEffect(() => {
+    if (!selectedWordId) {
+      setAxisStatus(null);
+      return;
+    }
+    let cancelled = false;
+    getAxisStatus(selectedWordId)
+      .then((result) => {
+        if (!cancelled) setAxisStatus(result);
+      })
+      .catch(() => {
+        if (!cancelled) setAxisStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWordId, selectedAxis]);
 
   function selectWord(wordId: string) {
     setSelectedWordId(wordId);
@@ -81,6 +105,7 @@ export default function App() {
                     key={axis.key}
                     type="button"
                     aria-current={selectedAxis === axis.key ? 'page' : undefined}
+                    className={axisStatus ? (axisStatus[axis.key] ? 'axis-complete' : 'axis-pending') : undefined}
                     onClick={() => setSelectedAxis(axis.key)}
                   >
                     {axis.label}

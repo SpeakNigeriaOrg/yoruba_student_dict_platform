@@ -51,12 +51,21 @@ export function getMyAssignments(): Promise<AssignmentSummary[]> {
 }
 
 // Mirrors api/src/reviewShared.ts's AxisDecided - whether each of the three
-// review axes already has a word_decisions row, shown as read-only context
-// on every review screen.
+// decision-driven review axes already has a word_decisions row, plus
+// whether audio has at least one registered recording - shown as
+// read-only context on every review screen.
 export interface AxisDecided {
   spelling: boolean;
   definition: boolean;
   etymology: boolean;
+  audio: boolean;
+}
+
+// Mirrors api/src/handlers/getAxisStatus.ts - a lightweight fetch of just
+// this shape, for coloring the axis-tab bar without waiting on whichever
+// single (heavier) review screen happens to be showing.
+export function getAxisStatus(wordId: string): Promise<AxisDecided> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/axis-status`);
 }
 
 // Mirrors api/src/handlers/getEtymologyReview.ts's EtymologyReviewResult.
@@ -337,4 +346,48 @@ export async function registerUtterance(input: RegisterUtteranceInput): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+// Mirrors api/src/handlers/listUtterances.ts's UtteranceSummary/
+// UtteranceSegmentSummary - read-only playback of every recording
+// registered for a word, across every speaker (recordings aren't
+// login-scoped, so there's no "view as a speaker" - any authenticated
+// user can already listen to any speaker's recordings).
+export interface UtteranceSegmentSummary {
+  syllablePosition: number;
+  syllableText: string;
+  startTimeS: number;
+  endTimeS: number;
+  vadConfidence: number | null;
+  audioDataBase64: string;
+}
+
+export interface UtteranceSummary {
+  utteranceId: string;
+  speakerId: string;
+  speakerDisplayName: string;
+  takeNumber: number;
+  status: string;
+  recordedDisplayText: string;
+  recordedSyllables: string[];
+  durationS: number | null;
+  sampleRate: number | null;
+  recordedAt: string;
+  audioDataBase64: string | null;
+  segments: UtteranceSegmentSummary[];
+}
+
+export function listUtterances(wordId: string): Promise<UtteranceSummary[]> {
+  return fetchJson<{ utterances: UtteranceSummary[] }>(`/api/words/${encodeURIComponent(wordId)}/utterances`).then(
+    (r) => r.utterances,
+  );
+}
+
+/** Inverse of blobToBase64 - turns a base64 string back into a playable
+ * Blob URL for an <audio> element. */
+export function base64ToAudioUrl(base64: string, mimeType = 'audio/wav'): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
 }

@@ -38,8 +38,8 @@ describe('listAllWords', () => {
     const decided = words.find((w) => w.wordId === decidedWordId);
     const undecided = words.find((w) => w.wordId === undecidedWordId);
 
-    expect(decided?.axisDecided).toEqual({ spelling: false, definition: true, etymology: false });
-    expect(undecided?.axisDecided).toEqual({ spelling: false, definition: false, etymology: false });
+    expect(decided?.axisDecided).toEqual({ spelling: false, definition: true, etymology: false, audio: false });
+    expect(undecided?.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
   });
 
   it('sorts results by word_id', async () => {

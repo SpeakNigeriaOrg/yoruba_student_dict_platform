@@ -10,7 +10,8 @@
     "axisDecided": {
       "spelling": false,
       "definition": true,
-      "etymology": false
+      "etymology": false,
+      "audio": false
     }
   },
   {
@@ -24,7 +25,8 @@
     "axisDecided": {
       "spelling": false,
       "definition": false,
-      "etymology": false
+      "etymology": false,
+      "audio": false
     }
   }
 ]

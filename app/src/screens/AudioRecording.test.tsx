@@ -89,9 +89,20 @@ afterEach(() => {
   FakeMediaRecorder.instances = [];
 });
 
+function installDefaultFetchMock() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    }),
+  );
+}
+
 describe('AudioRecording', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => spellingFixture }));
+    installDefaultFetchMock();
   });
 
   it('defaults the pronunciation fields from the word being reviewed', async () => {
@@ -162,9 +173,10 @@ describe('AudioRecording', () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
-      if (url.includes('/register')) {
+      if (url.includes('/utterances') && url.includes('/register')) {
         return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'fake-utterance-id' }) });
       }
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
       return Promise.resolve({ ok: true, json: async () => ({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -199,6 +211,40 @@ describe('AudioRecording', () => {
     expect(take2Register.segments).toHaveLength(2);
     expect(take2Register.segments[0]).toMatchObject({ syllablePosition: 0 });
     expect(typeof take2Register.segments[0].audioDataBase64).toBe('string');
+  });
+
+  it("lists previous recordings from any speaker, so a curator can listen without needing that speaker's own login", async () => {
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const previousUtterance = {
+      utteranceId: 'utt-1',
+      speakerId: 'spk-1',
+      speakerDisplayName: 'speaker3',
+      takeNumber: 1,
+      status: 'pending_processing',
+      recordedDisplayText: 'fixturegenspldef_kasu',
+      recordedSyllables: ['ka', 'su'],
+      durationS: 1.1,
+      sampleRate: 16000,
+      recordedAt: '2026-01-01T00:00:00.000Z',
+      audioDataBase64: Buffer.from('take1-bytes').toString('base64'),
+      segments: [],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [previousUtterance] }) });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+
+    const list = await screen.findByLabelText('Recordings by speaker');
+    expect(list).toHaveTextContent('speaker3');
+    expect(list).toHaveTextContent('take 1');
+    expect(list).toHaveTextContent('pending_processing');
   });
 
   it('shows a microphone error message when getUserMedia rejects', async () => {

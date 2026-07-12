@@ -28,7 +28,7 @@ import { decodeToSamples } from '../audio/decodeToSamples.js';
 import { sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
-import { getSpellingReview, registerUtterance } from '../api.js';
+import { base64ToAudioUrl, getSpellingReview, listUtterances, registerUtterance, type UtteranceSummary } from '../api.js';
 
 export interface AudioRecordingProps {
   wordId: string;
@@ -60,6 +60,15 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [previousRecordings, setPreviousRecordings] = useState<UtteranceSummary[] | null>(null);
+  const [previousRecordingsError, setPreviousRecordingsError] = useState<string | null>(null);
+
+  function loadPreviousRecordings() {
+    listUtterances(wordId)
+      .then(setPreviousRecordings)
+      .catch((err: unknown) => setPreviousRecordingsError(err instanceof Error ? err.message : String(err)));
+  }
+
   useEffect(() => {
     let cancelled = false;
     setLoaded(false);
@@ -67,6 +76,8 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
     setTake2Blob(null);
     setSegmentReviews(null);
     setStatus(null);
+    setPreviousRecordings(null);
+    setPreviousRecordingsError(null);
     getSpellingReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -77,6 +88,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
       });
+    loadPreviousRecordings();
     return () => {
       cancelled = true;
     };
@@ -154,6 +166,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
       });
 
       setStatus('Recording submitted.');
+      loadPreviousRecordings();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -270,6 +283,45 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
         {submitting ? 'Submitting...' : 'Submit recording'}
       </button>
       {status ? <p role="status">{status}</p> : null}
+
+      <div className="take-step" aria-label="Previous recordings">
+        <h3>Previous recordings</h3>
+        {previousRecordingsError ? (
+          <p role="alert">Couldn't load previous recordings: {previousRecordingsError}</p>
+        ) : previousRecordings === null ? (
+          <p>Loading previous recordings...</p>
+        ) : previousRecordings.length === 0 ? (
+          <p>No recordings yet for this word.</p>
+        ) : (
+          <ul aria-label="Recordings by speaker">
+            {previousRecordings.map((u) => (
+              <li key={u.utteranceId}>
+                <strong>{u.speakerDisplayName}</strong> - take {u.takeNumber} ({u.status}) - recorded as{' '}
+                <em>
+                  {u.recordedDisplayText} ({u.recordedSyllables.join(' · ')})
+                </em>
+                {u.audioDataBase64 ? (
+                  <>
+                    <br />
+                    <audio controls src={base64ToAudioUrl(u.audioDataBase64)} />
+                  </>
+                ) : null}
+                {u.segments.length > 0 ? (
+                  <ul aria-label={`${u.speakerDisplayName} take ${u.takeNumber} segments`}>
+                    {u.segments.map((seg) => (
+                      <li key={seg.syllablePosition}>
+                        Syllable {seg.syllablePosition + 1} ({seg.syllableText})
+                        <br />
+                        <audio controls src={base64ToAudioUrl(seg.audioDataBase64)} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

@@ -138,7 +138,7 @@ describe('getEtymologyReview', () => {
 
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
     expect(result.definition).toBe('a definition for context testing');
-    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false, audio: false });
   });
 
   it('reports definition as null and every axis undecided for a freshly-added word', async () => {
@@ -148,6 +148,6 @@ describe('getEtymologyReview', () => {
     const result = await getEtymologyReview(pool, wordId);
 
     expect(result.definition).toBeNull();
-    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
   });
 });

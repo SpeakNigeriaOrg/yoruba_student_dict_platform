@@ -43,19 +43,32 @@ export interface AxisDecided {
   spelling: boolean;
   definition: boolean;
   etymology: boolean;
+  // Unlike the other three (a curator's formal word_decisions row), audio
+  // has no decision step yet - this just reflects whether at least one
+  // recording has been registered for the word, same "status at a
+  // glance" purpose for the review-axis tabs.
+  audio: boolean;
 }
 
-/** Whether each of the platform's three review axes already has a
- * word_decisions row for this word - shown as read-only context on every
- * review screen so a curator on one axis isn't left guessing about the
- * other two. */
+/** Whether each of the platform's three decision-driven review axes
+ * already has a word_decisions row for this word, plus whether audio has
+ * at least one registered recording - shown as read-only context on
+ * every review screen so a curator on one axis isn't left guessing about
+ * the other three. */
 export async function loadAxisDecided(client: Queryable, wordId: string): Promise<AxisDecided> {
-  const rows = await client.query<{ axis: 'spelling' | 'definition' | 'etymology' }>(
-    'select axis from word_decisions where word_id = $1',
-    [wordId],
-  );
-  const decided = new Set(rows.rows.map((r) => r.axis));
-  return { spelling: decided.has('spelling'), definition: decided.has('definition'), etymology: decided.has('etymology') };
+  const [decisionRows, utteranceRows] = await Promise.all([
+    client.query<{ axis: 'spelling' | 'definition' | 'etymology' }>('select axis from word_decisions where word_id = $1', [
+      wordId,
+    ]),
+    client.query('select 1 from utterances where word_id = $1 limit 1', [wordId]),
+  ]);
+  const decided = new Set(decisionRows.rows.map((r) => r.axis));
+  return {
+    spelling: decided.has('spelling'),
+    definition: decided.has('definition'),
+    etymology: decided.has('etymology'),
+    audio: (utteranceRows.rowCount ?? 0) > 0,
+  };
 }
 
 export async function loadDefinition(client: Queryable, wordId: string): Promise<string | null> {

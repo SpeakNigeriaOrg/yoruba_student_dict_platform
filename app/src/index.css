@@ -130,6 +130,7 @@ main {
   z-index: 10;
 }
 .axis-tabs button {
+  position: relative;
   flex: 1;
   border: none;
   background: transparent;
@@ -145,6 +146,26 @@ main {
   color: var(--indigo);
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Status dot - independent of the active-tab treatment above, so a tab
+   shows its axis status (green = decided/recorded, amber = not yet)
+   whether or not it's the one currently open. */
+.axis-tabs button.axis-complete::after,
+.axis-tabs button.axis-pending::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.axis-tabs button.axis-complete::after {
+  background: var(--green);
+}
+.axis-tabs button.axis-pending::after {
+  background: var(--amber);
 }
 
 /* ---- Back button ---- */

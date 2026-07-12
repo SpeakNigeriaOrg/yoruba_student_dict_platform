@@ -61,7 +61,7 @@ describe('getSpellingReview', () => {
     expect(result.status).toBe('tone_mismatch');
     expect(result.matchedForm).toBe(`${NS}kásù`);
     expect(result.adoptionTarget).toBe(`${NS}kásù`);
-    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
   });
 
   it('returns not_in_kaikki with no candidates when this word has no Kaikki sense at all', async () => {
@@ -92,7 +92,7 @@ describe('getSpellingReview', () => {
     const result = await getSpellingReview(pool, wordId);
 
     expect(result.status).toBe('verified_keep_ours');
-    expect(result.axisDecided).toEqual({ spelling: true, definition: false, etymology: false });
+    expect(result.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: false });
   });
 
   it('surfaces syllables and definition as context alongside the diagnosis', async () => {
