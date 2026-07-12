@@ -17,6 +17,7 @@ api/vendor/
 .env.*
 !.env.example
 local.settings.json
+*.local.settings.json
 
 # Python (vad-service)
 __pycache__/

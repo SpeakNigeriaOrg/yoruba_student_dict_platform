@@ -24,5 +24,8 @@
     "build:api": "npm run build:shared && npm run vendor:shared:api && npm run build --workspace=api",
     "build:ingest": "npm run build:shared && npm run build --workspace=ingest",
     "db:migrate": "npm run migrate --workspace=db"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0"
   }
 }
