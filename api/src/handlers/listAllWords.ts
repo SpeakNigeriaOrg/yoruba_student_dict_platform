@@ -7,7 +7,7 @@
 // data source, filtering handled client-side since the corpus is small.
 
 import type { Queryable } from '../db.js';
-import { loadVocab, type AxisDecided } from '../reviewShared.js';
+import { loadAxisDecidedBatch, loadVocab, type AxisDecided } from '../reviewShared.js';
 
 export interface AllWordsListItem {
   wordId: string;
@@ -18,35 +18,21 @@ export interface AllWordsListItem {
   axisDecided: AxisDecided;
 }
 
-export async function listAllWords(client: Queryable): Promise<AllWordsListItem[]> {
+export async function listAllWords(client: Queryable, userId: string): Promise<AllWordsListItem[]> {
   const vocab = await loadVocab(client);
-  const [decisionRows, utteranceRows] = await Promise.all([
-    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>('select word_id, axis from word_decisions'),
-    client.query<{ word_id: string }>('select distinct word_id from utterances'),
-  ]);
-  const decidedByWord = new Map<string, Set<string>>();
-  for (const row of decisionRows.rows) {
-    const existing = decidedByWord.get(row.word_id);
-    if (existing) existing.add(row.axis);
-    else decidedByWord.set(row.word_id, new Set([row.axis]));
-  }
-  const wordsWithAudio = new Set(utteranceRows.rows.map((r) => r.word_id));
+  const wordIds = Object.keys(vocab);
+  const axisDecidedByWord = await loadAxisDecidedBatch(client, wordIds, userId);
 
-  return Object.entries(vocab)
-    .map(([wordId, entry]) => {
-      const decided = decidedByWord.get(wordId) ?? new Set<string>();
+  return wordIds
+    .map((wordId) => {
+      const entry = vocab[wordId];
       return {
         wordId,
         displayText: entry.displayText,
         syllables: entry.syllables,
         definition: entry.definition ?? null,
         entryType: entry.type ?? null,
-        axisDecided: {
-          spelling: decided.has('spelling'),
-          definition: decided.has('definition'),
-          etymology: decided.has('etymology'),
-          audio: wordsWithAudio.has(wordId),
-        },
+        axisDecided: axisDecidedByWord.get(wordId)!,
       };
     })
     .sort((a, b) => a.wordId.localeCompare(b.wordId));

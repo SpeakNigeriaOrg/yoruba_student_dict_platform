@@ -8,6 +8,10 @@ let userAId: string;
 let userBId: string;
 
 beforeAll(async () => {
+  await pool.query('delete from utterances where speaker_id in (select speaker_id from speakers where display_name like $1)', [
+    `${NS}%`,
+  ]);
+  await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
   const userA = await pool.query<{ user_id: string }>(
     'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
@@ -33,6 +37,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // speakers aren't covered by cleanUpTestData (golden_record's cascade
+  // deletes the utterances row it created, but not the speaker row
+  // itself) - cleaned explicitly so a re-run never finds this NS's
+  // speaker already present.
+  await pool.query('delete from utterances where speaker_id in (select speaker_id from speakers where display_name like $1)', [
+    `${NS}%`,
+  ]);
+  await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
   await pool.end();
 });
@@ -45,6 +57,7 @@ describe('listMyAssignments', () => {
     const word1 = assignments.find((a) => a.wordId === `${NS}word1`);
     expect(word1).toMatchObject({ displayText: 'epo', syllables: ['e', 'po'], definition: 'oil', entryType: null });
     expect(word1?.assignedAt).toBeInstanceOf(Date);
+    expect(word1?.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
   });
 
   it("does not leak another user's assignments", async () => {
@@ -60,5 +73,36 @@ describe('listMyAssignments', () => {
     );
     const assignments = await listMyAssignments(pool, noAssignmentsUser.rows[0].user_id);
     expect(assignments).toEqual([]);
+  });
+
+  it("reports axisDecided.audio true only for the SAME user's own recording, and a word_decisions row as decided for everyone", async () => {
+    const decidedResult = await pool.query<{ user_id: string }>(
+      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      [`${NS}curator`, 'Test Curator'],
+    );
+    await pool.query("insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'spelling', '{}', $2)", [
+      `${NS}word1`,
+      decidedResult.rows[0].user_id,
+    ]);
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (display_name, user_id) values ($1, $2) returning speaker_id',
+      [`${NS}speaker_a`, userAId],
+    );
+    await pool.query(
+      `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+       values ($1, $2, 1, 'x', 'epo', array['e','po'])`,
+      [`${NS}word1`, speaker.rows[0].speaker_id],
+    );
+
+    const assignmentsA = await listMyAssignments(pool, userAId);
+    const word1ForA = assignmentsA.find((a) => a.wordId === `${NS}word1`);
+    expect(word1ForA?.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: true });
+
+    const assignmentsB = await listMyAssignments(pool, userBId);
+    const word1ForB = assignmentsB.find((a) => a.wordId === `${NS}word1`);
+    // spelling: decided is a global fact (a curator decided it) - true
+    // for both users. audio: userB hasn't recorded it themselves, so
+    // false, even though userA has.
+    expect(word1ForB?.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: false });
   });
 });

@@ -137,7 +137,7 @@ describe('applyDefinitionDecision', () => {
       definitionSourceForm: `${NS}someothersourceform`,
     });
 
-    const review = await getDefinitionReview(pool, wordId);
+    const review = await getDefinitionReview(pool, wordId, curatorUserId);
     expect(review.definitionSourceForm).toBe(`${NS}someothersourceform`);
   });
 });

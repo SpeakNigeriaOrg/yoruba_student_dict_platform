@@ -24,6 +24,14 @@ describe('AssignmentsList', () => {
       expect(screen.getByText('fixturegencompoundspelling')).toBeInTheDocument();
     });
     expect(screen.getByText(/a made-up test word/)).toBeInTheDocument();
+
+    // Same per-axis status badges as the browse-all-words list (including
+    // audio, which this screen never showed at all before).
+    const row = screen.getByText('fixturegencompoundspelling').closest('li')!;
+    expect(row).toHaveTextContent('spelling: not yet decided');
+    expect(row).toHaveTextContent('definition: not yet decided');
+    expect(row).toHaveTextContent('etymology: not yet decided');
+    expect(row).toHaveTextContent('audio: not yet recorded');
   });
 
   it('calls onSelect with the wordId when a row is clicked', async () => {

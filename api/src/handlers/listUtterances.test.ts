@@ -77,11 +77,12 @@ describe('listUtterances', () => {
       username,
     );
 
-    const result = await listUtterances(pool, wordId);
+    const result = await listUtterances(pool, wordId, userId);
     expect(result).toHaveLength(2);
 
     const take1 = result.find((u) => u.takeNumber === 1)!;
     expect(take1.status).toBe('pending_processing');
+    expect(take1.isOwnRecording).toBe(true);
     expect(take1.recordedDisplayText).toBe('kàsù');
     expect(take1.audioDataBase64).toBe(Buffer.from('take1-bytes').toString('base64'));
     // No distinct raw audio supplied - defaults to the processed bytes.
@@ -100,15 +101,46 @@ describe('listUtterances', () => {
     expect(take1.speakerDisplayName).toBe(username);
   });
 
+  it("flags a different user's recording as isOwnRecording: false, and the requester's own as true, in the same result", async () => {
+    const wordId = `${NS}word_three`;
+    await insertWord(wordId, ['bí']);
+
+    const otherUsername = `${NS}other_user`;
+    const otherUser = await pool.query<{ user_id: string }>(
+      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      [otherUsername, 'Other Test User'],
+    );
+
+    await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: Buffer.from('mine'), recordedDisplayText: 'bí', recordedSyllables: ['bí'] },
+      userId,
+      username,
+    );
+    await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: Buffer.from('theirs'), recordedDisplayText: 'bí', recordedSyllables: ['bí'] },
+      otherUser.rows[0].user_id,
+      otherUsername,
+    );
+
+    const result = await listUtterances(pool, wordId, userId);
+    expect(result).toHaveLength(2);
+    const mine = result.find((u) => u.speakerDisplayName === username)!;
+    const theirs = result.find((u) => u.speakerDisplayName === otherUsername)!;
+    expect(mine.isOwnRecording).toBe(true);
+    expect(theirs.isOwnRecording).toBe(false);
+  });
+
   it('returns an empty list for a word with no recordings yet', async () => {
     const wordId = `${NS}word_two`;
     await insertWord(wordId, ['bá']);
 
-    const result = await listUtterances(pool, wordId);
+    const result = await listUtterances(pool, wordId, userId);
     expect(result).toEqual([]);
   });
 
   it('rejects a word_id that does not exist', async () => {
-    await expect(listUtterances(pool, `${NS}nonexistent`)).rejects.toThrow(WordNotFoundError);
+    await expect(listUtterances(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
 });

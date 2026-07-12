@@ -43,24 +43,32 @@ export interface AxisDecided {
   spelling: boolean;
   definition: boolean;
   etymology: boolean;
-  // Unlike the other three (a curator's formal word_decisions row), audio
-  // has no decision step yet - this just reflects whether at least one
-  // recording has been registered for the word, same "status at a
-  // glance" purpose for the review-axis tabs.
+  // Unlike the other three (a curator's formal word_decisions row, a
+  // global fact true for everyone), audio has no decision step and is
+  // deliberately scoped to the REQUESTING user's own recordings only -
+  // every participant is expected to record every word themselves, so
+  // "someone already recorded this" would be actively misleading here:
+  // it would show green/done for a word this user personally hasn't
+  // touched yet, just because a different speaker got to it first.
   audio: boolean;
 }
 
 /** Whether each of the platform's three decision-driven review axes
- * already has a word_decisions row for this word, plus whether audio has
- * at least one registered recording - shown as read-only context on
- * every review screen so a curator on one axis isn't left guessing about
- * the other three. */
-export async function loadAxisDecided(client: Queryable, wordId: string): Promise<AxisDecided> {
+ * already has a word_decisions row for this word (true for everyone,
+ * once a curator decides), plus whether the REQUESTING user themselves
+ * has at least one registered recording for it (see AxisDecided.audio) -
+ * shown as read-only context on every review screen so a curator on one
+ * axis isn't left guessing about the other three. */
+export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
   const [decisionRows, utteranceRows] = await Promise.all([
     client.query<{ axis: 'spelling' | 'definition' | 'etymology' }>('select axis from word_decisions where word_id = $1', [
       wordId,
     ]),
-    client.query('select 1 from utterances where word_id = $1 limit 1', [wordId]),
+    client.query(
+      `select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
+       where u.word_id = $1 and s.user_id = $2 limit 1`,
+      [wordId, userId],
+    ),
   ]);
   const decided = new Set(decisionRows.rows.map((r) => r.axis));
   return {
@@ -69,6 +77,49 @@ export async function loadAxisDecided(client: Queryable, wordId: string): Promis
     etymology: decided.has('etymology'),
     audio: (utteranceRows.rowCount ?? 0) > 0,
   };
+}
+
+/** Batched version of loadAxisDecided - for callers listing many words at
+ * once (listAllWords.ts, listMyAssignments.ts), which each need every
+ * word's own status but shouldn't run one query pair per word. Same
+ * semantics as loadAxisDecided (audio scoped to the requesting user's
+ * own recordings), just computed for a whole word_id set in two queries
+ * total instead of 2*N. */
+export async function loadAxisDecidedBatch(
+  client: Queryable,
+  wordIds: string[],
+  userId: string,
+): Promise<Map<string, AxisDecided>> {
+  const [decisionRows, utteranceRows] = await Promise.all([
+    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
+      'select word_id, axis from word_decisions where word_id = any($1)',
+      [wordIds],
+    ),
+    client.query<{ word_id: string }>(
+      `select distinct u.word_id from utterances u join speakers s on s.speaker_id = u.speaker_id
+       where s.user_id = $1 and u.word_id = any($2)`,
+      [userId, wordIds],
+    ),
+  ]);
+  const decidedByWord = new Map<string, Set<string>>();
+  for (const row of decisionRows.rows) {
+    const existing = decidedByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else decidedByWord.set(row.word_id, new Set([row.axis]));
+  }
+  const wordsWithAudio = new Set(utteranceRows.rows.map((r) => r.word_id));
+
+  const result = new Map<string, AxisDecided>();
+  for (const wordId of wordIds) {
+    const decided = decidedByWord.get(wordId) ?? new Set<string>();
+    result.set(wordId, {
+      spelling: decided.has('spelling'),
+      definition: decided.has('definition'),
+      etymology: decided.has('etymology'),
+      audio: wordsWithAudio.has(wordId),
+    });
+  }
+  return result;
 }
 
 export async function loadDefinition(client: Queryable, wordId: string): Promise<string | null> {

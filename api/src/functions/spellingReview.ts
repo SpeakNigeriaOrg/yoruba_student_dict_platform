@@ -13,9 +13,9 @@ import { WordNotFoundError } from '../handlers/errors.js';
 
 export async function spellingReviewFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
-    await requireUser(request);
+    const user = await requireUser(request);
     const wordId = request.params.wordId;
-    const result = await getSpellingReview(getPool(), wordId);
+    const result = await getSpellingReview(getPool(), wordId, user.userId);
     return { status: 200, jsonBody: result };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };

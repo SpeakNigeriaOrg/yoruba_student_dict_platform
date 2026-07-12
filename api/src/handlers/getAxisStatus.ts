@@ -11,8 +11,8 @@ import { loadAxisDecided, type AxisDecided } from '../reviewShared.js';
 import type { Queryable } from '../db.js';
 import { WordNotFoundError } from './errors.js';
 
-export async function getAxisStatus(client: Queryable, wordId: string): Promise<AxisDecided> {
+export async function getAxisStatus(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
   const wordResult = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
   if (wordResult.rowCount === 0) throw new WordNotFoundError(wordId);
-  return loadAxisDecided(client, wordId);
+  return loadAxisDecided(client, wordId, userId);
 }

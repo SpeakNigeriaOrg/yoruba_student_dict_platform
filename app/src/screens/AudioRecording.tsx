@@ -22,6 +22,14 @@
 // gets sent as recordedDisplayText/recordedSyllables and is what the
 // segment-count check and syllable identities are actually based on, not
 // necessarily golden_record's current (possibly later-revised) values.
+//
+// "Your recordings" vs "Other speakers' recordings" are kept as two
+// clearly separate sections (listUtterances.ts's isOwnRecording flag),
+// not one blended list - every participant is expected to record every
+// word themselves, so a single "someone recorded this" signal would be
+// actively misleading (this is also why the Audio axis tab's own
+// green/pending status, App.tsx's getAxisStatus, is scoped to the
+// current user's own recordings, not any speaker's).
 
 import { useEffect, useState } from 'react';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
@@ -37,6 +45,52 @@ export interface AudioRecordingProps {
 interface SegmentReview {
   segment: SyllableSegment;
   clip: Blob;
+}
+
+// Deliberately doesn't render `status` (pending_processing/segmented) -
+// that field describes internal segmentation state, not "did I finish
+// recording this," and showing it to the person recording (especially
+// "pending_processing" on their own freshly-submitted take 1, which is
+// simply never expected to change - take 1 is never segmented) reads as
+// an error or an unfinished step when it isn't one. Segment count is
+// shown instead, since that's the part actually meaningful to a listener.
+function UtteranceRow({ u, showSpeakerName }: { u: UtteranceSummary; showSpeakerName: boolean }) {
+  return (
+    <li>
+      {showSpeakerName ? (
+        <>
+          <strong>{u.speakerDisplayName}</strong> -{' '}
+        </>
+      ) : null}
+      take {u.takeNumber} - recorded as{' '}
+      <em>
+        {u.recordedDisplayText} ({u.recordedSyllables.join(' · ')})
+      </em>
+      {u.segments.length > 0 ? (
+        <span>
+          {' '}
+          ({u.segments.length} syllable{u.segments.length === 1 ? '' : 's'} identified)
+        </span>
+      ) : null}
+      {u.audioDataBase64 ? (
+        <>
+          <br />
+          <audio controls src={base64ToAudioUrl(u.audioDataBase64)} />
+        </>
+      ) : null}
+      {u.segments.length > 0 ? (
+        <ul aria-label={`take ${u.takeNumber} segments`}>
+          {u.segments.map((seg) => (
+            <li key={seg.syllablePosition}>
+              Syllable {seg.syllablePosition + 1} ({seg.syllableText})
+              <br />
+              <audio controls src={base64ToAudioUrl(seg.audioDataBase64)} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
 }
 
 export function AudioRecording({ wordId }: AudioRecordingProps) {
@@ -146,6 +200,9 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
   const expectedCount = recordedSyllables.length;
   const detectedCount = segmentReviews?.length ?? null;
   const countsMatch = detectedCount !== null && expectedCount === detectedCount;
+
+  const ownRecordings = previousRecordings?.filter((u) => u.isOwnRecording) ?? null;
+  const otherRecordings = previousRecordings?.filter((u) => !u.isOwnRecording) ?? null;
 
   async function submit() {
     if (!take1Blob || !take2Blob || !segmentReviews || !countsMatch) return;
@@ -295,40 +352,37 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
       </button>
       {status ? <p role="status">{status}</p> : null}
 
-      <div className="take-step" aria-label="Previous recordings">
-        <h3>Previous recordings</h3>
+      <div className="take-step" aria-label="Your recordings">
+        <h3>Your recordings</h3>
         {previousRecordingsError ? (
-          <p role="alert">Couldn't load previous recordings: {previousRecordingsError}</p>
-        ) : previousRecordings === null ? (
-          <p>Loading previous recordings...</p>
-        ) : previousRecordings.length === 0 ? (
-          <p>No recordings yet for this word.</p>
+          <p role="alert">Couldn't load your recordings: {previousRecordingsError}</p>
+        ) : ownRecordings === null ? (
+          <p>Loading your recordings...</p>
+        ) : ownRecordings.length === 0 ? (
+          <p>You haven't recorded this word yet.</p>
         ) : (
-          <ul aria-label="Recordings by speaker">
-            {previousRecordings.map((u) => (
-              <li key={u.utteranceId}>
-                <strong>{u.speakerDisplayName}</strong> - take {u.takeNumber} ({u.status}) - recorded as{' '}
-                <em>
-                  {u.recordedDisplayText} ({u.recordedSyllables.join(' · ')})
-                </em>
-                {u.audioDataBase64 ? (
-                  <>
-                    <br />
-                    <audio controls src={base64ToAudioUrl(u.audioDataBase64)} />
-                  </>
-                ) : null}
-                {u.segments.length > 0 ? (
-                  <ul aria-label={`${u.speakerDisplayName} take ${u.takeNumber} segments`}>
-                    {u.segments.map((seg) => (
-                      <li key={seg.syllablePosition}>
-                        Syllable {seg.syllablePosition + 1} ({seg.syllableText})
-                        <br />
-                        <audio controls src={base64ToAudioUrl(seg.audioDataBase64)} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
+          <ul aria-label="Your recordings by take">
+            {ownRecordings.map((u) => (
+              <UtteranceRow key={u.utteranceId} u={u} showSpeakerName={false} />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Whether to surface anyone else's recordings at all is a judgment
+          call (every participant is still expected to record every word
+          themselves - this is not a substitute for that) - kept, but
+          always clearly separated from "Your recordings" above, never
+          blended into one undifferentiated list or a single "done"
+          signal. */}
+      <div className="take-step" aria-label="Other speakers' recordings">
+        <h3>Other speakers' recordings</h3>
+        {previousRecordingsError ? null : otherRecordings === null ? null : otherRecordings.length === 0 ? (
+          <p>No other speakers have recorded this word yet.</p>
+        ) : (
+          <ul aria-label="Other speakers' recordings by take">
+            {otherRecordings.map((u) => (
+              <UtteranceRow key={u.utteranceId} u={u} showSpeakerName={true} />
             ))}
           </ul>
         )}

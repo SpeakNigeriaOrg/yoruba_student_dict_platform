@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { getMyAssignments, type AssignmentSummary } from '../api.js';
+import { AxisStatusBadges } from './AxisStatusBadges.js';
 
 export interface AssignmentsListProps {
   onSelect: (wordId: string) => void;
@@ -41,6 +42,8 @@ export function AssignmentsList({ onSelect }: AssignmentsListProps) {
             {a.displayText}
           </button>
           {a.definition ? <span> — {a.definition}</span> : null}
+          <br />
+          <AxisStatusBadges axisDecided={a.axisDecided} />
         </li>
       ))}
     </ul>

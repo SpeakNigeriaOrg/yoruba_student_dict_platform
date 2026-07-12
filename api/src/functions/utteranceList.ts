@@ -1,8 +1,9 @@
 // functions/utteranceList.ts
 //
 // GET /api/words/{wordId}/utterances - any authenticated user, same gate
-// as the review-axis GET endpoints (see listUtterances.ts's file header
-// for why this isn't speaker/account-scoped).
+// as the review-axis GET endpoints. Returns every speaker's recordings
+// (not restricted to the caller's own), each flagged with isOwnRecording
+// so the UI can tell them apart - see listUtterances.ts's file header.
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
@@ -12,9 +13,9 @@ import { WordNotFoundError } from '../handlers/errors.js';
 
 export async function listUtterancesFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
-    await requireUser(request);
+    const user = await requireUser(request);
     const wordId = request.params.wordId;
-    const result = await listUtterances(getPool(), wordId);
+    const result = await listUtterances(getPool(), wordId, user.userId);
     return { status: 200, jsonBody: { utterances: result } };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };

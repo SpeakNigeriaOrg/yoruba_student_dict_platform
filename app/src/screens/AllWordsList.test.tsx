@@ -25,6 +25,7 @@ describe('AllWordsList', () => {
     const list = screen.getByLabelText('All words');
     expect(list).toHaveTextContent('definition: decided');
     expect(list).toHaveTextContent('definition: not yet decided');
+    expect(list).toHaveTextContent('audio: not yet recorded');
   });
 
   it('calls onSelect with the clicked word_id', async () => {

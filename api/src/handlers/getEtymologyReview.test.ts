@@ -7,9 +7,15 @@ import { WordNotFoundError } from './errors.js';
 const NS = 'testgetety_';
 const pool = getTestPool();
 const seededKaikkiSenseIds: string[] = [];
+let userId: string;
 
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
+  const result = await pool.query<{ user_id: string }>(
+    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    [`${NS}requester`, 'Test Requester'],
+  );
+  userId = result.rows[0].user_id;
 });
 
 afterAll(async () => {
@@ -66,7 +72,7 @@ async function insertKaikkiSense(
 
 describe('getEtymologyReview', () => {
   it('rejects a word_id that does not exist', async () => {
-    await expect(getEtymologyReview(pool, `${NS}nonexistent`)).rejects.toThrow(WordNotFoundError);
+    await expect(getEtymologyReview(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
 
   it('surfaces both componentsProposal (forward) and usedInProposal (reverse), resolved against real golden_record entries', async () => {
@@ -91,7 +97,7 @@ describe('getEtymologyReview', () => {
       [{ form: `${NS}usedintarget`, provenance: 'synthesized_from_etymology' }],
     );
 
-    const result = await getEtymologyReview(pool, compoundId);
+    const result = await getEtymologyReview(pool, compoundId, userId);
 
     expect(result.wordId).toBe(compoundId);
     expect(result.componentsProposal).toHaveLength(2);
@@ -118,7 +124,7 @@ describe('getEtymologyReview', () => {
       'Clipping of an older form; no structured breakdown recorded by Kaikki.',
     );
 
-    const result = await getEtymologyReview(pool, wordId);
+    const result = await getEtymologyReview(pool, wordId, userId);
 
     expect(result.componentsProposal).toEqual([]);
     expect(result.etymologyText).toBe('Clipping of an older form; no structured breakdown recorded by Kaikki.');
@@ -128,7 +134,7 @@ describe('getEtymologyReview', () => {
     const wordId = `${NS}atomic_word`;
     await insertWord(wordId, `${NS}atomicspelling`);
 
-    const result = await getEtymologyReview(pool, wordId);
+    const result = await getEtymologyReview(pool, wordId, userId);
 
     expect(result.components).toEqual([wordId]);
     expect(result.componentsProposal).toEqual([]);
@@ -154,7 +160,7 @@ describe('getEtymologyReview', () => {
       curatorResult.rows[0].user_id,
     ]);
 
-    const result = await getEtymologyReview(pool, wordId);
+    const result = await getEtymologyReview(pool, wordId, userId);
 
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
     expect(result.definition).toBe('a definition for context testing');
@@ -165,7 +171,7 @@ describe('getEtymologyReview', () => {
     const wordId = `${NS}fresh_word`;
     await insertWord(wordId, `${NS}freshspelling`);
 
-    const result = await getEtymologyReview(pool, wordId);
+    const result = await getEtymologyReview(pool, wordId, userId);
 
     expect(result.definition).toBeNull();
     expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });

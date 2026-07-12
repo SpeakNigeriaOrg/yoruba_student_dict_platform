@@ -9,6 +9,12 @@
     ],
     "definition": "a made-up test word",
     "entryType": null,
-    "assignedAt": "2026-07-11T20:03:57.917Z"
+    "assignedAt": "2026-07-11T20:03:57.917Z",
+    "axisDecided": {
+      "spelling": false,
+      "definition": false,
+      "etymology": false,
+      "audio": false
+    }
   }
 ]

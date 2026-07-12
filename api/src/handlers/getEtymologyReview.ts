@@ -65,14 +65,14 @@ async function loadSpellingConfirmedOverrides(client: Queryable): Promise<Diagno
   return overrides;
 }
 
-export async function getEtymologyReview(client: Queryable, wordId: string): Promise<EtymologyReviewResult> {
+export async function getEtymologyReview(client: Queryable, wordId: string, userId: string): Promise<EtymologyReviewResult> {
   const vocab = await loadVocab(client);
   const entry = vocab[wordId];
   if (!entry) {
     throw new WordNotFoundError(wordId);
   }
   const definition = await loadDefinition(client, wordId);
-  const axisDecided = await loadAxisDecided(client, wordId);
+  const axisDecided = await loadAxisDecided(client, wordId, userId);
 
   const key = orthographyInsensitiveForm(entry.displayText);
   const senses = await loadKaikkiSensesForKey(client, key);

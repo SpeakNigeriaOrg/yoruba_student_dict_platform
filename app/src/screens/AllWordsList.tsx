@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { getAllWords, type AllWordsListItem } from '../api.js';
+import { AxisStatusBadges } from './AxisStatusBadges.js';
 
 export interface AllWordsListProps {
   onSelect: (wordId: string) => void;
@@ -72,7 +73,8 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       ) : (
         <ul aria-label="All words" className="card-list">
           {filtered.map((w) => {
-            const allDecided = w.axisDecided.spelling && w.axisDecided.definition && w.axisDecided.etymology;
+            const allDecided =
+              w.axisDecided.spelling && w.axisDecided.definition && w.axisDecided.etymology && w.axisDecided.audio;
             return (
               <li key={w.wordId} className={`card-row${allDecided ? ' decided' : ''}`}>
                 <button type="button" className="row-title" onClick={() => onSelect(w.wordId)}>
@@ -80,15 +82,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
                 </button>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: '0.78rem', color: 'var(--ink-soft)' }}> ({w.wordId})</span>
                 <br />
-                <span className={`badge${w.axisDecided.spelling ? ' decided' : ''}`}>
-                  spelling: {w.axisDecided.spelling ? 'decided' : 'not yet decided'}
-                </span>{' '}
-                <span className={`badge${w.axisDecided.definition ? ' decided' : ''}`}>
-                  definition: {w.axisDecided.definition ? 'decided' : 'not yet decided'}
-                </span>{' '}
-                <span className={`badge${w.axisDecided.etymology ? ' decided' : ''}`}>
-                  etymology: {w.axisDecided.etymology ? 'decided' : 'not yet decided'}
-                </span>
+                <AxisStatusBadges axisDecided={w.axisDecided} />
               </li>
             );
           })}

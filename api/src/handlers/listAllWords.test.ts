@@ -4,9 +4,15 @@ import { listAllWords } from './listAllWords.js';
 
 const NS = 'testlistall_';
 const pool = getTestPool();
+let userId: string;
 
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
+  const result = await pool.query<{ user_id: string }>(
+    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    [`${NS}requester`, 'Test Requester'],
+  );
+  userId = result.rows[0].user_id;
 });
 
 afterAll(async () => {
@@ -34,7 +40,7 @@ describe('listAllWords', () => {
       curatorResult.rows[0].user_id,
     ]);
 
-    const words = await listAllWords(pool);
+    const words = await listAllWords(pool, userId);
     const decided = words.find((w) => w.wordId === decidedWordId);
     const undecided = words.find((w) => w.wordId === undecidedWordId);
 
@@ -52,7 +58,7 @@ describe('listAllWords', () => {
       wordId1, 'y', ['y'],
     ]);
 
-    const words = await listAllWords(pool);
+    const words = await listAllWords(pool, userId);
     const indexA = words.findIndex((w) => w.wordId === wordId1);
     const indexB = words.findIndex((w) => w.wordId === wordId2);
 

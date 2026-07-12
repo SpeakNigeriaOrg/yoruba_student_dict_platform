@@ -7,6 +7,7 @@
 // implemented yet).
 
 import type { Queryable } from '../db.js';
+import { loadAxisDecidedBatch, type AxisDecided } from '../reviewShared.js';
 
 export interface AssignmentSummary {
   wordId: string;
@@ -15,6 +16,11 @@ export interface AssignmentSummary {
   definition: string | null;
   entryType: 'phrase' | null;
   assignedAt: Date;
+  // Same per-axis status shown on the browse-all-words list, via the
+  // same AxisStatusBadges component - a curator sees at a glance which
+  // axes on their assigned word still need attention, not just whether
+  // *someone* has already touched it.
+  axisDecided: AxisDecided;
 }
 
 export async function listMyAssignments(db: Queryable, userId: string): Promise<AssignmentSummary[]> {
@@ -33,6 +39,7 @@ export async function listMyAssignments(db: Queryable, userId: string): Promise<
      order by a.assigned_at asc`,
     [userId],
   );
+  const axisDecidedByWord = await loadAxisDecidedBatch(db, result.rows.map((row) => row.word_id), userId);
   return result.rows.map((row) => ({
     wordId: row.word_id,
     displayText: row.display_text,
@@ -40,5 +47,6 @@ export async function listMyAssignments(db: Queryable, userId: string): Promise<
     definition: row.definition,
     entryType: row.entry_type,
     assignedAt: row.assigned_at,
+    axisDecided: axisDecidedByWord.get(row.word_id)!,
   }));
 }

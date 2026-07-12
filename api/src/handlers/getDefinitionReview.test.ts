@@ -7,9 +7,15 @@ import { WordNotFoundError } from './errors.js';
 const NS = 'testgetdef_';
 const pool = getTestPool();
 const seededKaikkiSenseIds: string[] = [];
+let userId: string;
 
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
+  const result = await pool.query<{ user_id: string }>(
+    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    [`${NS}requester`, 'Test Requester'],
+  );
+  userId = result.rows[0].user_id;
 });
 
 afterAll(async () => {
@@ -48,7 +54,7 @@ async function insertKaikkiSense(headword: string, canonicalValue: string, ortho
 
 describe('getDefinitionReview', () => {
   it('rejects a word_id that does not exist', async () => {
-    await expect(getDefinitionReview(pool, `${NS}nonexistent`)).rejects.toThrow(WordNotFoundError);
+    await expect(getDefinitionReview(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
 
   it('proposes a definition from Kaikki glosses when none has been decided yet', async () => {
@@ -56,7 +62,7 @@ describe('getDefinitionReview', () => {
     await insertWord(wordId, `${NS}amotekun`);
     await insertKaikkiSense(`${NS}amotekun`, `${NS}amotekun`, orthographyInsensitiveForm(`${NS}amotekun`), ['leopard']);
 
-    const result = await getDefinitionReview(pool, wordId);
+    const result = await getDefinitionReview(pool, wordId, userId);
 
     expect(result.definitionStatus).toBe('proposed');
     expect(result.definitionProposed).toBe('leopard');
@@ -68,7 +74,7 @@ describe('getDefinitionReview', () => {
     const wordId = `${NS}missingword`;
     await insertWord(wordId, `${NS}missingspelling`);
 
-    const result = await getDefinitionReview(pool, wordId);
+    const result = await getDefinitionReview(pool, wordId, userId);
 
     expect(result.definitionStatus).toBe('missing');
   });
@@ -87,7 +93,7 @@ describe('getDefinitionReview', () => {
       curatorResult.rows[0].user_id,
     ]);
 
-    const result = await getDefinitionReview(pool, wordId);
+    const result = await getDefinitionReview(pool, wordId, userId);
 
     expect(result.definitionStatus).toBe('confirmed');
     expect(result.definitionCurrent).toBe('an already-confirmed definition');
@@ -102,7 +108,7 @@ describe('getDefinitionReview', () => {
       [`${NS}context`, 'spelling'],
     ]);
 
-    const result = await getDefinitionReview(pool, wordId);
+    const result = await getDefinitionReview(pool, wordId, userId);
 
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
   });

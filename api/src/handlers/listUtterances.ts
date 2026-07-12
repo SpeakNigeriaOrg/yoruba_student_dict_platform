@@ -32,6 +32,13 @@ export interface UtteranceSummary {
   utteranceId: string;
   speakerId: string;
   speakerDisplayName: string;
+  // Whether this recording's speaker is the requesting user's own
+  // speaker identity - lets the UI separate "your recordings" from
+  // "other speakers' recordings" instead of blending them (recordings
+  // aren't login-scoped at the data level - a speaker may have no
+  // user_id at all, e.g. migrated legacy recordings - so this is only
+  // ever true for a genuine match, never assumed).
+  isOwnRecording: boolean;
   takeNumber: number;
   status: string;
   recordedDisplayText: string;
@@ -44,7 +51,7 @@ export interface UtteranceSummary {
   segments: UtteranceSegmentSummary[];
 }
 
-export async function listUtterances(client: Queryable, wordId: string): Promise<UtteranceSummary[]> {
+export async function listUtterances(client: Queryable, wordId: string, userId: string): Promise<UtteranceSummary[]> {
   const wordResult = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
   if (wordResult.rowCount === 0) throw new WordNotFoundError(wordId);
 
@@ -52,6 +59,7 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     utterance_id: string;
     speaker_id: string;
     speaker_display_name: string;
+    is_own_recording: boolean;
     take_number: number;
     status: string;
     recorded_display_text: string;
@@ -62,14 +70,14 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     audio_data: Buffer | null;
     raw_audio_data: Buffer | null;
   }>(
-    `select u.utterance_id, u.speaker_id, s.display_name as speaker_display_name, u.take_number, u.status,
-            u.recorded_display_text, u.recorded_syllables, u.duration_s, u.sample_rate, u.recorded_at,
-            u.audio_data, u.raw_audio_data
+    `select u.utterance_id, u.speaker_id, s.display_name as speaker_display_name, s.user_id = $2 as is_own_recording,
+            u.take_number, u.status, u.recorded_display_text, u.recorded_syllables, u.duration_s, u.sample_rate,
+            u.recorded_at, u.audio_data, u.raw_audio_data
      from utterances u
      join speakers s on s.speaker_id = u.speaker_id
      where u.word_id = $1
-     order by s.display_name, u.take_number`,
-    [wordId],
+     order by is_own_recording desc, s.display_name, u.take_number`,
+    [wordId, userId],
   );
 
   const segmentRows = await client.query<{
@@ -108,6 +116,7 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     utteranceId: row.utterance_id,
     speakerId: row.speaker_id,
     speakerDisplayName: row.speaker_display_name,
+    isOwnRecording: row.is_own_recording,
     takeNumber: row.take_number,
     status: row.status,
     recordedDisplayText: row.recorded_display_text,

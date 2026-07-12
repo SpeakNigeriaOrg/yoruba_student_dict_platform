@@ -44,6 +44,7 @@ export interface AssignmentSummary {
   definition: string | null;
   entryType: 'phrase' | null;
   assignedAt: string;
+  axisDecided: AxisDecided;
 }
 
 export function getMyAssignments(): Promise<AssignmentSummary[]> {
@@ -373,6 +374,10 @@ export interface UtteranceSummary {
   utteranceId: string;
   speakerId: string;
   speakerDisplayName: string;
+  // Whether this recording's speaker is the current user's own speaker
+  // identity - lets the UI separate "your recordings" from "other
+  // speakers' recordings" instead of blending them.
+  isOwnRecording: boolean;
   takeNumber: number;
   status: string;
   recordedDisplayText: string;

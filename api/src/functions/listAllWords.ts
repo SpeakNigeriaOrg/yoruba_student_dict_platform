@@ -12,8 +12,8 @@ import { listAllWords } from '../handlers/listAllWords.js';
 
 export async function listAllWordsFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
-    await requireCurator(request);
-    const words = await listAllWords(getPool());
+    const user = await requireCurator(request);
+    const words = await listAllWords(getPool(), user.userId);
     return { status: 200, jsonBody: { words } };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };

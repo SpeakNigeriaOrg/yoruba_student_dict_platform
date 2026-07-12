@@ -28,14 +28,14 @@ export interface SpellingReviewResult extends DiagnoseEntryResult, CheckSyllable
   axisDecided: AxisDecided;
 }
 
-export async function getSpellingReview(client: Queryable, wordId: string): Promise<SpellingReviewResult> {
+export async function getSpellingReview(client: Queryable, wordId: string, userId: string): Promise<SpellingReviewResult> {
   const vocab = await loadVocab(client);
   const entry = vocab[wordId];
   if (!entry) {
     throw new WordNotFoundError(wordId);
   }
   const definition = await loadDefinition(client, wordId);
-  const axisDecided = await loadAxisDecided(client, wordId);
+  const axisDecided = await loadAxisDecided(client, wordId, userId);
   const override = await loadAxisOverride(client, wordId, 'spelling');
 
   const key = orthographyInsensitiveForm(entry.displayText);

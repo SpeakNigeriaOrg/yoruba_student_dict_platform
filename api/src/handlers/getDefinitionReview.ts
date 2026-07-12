@@ -27,13 +27,13 @@ export interface DefinitionReviewResult extends CheckDefinitionResult {
   axisDecided: AxisDecided;
 }
 
-export async function getDefinitionReview(client: Queryable, wordId: string): Promise<DefinitionReviewResult> {
+export async function getDefinitionReview(client: Queryable, wordId: string, userId: string): Promise<DefinitionReviewResult> {
   const vocab = await loadVocab(client);
   const entry = vocab[wordId];
   if (!entry) {
     throw new WordNotFoundError(wordId);
   }
-  const axisDecided = await loadAxisDecided(client, wordId);
+  const axisDecided = await loadAxisDecided(client, wordId, userId);
   const override = await loadAxisOverride(client, wordId, 'definition');
 
   // The full corpus (not just this word's own orthography key) is loaded

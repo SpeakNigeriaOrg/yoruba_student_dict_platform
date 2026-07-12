@@ -213,12 +213,13 @@ describe('AudioRecording', () => {
     expect(typeof take2Register.segments[0].audioDataBase64).toBe('string');
   });
 
-  it("lists previous recordings from any speaker, so a curator can listen without needing that speaker's own login", async () => {
+  it("shows another speaker's recording under 'Other speakers' recordings', clearly separated from - and never counted as - the current user's own", async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
-    const previousUtterance = {
+    const otherSpeakerUtterance = {
       utteranceId: 'utt-1',
       speakerId: 'spk-1',
       speakerDisplayName: 'speaker3',
+      isOwnRecording: false,
       takeNumber: 1,
       status: 'pending_processing',
       recordedDisplayText: 'fixturegenspldef_kasu',
@@ -234,7 +235,8 @@ describe('AudioRecording', () => {
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
-        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [previousUtterance] }) });
+        if (url.includes('/utterances'))
+          return Promise.resolve({ ok: true, json: async () => ({ utterances: [otherSpeakerUtterance] }) });
         return Promise.resolve({ ok: true, json: async () => ({}) });
       }),
     );
@@ -242,10 +244,53 @@ describe('AudioRecording', () => {
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
     await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
 
-    const list = await screen.findByLabelText('Recordings by speaker');
-    expect(list).toHaveTextContent('speaker3');
-    expect(list).toHaveTextContent('take 1');
-    expect(list).toHaveTextContent('pending_processing');
+    const yours = await screen.findByLabelText('Your recordings');
+    expect(yours).toHaveTextContent("You haven't recorded this word yet.");
+    // Raw internal status text should never be shown to the person recording.
+    expect(yours).not.toHaveTextContent('pending_processing');
+
+    const others = screen.getByLabelText("Other speakers' recordings");
+    expect(others).toHaveTextContent('speaker3');
+    expect(others).toHaveTextContent('take 1');
+    expect(others).not.toHaveTextContent('pending_processing');
+  });
+
+  it("shows the current user's own recording under 'Your recordings', without a speaker name", async () => {
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const ownUtterance = {
+      utteranceId: 'utt-2',
+      speakerId: 'spk-2',
+      speakerDisplayName: 'the-current-users-github-handle',
+      isOwnRecording: true,
+      takeNumber: 1,
+      status: 'pending_processing',
+      recordedDisplayText: 'fixturegenspldef_kasu',
+      recordedSyllables: ['ka', 'su'],
+      durationS: 1.1,
+      sampleRate: 16000,
+      recordedAt: '2026-01-01T00:00:00.000Z',
+      audioDataBase64: Buffer.from('take1-bytes').toString('base64'),
+      rawAudioDataBase64: Buffer.from('take1-bytes').toString('base64'),
+      segments: [],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [ownUtterance] }) });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+
+    const yours = await screen.findByLabelText('Your recordings');
+    expect(yours).toHaveTextContent('take 1');
+    expect(yours).not.toHaveTextContent('the-current-users-github-handle');
+
+    const others = screen.getByLabelText("Other speakers' recordings");
+    expect(others).toHaveTextContent('No other speakers have recorded this word yet.');
   });
 
   it('lets take 1 be re-recorded - clicking Re-record shows the Stop button, not a stuck Re-record button', async () => {

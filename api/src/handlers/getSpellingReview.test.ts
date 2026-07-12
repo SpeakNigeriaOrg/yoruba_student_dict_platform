@@ -7,9 +7,15 @@ import { WordNotFoundError } from './errors.js';
 const NS = 'testgetspl_';
 const pool = getTestPool();
 const seededKaikkiSenseIds: string[] = [];
+let userId: string;
 
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
+  const result = await pool.query<{ user_id: string }>(
+    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    [`${NS}requester`, 'Test Requester'],
+  );
+  userId = result.rows[0].user_id;
 });
 
 afterAll(async () => {
@@ -47,7 +53,7 @@ async function insertKaikkiSense(headword: string, canonicalValue: string, ortho
 
 describe('getSpellingReview', () => {
   it('rejects a word_id that does not exist', async () => {
-    await expect(getSpellingReview(pool, `${NS}nonexistent`)).rejects.toThrow(WordNotFoundError);
+    await expect(getSpellingReview(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
 
   it('surfaces a real tone mismatch against Kaikki, with the adoption target and context fields', async () => {
@@ -56,7 +62,7 @@ describe('getSpellingReview', () => {
     await insertWord(wordId, untoned);
     await insertKaikkiSense(untoned, `${NS}kásù`, orthographyInsensitiveForm(untoned));
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.status).toBe('tone_mismatch');
     expect(result.matchedForm).toBe(`${NS}kásù`);
@@ -68,7 +74,7 @@ describe('getSpellingReview', () => {
     const wordId = `${NS}nokaikkiword`;
     await insertWord(wordId, `${NS}nokaikkispelling`);
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.status).toBe('not_in_kaikki');
   });
@@ -89,7 +95,7 @@ describe('getSpellingReview', () => {
       curatorResult.rows[0].user_id,
     ]);
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.status).toBe('verified_keep_ours');
     expect(result.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: false });
@@ -104,7 +110,7 @@ describe('getSpellingReview', () => {
       'a definition for context testing',
     ]);
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
     expect(result.definition).toBe('a definition for context testing');
@@ -118,7 +124,7 @@ describe('getSpellingReview', () => {
       ['ka', 'su'],
     ]);
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.syllableSplitStatus).toBe('match');
   });
@@ -131,7 +137,7 @@ describe('getSpellingReview', () => {
       ['kasu'],
     ]);
 
-    const result = await getSpellingReview(pool, wordId);
+    const result = await getSpellingReview(pool, wordId, userId);
 
     expect(result.syllableSplitStatus).toBe('mismatch');
     expect(result.syllableSplitManual).toEqual(['kasu']);
