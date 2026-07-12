@@ -29,6 +29,10 @@ export interface SyllableObservationSummary {
   endTimeS: number;
   vadConfidence: number | null;
   audioDataBase64: string;
+  // Exactly as sliced, before any trimming/normalization - see
+  // registerUtterance.ts's file header. Equal to audioDataBase64 until a
+  // real processing step exists.
+  rawAudioDataBase64: string;
 }
 
 export async function listSyllableObservations(client: Queryable, syllableText: string): Promise<SyllableObservationSummary[]> {
@@ -43,9 +47,10 @@ export async function listSyllableObservations(client: Queryable, syllableText: 
     end_time_s: string;
     vad_confidence: string | null;
     audio_data: Buffer;
+    raw_audio_data: Buffer;
   }>(
     `select e.observation_id, e.word_id, e.speaker_id, s.display_name as speaker_display_name, e.take_number,
-            e.syllable_position, e.start_time_s, e.end_time_s, e.vad_confidence, e.audio_data
+            e.syllable_position, e.start_time_s, e.end_time_s, e.vad_confidence, e.audio_data, e.raw_audio_data
      from syllable_observations_enriched e
      join speakers s on s.speaker_id = e.speaker_id
      where e.syllable_text = $1
@@ -64,5 +69,6 @@ export async function listSyllableObservations(client: Queryable, syllableText: 
     endTimeS: Number(row.end_time_s),
     vadConfidence: row.vad_confidence === null ? null : Number(row.vad_confidence),
     audioDataBase64: row.audio_data.toString('base64'),
+    rawAudioDataBase64: row.raw_audio_data.toString('base64'),
   }));
 }

@@ -84,6 +84,8 @@ describe('listUtterances', () => {
     expect(take1.status).toBe('pending_processing');
     expect(take1.recordedDisplayText).toBe('kàsù');
     expect(take1.audioDataBase64).toBe(Buffer.from('take1-bytes').toString('base64'));
+    // No distinct raw audio supplied - defaults to the processed bytes.
+    expect(take1.rawAudioDataBase64).toBe(Buffer.from('take1-bytes').toString('base64'));
     expect(take1.segments).toEqual([]);
 
     const take2 = result.find((u) => u.takeNumber === 2)!;
@@ -91,6 +93,7 @@ describe('listUtterances', () => {
     expect(take2.segments).toHaveLength(2);
     expect(take2.segments[0]).toMatchObject({ syllablePosition: 0, syllableText: 'kà' });
     expect(take2.segments[0].audioDataBase64).toBe(Buffer.from('seg0').toString('base64'));
+    expect(take2.segments[0].rawAudioDataBase64).toBe(Buffer.from('seg0').toString('base64'));
 
     // Both takes came from the same (test) speaker.
     expect(take1.speakerId).toBe(take2.speakerId);

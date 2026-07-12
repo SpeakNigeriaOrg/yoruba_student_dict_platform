@@ -36,6 +36,12 @@
 //     hardcoded confidence=1.0 (not a real per-segment confidence value,
 //     just a constant the old script never varied - more honest as null
 //     than as a fabricated precise number).
+//   - raw_audio_data/raw_blob_path (0008_raw_audio.sql) are set equal to
+//     audio_data/blob_path for every clip here - this legacy batch has
+//     no separately-preserved "before processing" artifact (the original
+//     content/incoming/*.mp4 isn't migrated), so raw and processed are
+//     the same bytes, same as the live registerUtterance.ts path when
+//     the caller doesn't supply a distinct raw version.
 //
 // Speaker: registered under display_name 'speaker3' (yoruba-student-
 // dict/config.json's own existing "speakers": ["speaker1","speaker2",
@@ -187,16 +193,35 @@ async function main() {
       const wholeWordWav = parseWav(wholeWordBytes);
 
       const blobPathTake1 = `utterances/${wordId}/${speakerId}/take1.wav`;
+      // Raw = processed for this legacy batch (see raw_audio.sql / this
+      // script's file header) - the original content/incoming/*.mp4
+      // isn't itself migrated, so the already-sliced .wav files here are
+      // the only artifact that exists; storing them in both columns
+      // keeps the "raw is never null once a recording exists" invariant
+      // the live registerUtterance.ts path also maintains.
+      const rawBlobPathTake1 = `utterances/${wordId}/${speakerId}/take1-raw.wav`;
       const take1Result = await client.query(
-        `insert into utterances (word_id, speaker_id, take_number, blob_path, duration_s, sample_rate, status, audio_data,
-                                  recorded_display_text, recorded_syllables)
-         values ($1, $2, 1, $3, $4, $5, 'pending_processing', $6, $7, $8)
+        `insert into utterances (word_id, speaker_id, take_number, blob_path, raw_blob_path, duration_s, sample_rate,
+                                  status, audio_data, raw_audio_data, recorded_display_text, recorded_syllables)
+         values ($1, $2, 1, $3, $4, $5, $6, 'pending_processing', $7, $7, $8, $9)
          on conflict (word_id, speaker_id, take_number) do update set
-           blob_path = excluded.blob_path, duration_s = excluded.duration_s, sample_rate = excluded.sample_rate,
-           audio_data = excluded.audio_data, recorded_display_text = excluded.recorded_display_text,
+           blob_path = excluded.blob_path, raw_blob_path = excluded.raw_blob_path,
+           duration_s = excluded.duration_s, sample_rate = excluded.sample_rate,
+           audio_data = excluded.audio_data, raw_audio_data = excluded.raw_audio_data,
+           recorded_display_text = excluded.recorded_display_text,
            recorded_syllables = excluded.recorded_syllables, recorded_at = now()
          returning utterance_id`,
-        [wordId, speakerId, blobPathTake1, wholeWordWav.durationS, wholeWordWav.sampleRate, wholeWordBytes, displayText, syllables],
+        [
+          wordId,
+          speakerId,
+          blobPathTake1,
+          rawBlobPathTake1,
+          wholeWordWav.durationS,
+          wholeWordWav.sampleRate,
+          wholeWordBytes,
+          displayText,
+          syllables,
+        ],
       );
       const take1UtteranceId = take1Result.rows[0].utterance_id;
 
@@ -219,13 +244,15 @@ async function main() {
         const syllableBytes = readFileSync(path.join(wordDirPath, syllableFileNames[position]));
         const syllableWav = parseWav(syllableBytes);
         const segmentBlobPath = `utterances/${wordId}/${speakerId}/take2/syllable${position}.wav`;
+        const segmentRawBlobPath = `utterances/${wordId}/${speakerId}/take2/syllable${position}-raw.wav`;
         const toneInsensitive = toneInsensitiveForm(syllableText);
         const orthographyInsensitive = orthographyInsensitiveForm(syllableText);
         await client.query(
           `insert into syllable_observations
              (utterance_id, syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive,
-              legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data)
-           values ($1, $2, $3, $4, $5, $5, 0, $6, null, $7, $8)`,
+              legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data,
+              raw_blob_path, raw_audio_data)
+           values ($1, $2, $3, $4, $5, $5, 0, $6, null, $7, $8, $9, $8)`,
           // legacy_syllable_key: same honest placeholder as
           // registerUtterance.ts (orthography-insensitive form only, NOT
           // the real ported Python generate_syllable_info scheme) - see
@@ -239,6 +266,7 @@ async function main() {
             syllableWav.durationS,
             segmentBlobPath,
             syllableBytes,
+            segmentRawBlobPath,
           ],
         );
       }

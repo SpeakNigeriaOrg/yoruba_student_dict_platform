@@ -360,6 +360,9 @@ export interface UtteranceSegmentSummary {
   endTimeS: number;
   vadConfidence: number | null;
   audioDataBase64: string;
+  // Exactly as sliced, before any trimming/normalization - equal to
+  // audioDataBase64 until a real processing step exists.
+  rawAudioDataBase64: string;
 }
 
 export interface UtteranceSummary {
@@ -374,6 +377,7 @@ export interface UtteranceSummary {
   sampleRate: number | null;
   recordedAt: string;
   audioDataBase64: string | null;
+  rawAudioDataBase64: string | null;
   segments: UtteranceSegmentSummary[];
 }
 

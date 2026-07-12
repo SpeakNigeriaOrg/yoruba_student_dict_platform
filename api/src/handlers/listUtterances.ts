@@ -22,6 +22,10 @@ export interface UtteranceSegmentSummary {
   endTimeS: number;
   vadConfidence: number | null;
   audioDataBase64: string;
+  // Exactly as sliced, before any trimming/normalization - see
+  // registerUtterance.ts's file header. Equal to audioDataBase64 until a
+  // real processing step exists.
+  rawAudioDataBase64: string;
 }
 
 export interface UtteranceSummary {
@@ -36,6 +40,7 @@ export interface UtteranceSummary {
   sampleRate: number | null;
   recordedAt: string;
   audioDataBase64: string | null;
+  rawAudioDataBase64: string | null;
   segments: UtteranceSegmentSummary[];
 }
 
@@ -55,9 +60,11 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     sample_rate: number | null;
     recorded_at: string;
     audio_data: Buffer | null;
+    raw_audio_data: Buffer | null;
   }>(
     `select u.utterance_id, u.speaker_id, s.display_name as speaker_display_name, u.take_number, u.status,
-            u.recorded_display_text, u.recorded_syllables, u.duration_s, u.sample_rate, u.recorded_at, u.audio_data
+            u.recorded_display_text, u.recorded_syllables, u.duration_s, u.sample_rate, u.recorded_at,
+            u.audio_data, u.raw_audio_data
      from utterances u
      join speakers s on s.speaker_id = u.speaker_id
      where u.word_id = $1
@@ -73,8 +80,10 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     end_time_s: string;
     vad_confidence: string | null;
     audio_data: Buffer;
+    raw_audio_data: Buffer;
   }>(
-    `select utterance_id, syllable_position, syllable_text, start_time_s, end_time_s, vad_confidence, audio_data
+    `select utterance_id, syllable_position, syllable_text, start_time_s, end_time_s, vad_confidence,
+            audio_data, raw_audio_data
      from syllable_observations
      where utterance_id = any($1)
      order by utterance_id, syllable_position`,
@@ -90,6 +99,7 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
       endTimeS: Number(row.end_time_s),
       vadConfidence: row.vad_confidence === null ? null : Number(row.vad_confidence),
       audioDataBase64: row.audio_data.toString('base64'),
+      rawAudioDataBase64: row.raw_audio_data.toString('base64'),
     });
     segmentsByUtterance.set(row.utterance_id, list);
   }
@@ -106,6 +116,7 @@ export async function listUtterances(client: Queryable, wordId: string): Promise
     sampleRate: row.sample_rate,
     recordedAt: row.recorded_at,
     audioDataBase64: row.audio_data === null ? null : row.audio_data.toString('base64'),
+    rawAudioDataBase64: row.raw_audio_data === null ? null : row.raw_audio_data.toString('base64'),
     segments: segmentsByUtterance.get(row.utterance_id) ?? [],
   }));
 }

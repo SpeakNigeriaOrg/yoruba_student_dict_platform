@@ -18,6 +18,15 @@
 // to that same path and null out audio_data - no consumer of blob_path
 // has to change.
 //
+// Raw vs. processed (see 0008_raw_audio.sql): audio_data/blob_path are
+// always "the current best version to play"; raw_audio_data/
+// raw_blob_path are "exactly as captured/sliced, before any trimming or
+// loudness normalization." No real processing step exists yet, so
+// rawAudioData defaults to the same bytes as audioData when the caller
+// doesn't supply a distinct one - raw is never null once a recording
+// exists, and starts genuinely diverging only once real trim/normalize
+// logic lands client-side, with no further schema change needed then.
+//
 // A speaker may record under a tentative pronunciation (spelling/tone)
 // that golden_record later converges on something different from - so
 // syllable_text is derived from the CLIENT-SUPPLIED recordedSyllables
@@ -41,12 +50,18 @@ export interface RegisterSegmentInput {
   endTimeS: number;
   confidence: number;
   audioData: Buffer;
+  // Exactly as sliced, before any trimming/normalization - defaults to
+  // audioData when omitted (see file header).
+  rawAudioData?: Buffer;
 }
 
 export interface RegisterUtteranceInput {
   wordId: string;
   takeNumber: number;
   audioData: Buffer;
+  // Exactly as captured, before any trimming/normalization - defaults to
+  // audioData when omitted (see file header).
+  rawAudioData?: Buffer;
   // The pronunciation actually spoken in this recording - independent of
   // (and may later diverge from) golden_record's current spelling/
   // syllabification. See file header.
@@ -86,16 +101,18 @@ async function registerUtteranceInTransaction(
   // there's no real upload step to generate one from, so it's derived
   // from the same key the unique constraint already uses.
   const blobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}.wav`;
+  const rawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}-raw.wav`;
+  const rawAudioData = input.rawAudioData ?? input.audioData;
 
   const utteranceResult = await client.query<{ utterance_id: string }>(
     `insert into utterances
-       (word_id, speaker_id, take_number, submitted_by, blob_path, duration_s, sample_rate, status, audio_data,
-        recorded_display_text, recorded_syllables)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (word_id, speaker_id, take_number, submitted_by, blob_path, raw_blob_path, duration_s, sample_rate, status,
+        audio_data, raw_audio_data, recorded_display_text, recorded_syllables)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      on conflict (word_id, speaker_id, take_number) do update set
-       submitted_by = excluded.submitted_by, blob_path = excluded.blob_path,
+       submitted_by = excluded.submitted_by, blob_path = excluded.blob_path, raw_blob_path = excluded.raw_blob_path,
        duration_s = excluded.duration_s, sample_rate = excluded.sample_rate,
-       status = excluded.status, audio_data = excluded.audio_data,
+       status = excluded.status, audio_data = excluded.audio_data, raw_audio_data = excluded.raw_audio_data,
        recorded_display_text = excluded.recorded_display_text, recorded_syllables = excluded.recorded_syllables,
        recorded_at = now()
      returning utterance_id`,
@@ -105,10 +122,12 @@ async function registerUtteranceInTransaction(
       input.takeNumber,
       userId,
       blobPath,
+      rawBlobPath,
       input.durationS ?? null,
       input.sampleRate ?? null,
       status,
       input.audioData,
+      rawAudioData,
       input.recordedDisplayText,
       input.recordedSyllables,
     ],
@@ -128,11 +147,13 @@ async function registerUtteranceInTransaction(
       );
     }
     const segmentBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}/syllable${segment.syllablePosition}.wav`;
+    const segmentRawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}/syllable${segment.syllablePosition}-raw.wav`;
+    const segmentRawAudioData = segment.rawAudioData ?? segment.audioData;
     await client.query(
       `insert into syllable_observations
          (utterance_id, syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive,
-          legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data, raw_blob_path, raw_audio_data)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         utteranceId,
         segment.syllablePosition,
@@ -151,6 +172,8 @@ async function registerUtteranceInTransaction(
         segment.confidence,
         segmentBlobPath,
         segment.audioData,
+        segmentRawBlobPath,
+        segmentRawAudioData,
       ],
     );
   }

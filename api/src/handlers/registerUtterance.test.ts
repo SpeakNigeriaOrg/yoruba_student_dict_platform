@@ -76,11 +76,13 @@ describe('registerUtterance', () => {
     const row = await pool.query<{
       status: string;
       blob_path: string;
+      raw_blob_path: string;
       audio_data: Buffer;
+      raw_audio_data: Buffer;
       recorded_display_text: string;
       recorded_syllables: string[];
     }>(
-      'select status, blob_path, audio_data, recorded_display_text, recorded_syllables from utterances where utterance_id = $1',
+      'select status, blob_path, raw_blob_path, audio_data, raw_audio_data, recorded_display_text, recorded_syllables from utterances where utterance_id = $1',
       [result.utteranceId],
     );
     expect(row.rows[0].status).toBe('pending_processing');
@@ -88,6 +90,36 @@ describe('registerUtterance', () => {
     expect(Buffer.compare(row.rows[0].audio_data, FAKE_AUDIO)).toBe(0);
     expect(row.rows[0].recorded_display_text).toBe('kàsù');
     expect(row.rows[0].recorded_syllables).toEqual(['kà', 'sù']);
+    // No distinct raw bytes supplied - defaults to the same content/path
+    // as the processed version (see file header).
+    expect(row.rows[0].raw_blob_path).toBe(`utterances/${wordId}/${speaker.rows[0].speaker_id}/take1-raw.wav`);
+    expect(Buffer.compare(row.rows[0].raw_audio_data, FAKE_AUDIO)).toBe(0);
+  });
+
+  it('stores a distinct raw recording when one is supplied separately from the processed audio', async () => {
+    const wordId = `${NS}word_raw`;
+    await insertWord(wordId, ['ta']);
+
+    const result = await registerUtterance(
+      pool,
+      {
+        wordId,
+        takeNumber: 1,
+        audioData: Buffer.from('processed-bytes'),
+        rawAudioData: Buffer.from('raw-bytes'),
+        recordedDisplayText: 'ta',
+        recordedSyllables: ['ta'],
+      },
+      userId,
+      username,
+    );
+
+    const row = await pool.query<{ audio_data: Buffer; raw_audio_data: Buffer }>(
+      'select audio_data, raw_audio_data from utterances where utterance_id = $1',
+      [result.utteranceId],
+    );
+    expect(Buffer.compare(row.rows[0].audio_data, Buffer.from('processed-bytes'))).toBe(0);
+    expect(Buffer.compare(row.rows[0].raw_audio_data, Buffer.from('raw-bytes'))).toBe(0);
   });
 
   it('reuses the same speaker on a second registration from the same user', async () => {
@@ -147,14 +179,17 @@ describe('registerUtterance', () => {
       syllable_orthography_insensitive: string;
       blob_path: string;
       audio_data: Buffer;
+      raw_audio_data: Buffer;
     }>(
-      'select syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive, blob_path, audio_data from syllable_observations where utterance_id = $1 order by syllable_position',
+      'select syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive, blob_path, audio_data, raw_audio_data from syllable_observations where utterance_id = $1 order by syllable_position',
       [result.utteranceId],
     );
     expect(observations.rows).toHaveLength(2);
     expect(observations.rows[0].syllable_position).toBe(0);
     expect(observations.rows[0].syllable_text).toBe('kà');
     expect(Buffer.compare(observations.rows[0].audio_data, Buffer.from('seg0'))).toBe(0);
+    // No distinct raw clip supplied - defaults to the same bytes as the processed segment.
+    expect(Buffer.compare(observations.rows[0].raw_audio_data, Buffer.from('seg0'))).toBe(0);
     // 'sù', not golden_record's current 'sún' - the recorded pronunciation wins.
     expect(observations.rows[1].syllable_text).toBe('sù');
   });

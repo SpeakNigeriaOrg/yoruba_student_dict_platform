@@ -17,6 +17,11 @@ function parseAudioData(value: unknown, field: string): Buffer {
   return Buffer.from(value, 'base64');
 }
 
+function parseOptionalAudioData(value: unknown, field: string): Buffer | undefined {
+  if (value === undefined) return undefined;
+  return parseAudioData(value, field);
+}
+
 function parseSegment(s: unknown): RegisterSegmentInput {
   if (!s || typeof s !== 'object') throw new Error('each segment must be an object');
   const seg = s as Record<string, unknown>;
@@ -30,6 +35,7 @@ function parseSegment(s: unknown): RegisterSegmentInput {
     endTimeS: seg.endTimeS,
     confidence: seg.confidence,
     audioData: parseAudioData(seg.audioDataBase64, 'segment.audioDataBase64'),
+    rawAudioData: parseOptionalAudioData(seg.rawAudioDataBase64, 'segment.rawAudioDataBase64'),
   };
 }
 
@@ -51,6 +57,7 @@ function parseRegisterInput(body: unknown): RegisterUtteranceInput {
     wordId: b.wordId,
     takeNumber: b.takeNumber,
     audioData: parseAudioData(b.audioDataBase64, 'audioDataBase64'),
+    rawAudioData: parseOptionalAudioData(b.rawAudioDataBase64, 'rawAudioDataBase64'),
     recordedDisplayText: b.recordedDisplayText,
     recordedSyllables: parseRecordedSyllables(b.recordedSyllables),
     durationS: typeof b.durationS === 'number' ? b.durationS : undefined,

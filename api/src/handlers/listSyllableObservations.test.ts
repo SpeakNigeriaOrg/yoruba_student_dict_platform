@@ -94,6 +94,8 @@ describe('listSyllableObservations', () => {
     expect(fromA.map((r) => r.syllablePosition)).toEqual([1, 2]);
     expect(fromA[0].audioDataBase64).toBe(Buffer.from('wordA-seg1-ko').toString('base64'));
     expect(fromA[1].audioDataBase64).toBe(Buffer.from('wordA-seg2-ko').toString('base64'));
+    // No distinct raw clip supplied - defaults to the processed bytes.
+    expect(fromA[0].rawAudioDataBase64).toBe(Buffer.from('wordA-seg1-ko').toString('base64'));
 
     const fromB = results.find((r) => r.wordId === wordB)!;
     expect(fromB.syllablePosition).toBe(0);

@@ -227,6 +227,7 @@ describe('AudioRecording', () => {
       sampleRate: 16000,
       recordedAt: '2026-01-01T00:00:00.000Z',
       audioDataBase64: Buffer.from('take1-bytes').toString('base64'),
+      rawAudioDataBase64: Buffer.from('take1-bytes').toString('base64'),
       segments: [],
     };
     vi.stubGlobal(
