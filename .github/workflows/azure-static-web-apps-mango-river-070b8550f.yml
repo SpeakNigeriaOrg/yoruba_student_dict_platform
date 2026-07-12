@@ -29,21 +29,6 @@ jobs:
         run: npm run build:api
       - name: Build app (builds shared first, then app's own dist)
         run: npm run build:app
-      - name: Flatten hoisted node_modules into api/ for standalone deployment
-        # npm workspaces hoists third-party dependencies into the repo
-        # root's node_modules - but Azure zips up api_location in
-        # isolation, so api/ needs its own real copy to run standalone
-        # once deployed. The @yoruba-student-dict-platform/* scope is
-        # excluded: npm workspaces symlinks it back to the workspace
-        # folders themselves (e.g. .../api -> ../../api), and following
-        # that for "api" would copy api/ into itself. shared's built
-        # output - the one thing api actually needs from that scope - is
-        # copied in explicitly instead.
-        run: |
-          mkdir -p api/node_modules
-          rsync -a --exclude='@yoruba-student-dict-platform' node_modules/ api/node_modules/
-          mkdir -p api/node_modules/@yoruba-student-dict-platform/shared
-          cp -r shared/dist shared/package.json api/node_modules/@yoruba-student-dict-platform/shared/
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -54,13 +39,16 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "app/dist" # already-built app content - see custom build steps above
-          api_location: "api" # already-built api, including flattened node_modules - see custom build steps above
+          api_location: "api" # api's own dist is pre-built above; Oryx installs api's node_modules itself (see api/package.json's file:../shared dependency)
           output_location: "" # app_location IS the built output already; nothing further to append
           skip_app_build: true
           # No skip_api_build here (unsupported by this action version) -
-          # Oryx will still run its own npm install/build inside api/,
-          # redundant but harmless (see comment history in the previous
-          # resource's workflow file for why).
+          # Oryx runs its own npm install/build inside api/. This now
+          # works correctly: api/package.json points at shared via
+          # "file:../shared" (a plain relative path, resolved without any
+          # npm-workspace detection or registry lookup), rather than the
+          # bare "*" workspace-style version spec that 404'd when Oryx's
+          # isolated install phase failed to recognize the monorepo root.
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
