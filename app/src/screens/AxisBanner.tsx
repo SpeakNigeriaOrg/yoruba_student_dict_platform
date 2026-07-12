@@ -1,0 +1,44 @@
+// screens/AxisBanner.tsx
+//
+// Shared header for all three review screens: the word's read-only
+// spelling/definition context, plus an explicit banner naming all three
+// review axes and which one this screen covers. Extracted after a
+// confusing first pass (only Etymology existed, with no indication a
+// curator was even looking at just one of three separate axes) - every
+// axis screen needs the same orientation, not just Etymology's.
+
+import type { AxisDecided } from '../api.js';
+
+export interface AxisBannerProps {
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  axisDecided: AxisDecided;
+  currentAxis: 'Spelling' | 'Definition' | 'Etymology';
+}
+
+function axisLabel(decided: boolean): string {
+  return decided ? 'decided' : 'not yet decided';
+}
+
+export function AxisBanner({ displayText, syllables, definition, axisDecided, currentAxis }: AxisBannerProps) {
+  return (
+    <>
+      <h2>{displayText}</h2>
+      <p>
+        <strong>Syllables:</strong> {syllables.join(' · ')}
+        <br />
+        <strong>Definition:</strong> {definition ?? '(not yet decided)'}
+      </p>
+
+      <p aria-label="Review axis status">
+        This platform splits word review into three separate axes, decided independently:{' '}
+        <strong>Spelling</strong> ({axisLabel(axisDecided.spelling)}),{' '}
+        <strong>Definition</strong> ({axisLabel(axisDecided.definition)}), and{' '}
+        <strong>Etymology</strong> ({axisLabel(axisDecided.etymology)}).
+        <br />
+        You are viewing <strong>{currentAxis}</strong>.
+      </p>
+    </>
+  );
+}

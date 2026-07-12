@@ -1,0 +1,21 @@
+{
+  "wordId": "fixturegenspldef_definitionword_leopard",
+  "displayText": "fixturegenspldef_amotekun",
+  "syllables": [
+    "fixturegenspldef_amotekun"
+  ],
+  "axisDecided": {
+    "spelling": false,
+    "definition": false,
+    "etymology": false
+  },
+  "definitionCandidateGlosses": [
+    "leopard"
+  ],
+  "definitionSourceForm": "fixturegenspldef_amotekun",
+  "definitionSourceIsCrossReference": false,
+  "definitionLinkedSameAsSpelling": true,
+  "definitionStatus": "proposed",
+  "definitionCurrent": null,
+  "definitionProposed": "leopard"
+}

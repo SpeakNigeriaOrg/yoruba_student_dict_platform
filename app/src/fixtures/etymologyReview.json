@@ -1,10 +1,19 @@
 {
-  "wordId": "fixturegencompound_madeupword",
-  "displayText": "fixturegencompoundspelling",
+  "wordId": "fixturegen2_compound_madeupword",
+  "displayText": "fixturegen2_compoundspelling",
+  "syllables": [
+    "fixturegen2_compoundspelling"
+  ],
+  "definition": "a made-up compound word for fixture generation",
+  "axisDecided": {
+    "spelling": false,
+    "definition": true,
+    "etymology": false
+  },
   "componentsProposal": [
     {
-      "kaikkiForm": "fixturegenpartonespelling",
-      "wordId": "fixturegenpartone_madeuppart",
+      "kaikkiForm": "fixturegen2_partonespelling",
+      "wordId": "fixturegen2_partone_madeuppart",
       "targetSpellingConfirmed": false,
       "ambiguous": false,
       "possibleMatches": [],
@@ -13,8 +22,8 @@
       "previewGlossesAreExactMatches": false
     },
     {
-      "kaikkiForm": "fixturegenparttwospelling",
-      "wordId": "fixturegenparttwo_madeuppart",
+      "kaikkiForm": "fixturegen2_parttwospelling",
+      "wordId": "fixturegen2_parttwo_madeuppart",
       "targetSpellingConfirmed": false,
       "ambiguous": false,
       "possibleMatches": [],
@@ -25,8 +34,8 @@
   ],
   "usedInProposal": [
     {
-      "kaikkiForm": "fixturegenusedintargetspelling",
-      "wordId": "fixturegenusedintarget_otherword",
+      "kaikkiForm": "fixturegen2_usedintargetspelling",
+      "wordId": "fixturegen2_usedintarget_otherword",
       "targetSpellingConfirmed": false,
       "ambiguous": false,
       "possibleMatches": [],
@@ -37,6 +46,6 @@
   ],
   "usedAsComponentOf": [],
   "components": [
-    "fixturegencompound_madeupword"
+    "fixturegen2_compound_madeupword"
   ]
 }

@@ -10,3 +10,5 @@ import './functions/contributions.js';
 import './functions/approveContribution.js';
 import './functions/assignmentsMe.js';
 import './functions/etymologyReview.js';
+import './functions/spellingReview.js';
+import './functions/definitionReview.js';

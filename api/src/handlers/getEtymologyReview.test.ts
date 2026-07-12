@@ -115,4 +115,39 @@ describe('getEtymologyReview', () => {
     expect(result.usedInProposal).toEqual([]);
     expect(result.usedAsComponentOf).toEqual([]);
   });
+
+  it('surfaces syllables, definition, and per-axis decided status as read-only context', async () => {
+    const wordId = `${NS}context_word`;
+    await pool.query('insert into golden_record (word_id, display_text, syllables, definition) values ($1, $2, $3, $4)', [
+      wordId,
+      `${NS}contextspelling`,
+      [`${NS}context`, 'spelling'],
+      'a definition for context testing',
+    ]);
+    const curatorResult = await pool.query<{ user_id: string }>(
+      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      [`${NS}context_curator`, 'Test Curator'],
+    );
+    await pool.query(`insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'definition', $2, $3)`, [
+      wordId,
+      JSON.stringify({ definitionAction: 'confirm' }),
+      curatorResult.rows[0].user_id,
+    ]);
+
+    const result = await getEtymologyReview(pool, wordId);
+
+    expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
+    expect(result.definition).toBe('a definition for context testing');
+    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false });
+  });
+
+  it('reports definition as null and every axis undecided for a freshly-added word', async () => {
+    const wordId = `${NS}fresh_word`;
+    await insertWord(wordId, `${NS}freshspelling`);
+
+    const result = await getEtymologyReview(pool, wordId);
+
+    expect(result.definition).toBeNull();
+    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false });
+  });
 });

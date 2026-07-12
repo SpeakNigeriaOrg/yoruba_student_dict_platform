@@ -15,23 +15,30 @@ describe('EtymologyReview', () => {
   it('renders real componentsProposal and usedInProposal data (fixture generated via the real getEtymologyReview handler against real Postgres)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
 
-    render(<EtymologyReview wordId="fixturegencompound_madeupword" />);
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" />);
 
     await waitFor(() => {
-      expect(screen.getByText('fixturegencompoundspelling')).toBeInTheDocument();
+      expect(screen.getByText('fixturegen2_compoundspelling')).toBeInTheDocument();
     });
 
     // Forward: both real proposed components resolve to real word_ids.
-    expect(screen.getByText('fixturegenpartonespelling')).toBeInTheDocument();
-    expect(screen.getByText(/fixturegenpartone_madeuppart/)).toBeInTheDocument();
-    expect(screen.getByText('fixturegenparttwospelling')).toBeInTheDocument();
+    expect(screen.getByText('fixturegen2_partonespelling')).toBeInTheDocument();
+    expect(screen.getByText(/fixturegen2_partone_madeuppart/)).toBeInTheDocument();
+    expect(screen.getByText('fixturegen2_parttwospelling')).toBeInTheDocument();
 
     // Reverse: the newly-surfaced usedInProposal.
-    expect(screen.getByText('fixturegenusedintargetspelling')).toBeInTheDocument();
-    expect(screen.getByText(/fixturegenusedintarget_otherword/)).toBeInTheDocument();
+    expect(screen.getByText('fixturegen2_usedintargetspelling')).toBeInTheDocument();
+    expect(screen.getByText(/fixturegen2_usedintarget_otherword/)).toBeInTheDocument();
 
     // No confirmed usedAsComponentOf relationships yet in this fixture.
     expect(screen.getByText('No confirmed relationships yet.')).toBeInTheDocument();
+
+    // Read-only spelling/definition context, and the three-axis status banner.
+    expect(screen.getByText(/a made-up compound word for fixture generation/)).toBeInTheDocument();
+    const axisStatus = screen.getByLabelText('Review axis status');
+    expect(axisStatus).toHaveTextContent('Spelling (not yet decided)');
+    expect(axisStatus).toHaveTextContent('Definition (decided)');
+    expect(axisStatus).toHaveTextContent('Etymology (not yet decided)');
   });
 
   it('submits accept_proposed with the resolved word_ids when both components resolve', async () => {
@@ -42,8 +49,8 @@ describe('EtymologyReview', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<EtymologyReview wordId="fixturegencompound_madeupword" />);
-    await waitFor(() => screen.getByText('fixturegencompoundspelling'));
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
     await user.click(screen.getByRole('button', { name: 'Accept proposed components' }));
 
@@ -55,9 +62,9 @@ describe('EtymologyReview', () => {
     expect(decisionCall).toBeDefined();
     const body = JSON.parse(decisionCall![1].body);
     expect(body).toEqual({
-      wordId: 'fixturegencompound_madeupword',
+      wordId: 'fixturegen2_compound_madeupword',
       componentsAction: 'accept_proposed',
-      components: ['fixturegenpartone_madeuppart', 'fixturegenparttwo_madeuppart'],
+      components: ['fixturegen2_partone_madeuppart', 'fixturegen2_parttwo_madeuppart'],
     });
   });
 

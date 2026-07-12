@@ -1,0 +1,26 @@
+{
+  "wordId": "fixturegenspldef_spellingword",
+  "displayText": "fixturegenspldef_kasu",
+  "englishHint": "spellingword",
+  "status": "tone_mismatch",
+  "matchedForm": "fixturegenspldef_kásù",
+  "canonicalForm": "fixturegenspldef_kásù",
+  "adoptionTarget": "fixturegenspldef_kásù",
+  "matchedPos": "verb",
+  "matchedGlosses": [
+    "test gloss for spelling fixture"
+  ],
+  "matchedAltOfTargets": [],
+  "matchedComponentCandidates": [],
+  "matchedUsedInCandidates": [],
+  "syllables": [
+    "ka",
+    "su"
+  ],
+  "definition": null,
+  "axisDecided": {
+    "spelling": false,
+    "definition": false,
+    "etymology": false
+  }
+}

@@ -24,44 +24,23 @@ import {
   orthographyInsensitiveForm,
   type ComponentsAxisFieldsResult,
   type DiagnosticsOverrides,
-  type Vocab,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
+import { loadAxisDecided, loadDefinition, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
 export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
   wordId: string;
   displayText: string;
-}
-
-async function loadVocab(client: Queryable): Promise<Vocab> {
-  const words = await client.query<{
-    word_id: string;
-    display_text: string;
-    syllables: string[];
-    entry_type: 'phrase' | null;
-  }>('select word_id, display_text, syllables, entry_type from golden_record');
-  const componentRows = await client.query<{ word_id: string; component_word_id: string }>(
-    'select word_id, component_word_id from golden_record_components order by word_id, component_position',
-  );
-  const componentsByWord = new Map<string, string[]>();
-  for (const row of componentRows.rows) {
-    const existing = componentsByWord.get(row.word_id);
-    if (existing) existing.push(row.component_word_id);
-    else componentsByWord.set(row.word_id, [row.component_word_id]);
-  }
-
-  const vocab: Vocab = {};
-  for (const row of words.rows) {
-    vocab[row.word_id] = {
-      displayText: row.display_text,
-      syllables: row.syllables,
-      ...(row.entry_type === 'phrase' ? { type: 'phrase' as const } : {}),
-      ...(componentsByWord.has(row.word_id) ? { components: componentsByWord.get(row.word_id) } : {}),
-    };
-  }
-  return vocab;
+  syllables: string[];
+  definition: string | null;
+  /** Whether each of the platform's three review axes already has a
+   * word_decisions row for this word - shown as read-only context so a
+   * curator reviewing etymology (the only axis this screen has an
+   * interactive decision UI for) isn't left guessing whether spelling and
+   * definition have been separately decided elsewhere. */
+  axisDecided: AxisDecided;
 }
 
 /** Only the one field componentsAxisFields actually reads from overrides
@@ -86,6 +65,8 @@ export async function getEtymologyReview(client: Queryable, wordId: string): Pro
   if (!entry) {
     throw new WordNotFoundError(wordId);
   }
+  const definition = await loadDefinition(client, wordId);
+  const axisDecided = await loadAxisDecided(client, wordId);
 
   const key = orthographyInsensitiveForm(entry.displayText);
   const senses = await loadKaikkiSensesForKey(client, key);
@@ -107,5 +88,12 @@ export async function getEtymologyReview(client: Queryable, wordId: string): Pro
     componentOwners,
   );
 
-  return { wordId, displayText: entry.displayText, ...fields };
+  return {
+    wordId,
+    displayText: entry.displayText,
+    syllables: entry.syllables,
+    definition,
+    axisDecided,
+    ...fields,
+  };
 }

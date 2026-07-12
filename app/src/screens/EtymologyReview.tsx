@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import type { ComponentsProposalItem } from '@yoruba-student-dict-platform/shared';
 import { getEtymologyReview, postEtymologyDecision, type EtymologyReviewResult } from '../api.js';
+import { AxisBanner } from './AxisBanner.js';
 
 export interface EtymologyReviewProps {
   wordId: string;
@@ -84,7 +85,13 @@ export function EtymologyReview({ wordId }: EtymologyReviewProps) {
 
   return (
     <section aria-label="Etymology review">
-      <h2>{review.displayText}</h2>
+      <AxisBanner
+        displayText={review.displayText}
+        syllables={review.syllables}
+        definition={review.definition}
+        axisDecided={review.axisDecided}
+        currentAxis="Etymology"
+      />
 
       <h3>Proposed components (this word's own decomposition)</h3>
       {review.componentsProposal.length === 0 ? (
