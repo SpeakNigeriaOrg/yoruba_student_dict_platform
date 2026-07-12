@@ -240,8 +240,21 @@ async function main() {
   const speakersResult = await pool.query('select speaker_id, display_name from speakers order by display_name');
   const speakerNameById = new Map(speakersResult.rows.map((r) => [r.speaker_id, r.display_name]));
 
+  // Only a recording whose OWN recorded_display_text/recorded_syllables
+  // still matches golden_record's CURRENT canonical values is a valid
+  // pronunciation for the game - see publishToR2.mjs's identical check
+  // for the full rationale (a word's spelling/tone can be revised after
+  // it was recorded; a stale recording must never be served as if it
+  // were current). Confirmed 0/96 live recordings actually diverge as
+  // of this writing, but nothing previously enforced it.
   const wordAudioResult = await pool.query(
-    `select word_id, speaker_id, audio_data from utterances where take_number = 1 and audio_data is not null`,
+    `select u.word_id, u.speaker_id, u.audio_data
+     from utterances u
+     join golden_record w on w.word_id = u.word_id
+     where u.take_number = 1
+       and u.audio_data is not null
+       and u.recorded_display_text = w.display_text
+       and u.recorded_syllables = w.syllables`,
   );
   // speaker -> word_id -> Buffer
   const wordAudioBySpeaker = new Map();

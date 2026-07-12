@@ -199,9 +199,39 @@ async function main() {
   const speakersResult = await pool.query('select speaker_id, display_name from speakers order by display_name');
   const speakerNameById = new Map(speakersResult.rows.map((r) => [r.speaker_id, r.display_name]));
 
+  // Only a recording whose OWN recorded_display_text/recorded_syllables
+  // still matches golden_record's CURRENT canonical values is a valid
+  // pronunciation for the game - a word's spelling/tone can be revised
+  // by a curator (word_decisions' spelling axis) after it was recorded,
+  // and a stale recording must never be silently served as if it were
+  // the current canonical pronunciation. Same "verify against CURRENT
+  // golden_record, not whatever was true at recording time" discipline
+  // this script already applies to syllable coverage (see this file's
+  // header) - now applied to the word-level clip itself too, closing a
+  // real gap (confirmed: 0/96 live recordings actually diverge today,
+  // but nothing previously checked for it).
   const wordAudioResult = await pool.query(
-    `select word_id, speaker_id, audio_data from utterances where take_number = 1 and audio_data is not null`,
+    `select u.word_id, u.speaker_id, u.audio_data
+     from utterances u
+     join golden_record w on w.word_id = u.word_id
+     where u.take_number = 1
+       and u.audio_data is not null
+       and u.recorded_display_text = w.display_text
+       and u.recorded_syllables = w.syllables`,
   );
+  const staleCountResult = await pool.query(
+    `select count(*)::int as n
+     from utterances u
+     join golden_record w on w.word_id = u.word_id
+     where u.take_number = 1
+       and u.audio_data is not null
+       and (u.recorded_display_text != w.display_text or u.recorded_syllables != w.syllables)`,
+  );
+  if (staleCountResult.rows[0].n > 0) {
+    console.warn(
+      `      ${staleCountResult.rows[0].n} take-1 recording(s) EXCLUDED: recorded pronunciation no longer matches golden_record (word re-spelled since recording - needs re-recording)`,
+    );
+  }
   const wordAudioBySpeaker = new Map();
   for (const row of wordAudioResult.rows) {
     const speaker = speakerNameById.get(row.speaker_id);
