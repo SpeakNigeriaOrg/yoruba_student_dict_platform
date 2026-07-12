@@ -7,11 +7,12 @@
     { "route": "/api/phrases", "allowedRoles": ["curator"] },
     { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
     { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
+
+    { "route": "/api/assignments/me", "allowedRoles": ["authenticated"] },
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/contributions", "allowedRoles": ["authenticated"] },
     { "route": "/api/utterances/*", "allowedRoles": ["authenticated"] },
-    { "route": "/api/assignments/me", "allowedRoles": ["authenticated"] },
 
     { "route": "/login", "redirect": "/.auth/login/github" },
     { "route": "/logout", "redirect": "/.auth/logout" }
