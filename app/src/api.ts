@@ -272,3 +272,63 @@ export function approveContribution(contributionId: string): Promise<void> {
 export function rejectContribution(contributionId: string): Promise<void> {
   return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/reject`, { method: 'POST' });
 }
+
+// Mirrors api/src/handlers/issueUploadSasToken.ts's UploadSasTokenResult.
+export interface UploadSasTokenResult {
+  containerUrl: string;
+  sasQuery: string;
+  blobPrefix: string;
+  expiresAt: string;
+}
+
+export function getUploadSasToken(wordId: string): Promise<UploadSasTokenResult> {
+  return fetchJson('/api/utterances/sas-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wordId }),
+  });
+}
+
+/** Uploads a blob directly to Azure Blob Storage using an already-issued
+ * SAS token - not a fetchJson call (the response isn't JSON, and a
+ * successful PUT returns an empty 201 body). */
+export async function uploadBlob(token: UploadSasTokenResult, blobName: string, blob: Blob): Promise<string> {
+  const blobPath = `${token.blobPrefix}${blobName}`;
+  const url = `${token.containerUrl}/${blobPath}?${token.sasQuery}`;
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': blob.type || 'application/octet-stream' },
+    body: blob,
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, `blob upload failed: ${response.status}`);
+  }
+  return blobPath;
+}
+
+// Mirrors api/src/handlers/registerUtterance.ts's RegisterUtteranceInput/Result.
+export interface RegisterSegmentInput {
+  syllablePosition: number;
+  startTimeS: number;
+  endTimeS: number;
+  confidence: number;
+  blobPath: string;
+}
+
+export interface RegisterUtteranceInput {
+  wordId: string;
+  takeNumber: number;
+  blobPath: string;
+  rawBlobPath?: string;
+  durationS?: number;
+  sampleRate?: number;
+  segments?: RegisterSegmentInput[];
+}
+
+export function registerUtterance(input: RegisterUtteranceInput): Promise<{ utteranceId: string }> {
+  return fetchJson('/api/utterances/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}

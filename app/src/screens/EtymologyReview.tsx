@@ -135,13 +135,13 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
   const hasRealExistingComponents =
     review !== null && review.components.length > 0 && !(review.components.length === 1 && review.components[0] === wordId);
 
-  if (error) return <p role="alert">Couldn't load etymology data: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
 
   const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
 
   return (
-    <section aria-label="Etymology review">
+    <section aria-label="Etymology review" className={`card${review.axisDecided.etymology ? ' decided' : ''}`}>
       <AxisBanner
         displayText={review.displayText}
         syllables={review.syllables}
@@ -187,11 +187,11 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
       {draftComponents.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
-        <ul aria-label="Draft components">
+        <ul aria-label="Draft components" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {draftComponents.map((componentWordId) => (
-            <li key={componentWordId}>
-              {componentWordId}{' '}
-              <button type="button" onClick={() => removeManualComponent(componentWordId)}>
+            <li key={componentWordId} className="search-result-row">
+              <span className="result-text">{componentWordId}</span>
+              <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
                 Remove
               </button>
             </li>
@@ -210,31 +210,32 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
         placeholder="Search existing vocabulary..."
         resultsAriaLabel="Vocab search results"
       />
-      <button type="button" onClick={saveCustomComponents}>
-        {label('Save custom components')}
-      </button>
+      <div className="btn-row">
+        <button type="button" className="btn btn-secondary" onClick={saveCustomComponents}>
+          {label('Save custom components')}
+        </button>
+      </div>
 
-      <div>
+      <div className="field">
         <label htmlFor="etymology-note-field">Note</label>
-        <br />
         <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
       </div>
 
-      <div>
-        <button type="button" onClick={acceptProposedComponents}>
+      <div className="btn-row">
+        <button type="button" className="btn btn-primary" onClick={acceptProposedComponents}>
           {label('Accept proposed components')}
         </button>
-        <button type="button" onClick={confirmAtomic}>
+        <button type="button" className="btn btn-secondary" onClick={confirmAtomic}>
           {label('Confirm atomic (no components)')}
         </button>
-        <button type="button" onClick={confirmExisting} disabled={!hasRealExistingComponents}>
+        <button type="button" className="btn btn-secondary" onClick={confirmExisting} disabled={!hasRealExistingComponents}>
           {label('Confirm components')}
         </button>
-        <button type="button" onClick={rejectProposed} disabled={review.componentsProposal.length === 0}>
+        <button type="button" className="btn btn-danger" onClick={rejectProposed} disabled={review.componentsProposal.length === 0}>
           {label('Reject this etymology')}
         </button>
       </div>
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>
   );
 }

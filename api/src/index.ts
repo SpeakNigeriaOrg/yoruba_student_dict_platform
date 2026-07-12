@@ -17,3 +17,5 @@ import './functions/vocabSearch.js';
 import './functions/listAllWords.js';
 import './functions/duplicateCheck.js';
 import './functions/rejectContribution.js';
+import './functions/utteranceSasToken.js';
+import './functions/utterances.js';

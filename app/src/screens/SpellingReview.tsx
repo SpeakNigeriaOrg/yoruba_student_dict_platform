@@ -111,13 +111,13 @@ export function SpellingReview({ wordId, isCurator }: SpellingReviewProps) {
     );
   }
 
-  if (error) return <p role="alert">Couldn't load spelling data: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load spelling data: {error}</p>;
   if (!review) return <p>Loading spelling data...</p>;
 
   const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
 
   return (
-    <section aria-label="Spelling review">
+    <section aria-label="Spelling review" className={`card${review.axisDecided.spelling ? ' decided' : ''}`}>
       <AxisBanner
         displayText={review.displayText}
         syllables={review.syllables}
@@ -161,7 +161,7 @@ export function SpellingReview({ wordId, isCurator }: SpellingReviewProps) {
               </li>
             ))}
           </ul>
-          <button type="button" onClick={confirmSelectedCandidate}>
+          <button type="button" className="btn btn-primary" onClick={confirmSelectedCandidate}>
             {label('Confirm selected candidate')}
           </button>
         </>
@@ -184,37 +184,41 @@ export function SpellingReview({ wordId, isCurator }: SpellingReviewProps) {
       {review.syllableSplitStatus === 'mismatch' ? (
         <>
           <h3>Syllable split</h3>
-          <p aria-label="Syllable split comparison">
-            Manual: <strong>{review.syllableSplitManual?.join(' · ')}</strong>
-            <br />
-            Programmatic: <strong>{review.syllableSplitProgrammatic?.join(' · ')}</strong>
-          </p>
-          <div>
-            <button type="button" onClick={keepManualSyllables}>
+          <div className="comparison" aria-label="Syllable split comparison">
+            <div className="col">
+              <div className="col-label">Manual</div>
+              {review.syllableSplitManual?.join(' · ')}
+            </div>
+            <div className="col">
+              <div className="col-label">Programmatic</div>
+              {review.syllableSplitProgrammatic?.join(' · ')}
+            </div>
+          </div>
+          <div className="btn-row">
+            <button type="button" className="btn btn-secondary" onClick={keepManualSyllables}>
               {label('Keep manual split')}
             </button>
-            <button type="button" onClick={acceptProgrammaticSyllables}>
+            <button type="button" className="btn btn-primary" onClick={acceptProgrammaticSyllables}>
               {label('Accept programmatic split')}
             </button>
           </div>
         </>
       ) : null}
 
-      <div>
+      <div className="field">
         <label htmlFor="spelling-note-field">Note</label>
-        <br />
         <textarea id="spelling-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
       </div>
 
-      <div>
-        <button type="button" onClick={keepOurs}>
+      <div className="btn-row">
+        <button type="button" className="btn btn-secondary" onClick={keepOurs}>
           {label('Keep our spelling')}
         </button>
-        <button type="button" onClick={adoptKaikki} disabled={!review.adoptionTarget}>
+        <button type="button" className="btn btn-primary" onClick={adoptKaikki} disabled={!review.adoptionTarget}>
           {label("Adopt Kaikki's spelling")}
         </button>
       </div>
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>
   );
 }

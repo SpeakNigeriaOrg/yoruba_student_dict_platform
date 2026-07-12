@@ -29,15 +29,15 @@ export function AssignmentsList({ onSelect }: AssignmentsListProps) {
     };
   }, []);
 
-  if (error) return <p role="alert">Couldn't load your assignments: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load your assignments: {error}</p>;
   if (!assignments) return <p>Loading assignments...</p>;
   if (assignments.length === 0) return <p>No words assigned to you right now.</p>;
 
   return (
-    <ul aria-label="My assignments">
+    <ul aria-label="My assignments" className="card-list">
       {assignments.map((a) => (
-        <li key={a.wordId}>
-          <button type="button" onClick={() => onSelect(a.wordId)}>
+        <li key={a.wordId} className="card-row">
+          <button type="button" className="row-title" onClick={() => onSelect(a.wordId)}>
             {a.displayText}
           </button>
           {a.definition ? <span> — {a.definition}</span> : null}

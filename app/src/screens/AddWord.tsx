@@ -19,7 +19,7 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
   if (matches === null) return null;
   if (matches.length === 0) return <p>No likely duplicates found.</p>;
   return (
-    <div role="alert" aria-label="Duplicate warning">
+    <div role="alert" aria-label="Duplicate warning" className="warning-banner">
       <p>Possible duplicates - review before adding:</p>
       <ul>
         {matches.map((m) => (
@@ -94,20 +94,21 @@ function WordTab() {
       {selected ? (
         <>
           {selected.standardForms.length > 1 ? (
-            <div>
+            <div className="field">
               <p>Choose a spelling:</p>
               {selected.standardForms.map((form) => (
-                <label key={form}>
-                  <input type="radio" name="spelling-form" checked={selectedForm === form} onChange={() => setSelectedForm(form)} />
-                  {form}
-                </label>
+                <div key={form} className="field-inline">
+                  <label>
+                    <input type="radio" name="spelling-form" checked={selectedForm === form} onChange={() => setSelectedForm(form)} />
+                    {form}
+                  </label>
+                </div>
               ))}
             </div>
           ) : null}
 
-          <div>
+          <div className="field">
             <label htmlFor="word-syllables-field">Syllables (comma-separated)</label>
-            <br />
             <input
               id="word-syllables-field"
               type="text"
@@ -116,9 +117,8 @@ function WordTab() {
             />
           </div>
 
-          <div>
+          <div className="field">
             <label htmlFor="word-hint-field">Word ID hint (English meaning, e.g. "hand")</label>
-            <br />
             <input id="word-hint-field" type="text" value={hint} onChange={(e) => setHint(e.target.value.replace(/\s+/g, '_'))} />
           </div>
 
@@ -128,12 +128,12 @@ function WordTab() {
 
           <DuplicateWarning matches={duplicates} />
 
-          <button type="button" onClick={submit}>
+          <button type="button" className="btn btn-primary" onClick={submit}>
             Add to vocabulary
           </button>
         </>
       ) : null}
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </div>
   );
 }
@@ -191,11 +191,13 @@ function PhraseTab() {
       {components.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
-        <ul aria-label="Phrase components">
+        <ul aria-label="Phrase components" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {components.map((c) => (
-            <li key={c.wordId}>
-              {c.wordId} ({c.displayText}){' '}
-              <button type="button" onClick={() => removeComponent(c.wordId)}>
+            <li key={c.wordId} className="search-result-row">
+              <span className="result-text">
+                {c.wordId} ({c.displayText})
+              </span>
+              <button type="button" className="btn btn-danger" onClick={() => removeComponent(c.wordId)}>
                 Remove
               </button>
             </li>
@@ -221,9 +223,8 @@ function PhraseTab() {
         Syllables: <strong>{syllables.join(' · ')}</strong>
       </p>
 
-      <div>
+      <div className="field">
         <label htmlFor="phrase-hint-field">Word ID hint</label>
-        <br />
         <input id="phrase-hint-field" type="text" value={hint} onChange={(e) => setHint(e.target.value.replace(/\s+/g, '_'))} />
       </div>
 
@@ -233,10 +234,10 @@ function PhraseTab() {
 
       <DuplicateWarning matches={duplicates} />
 
-      <button type="button" onClick={submit}>
+      <button type="button" className="btn btn-primary" onClick={submit}>
         Add phrase to vocabulary
       </button>
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </div>
   );
 }
@@ -245,8 +246,8 @@ export function AddWord() {
   const [tab, setTab] = useState<Tab>('word');
 
   return (
-    <section aria-label="Add a word">
-      <nav aria-label="Add word tabs">
+    <section aria-label="Add a word" className="card">
+      <nav aria-label="Add word tabs" className="axis-tabs">
         <button type="button" aria-current={tab === 'word' ? 'page' : undefined} onClick={() => setTab('word')}>
           Word
         </button>

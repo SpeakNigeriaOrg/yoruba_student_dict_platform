@@ -17,8 +17,8 @@ export interface AxisBannerProps {
   currentAxis: 'Spelling' | 'Definition' | 'Etymology';
 }
 
-function axisLabel(decided: boolean): string {
-  return decided ? 'decided' : 'not yet decided';
+function AxisStatusBadge({ decided }: { decided: boolean }) {
+  return <span className={`badge${decided ? ' decided' : ''}`}>{decided ? 'decided' : 'not yet decided'}</span>;
 }
 
 export function AxisBanner({ displayText, syllables, definition, axisDecided, currentAxis }: AxisBannerProps) {
@@ -33,9 +33,9 @@ export function AxisBanner({ displayText, syllables, definition, axisDecided, cu
 
       <p aria-label="Review axis status">
         This platform splits word review into three separate axes, decided independently:{' '}
-        <strong>Spelling</strong> ({axisLabel(axisDecided.spelling)}),{' '}
-        <strong>Definition</strong> ({axisLabel(axisDecided.definition)}), and{' '}
-        <strong>Etymology</strong> ({axisLabel(axisDecided.etymology)}).
+        <strong>Spelling</strong> (<AxisStatusBadge decided={axisDecided.spelling} />),{' '}
+        <strong>Definition</strong> (<AxisStatusBadge decided={axisDecided.definition} />), and{' '}
+        <strong>Etymology</strong> (<AxisStatusBadge decided={axisDecided.etymology} />).
         <br />
         You are viewing <strong>{currentAxis}</strong>.
       </p>

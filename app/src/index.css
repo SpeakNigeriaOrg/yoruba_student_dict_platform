@@ -1,0 +1,399 @@
+/* index.css
+ *
+ * Mobile-first design system for the curation platform. Palette/tokens
+ * are carried over from the old local tool (yoruba-student-dict/tools/
+ * resolver.css) for a coherent, already-proven look - not a pixel-exact
+ * copy, since curators aren't yet trained on that tool's layout and this
+ * app's structure differs (bottom nav + axis segmented control instead
+ * of resolver.html's top tabs).
+ */
+
+:root {
+  --bg: #f6f5f2;
+  --card-bg: #fff;
+  --border: #ddd8cc;
+  --ink: #241f1c;
+  --ink-soft: #666057;
+  --amber: #c1852e;
+  --amber-bg: #fbf1e2;
+  --green: #2f7a4d;
+  --green-bg: #eaf5ee;
+  --red: #b3403a;
+  --red-bg: #fbeceb;
+  --indigo: #21295c;
+  --mono: 'SFMono-Regular', Consolas, monospace;
+  --nav-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--nav-height) + 24px);
+}
+
+/* ---- Header ---- */
+
+.topbar {
+  background: var(--indigo);
+  color: #fff;
+  padding: 16px;
+  margin: -16px -16px 16px;
+}
+.topbar h1 {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.topbar .identity-line {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar a {
+  color: #fff;
+}
+
+/* ---- Bottom nav (mobile-native primary navigation) ---- */
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+.bottom-nav button {
+  flex: 1;
+  min-height: 56px;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.bottom-nav button .nav-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.bottom-nav button[aria-current='page'] {
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+/* ---- Axis segmented control ---- */
+
+.axis-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 16px;
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+}
+.axis-tabs button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  padding: 10px 6px;
+  min-height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.axis-tabs button[aria-current='page'] {
+  background: var(--card-bg);
+  color: var(--indigo);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ---- Back button ---- */
+
+.back-btn {
+  background: transparent;
+  border: none;
+  color: var(--indigo);
+  font-size: 0.9rem;
+  padding: 10px 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* ---- Cards ---- */
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.card.decided {
+  border-left-color: var(--green);
+}
+
+.card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card-row {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.card-row.decided {
+  border-left-color: var(--green);
+}
+.card-row button.row-title {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--indigo);
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Badges ---- */
+
+.badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  white-space: nowrap;
+}
+.badge.decided {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+/* ---- Buttons ---- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: #fff;
+  font-weight: 600;
+  width: 100%;
+}
+.btn-secondary {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--ink);
+}
+.btn-danger {
+  background: transparent;
+  border-color: transparent;
+  color: var(--red);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ---- Forms ---- */
+
+.field {
+  margin-bottom: 14px;
+}
+.field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.field input[type='text'],
+.field textarea {
+  width: 100%;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+  min-height: 44px;
+}
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 0.88rem;
+}
+
+/* ---- Comparison grid ---- */
+
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+@media (max-width: 420px) {
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+}
+.comparison .col {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.comparison .col-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+/* ---- Status / error banners ---- */
+
+.status-banner {
+  background: var(--green-bg);
+  color: var(--green);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  margin-top: 12px;
+}
+.error-banner {
+  background: var(--red-bg);
+  color: var(--red);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  margin-top: 12px;
+}
+.warning-banner {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  margin-top: 12px;
+}
+
+/* ---- Search ---- */
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.search-row input {
+  flex: 1;
+}
+.search-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.search-result-row .result-text {
+  font-size: 0.88rem;
+}
+
+/* ---- Audio recording ---- */
+
+.record-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 72px;
+  border-radius: 12px;
+  border: none;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--indigo);
+  color: #fff;
+}
+.record-btn.recording {
+  background: var(--red);
+}
+.take-step {
+  margin-bottom: 16px;
+}

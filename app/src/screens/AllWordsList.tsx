@@ -28,7 +28,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
-  if (error) return <p role="alert">Couldn't load all words: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load all words: {error}</p>;
   if (!words) return <p>Loading all words...</p>;
 
   const filtered = words.filter((w) => {
@@ -43,7 +43,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
 
   return (
     <section aria-label="Browse all words">
-      <div>
+      <div className="field">
         <input
           type="text"
           placeholder="Filter by spelling or word_id..."
@@ -53,15 +53,15 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
         />
       </div>
       <div aria-label="Hide decided filters">
-        <label>
+        <label className="field-inline">
           <input type="checkbox" checked={hideSpellingDecided} onChange={(e) => setHideSpellingDecided(e.target.checked)} />
           Hide spelling-decided
         </label>
-        <label>
+        <label className="field-inline">
           <input type="checkbox" checked={hideDefinitionDecided} onChange={(e) => setHideDefinitionDecided(e.target.checked)} />
           Hide definition-decided
         </label>
-        <label>
+        <label className="field-inline">
           <input type="checkbox" checked={hideEtymologyDecided} onChange={(e) => setHideEtymologyDecided(e.target.checked)} />
           Hide etymology-decided
         </label>
@@ -70,17 +70,28 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       {filtered.length === 0 ? (
         <p>No words match the current filters.</p>
       ) : (
-        <ul aria-label="All words">
-          {filtered.map((w) => (
-            <li key={w.wordId}>
-              <button type="button" onClick={() => onSelect(w.wordId)}>
-                {w.displayText}
-              </button>{' '}
-              ({w.wordId}) - spelling: {w.axisDecided.spelling ? 'decided' : 'not yet decided'}, definition:{' '}
-              {w.axisDecided.definition ? 'decided' : 'not yet decided'}, etymology:{' '}
-              {w.axisDecided.etymology ? 'decided' : 'not yet decided'}
-            </li>
-          ))}
+        <ul aria-label="All words" className="card-list">
+          {filtered.map((w) => {
+            const allDecided = w.axisDecided.spelling && w.axisDecided.definition && w.axisDecided.etymology;
+            return (
+              <li key={w.wordId} className={`card-row${allDecided ? ' decided' : ''}`}>
+                <button type="button" className="row-title" onClick={() => onSelect(w.wordId)}>
+                  {w.displayText}
+                </button>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: '0.78rem', color: 'var(--ink-soft)' }}> ({w.wordId})</span>
+                <br />
+                <span className={`badge${w.axisDecided.spelling ? ' decided' : ''}`}>
+                  spelling: {w.axisDecided.spelling ? 'decided' : 'not yet decided'}
+                </span>{' '}
+                <span className={`badge${w.axisDecided.definition ? ' decided' : ''}`}>
+                  definition: {w.axisDecided.definition ? 'decided' : 'not yet decided'}
+                </span>{' '}
+                <span className={`badge${w.axisDecided.etymology ? ' decided' : ''}`}>
+                  etymology: {w.axisDecided.etymology ? 'decided' : 'not yet decided'}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

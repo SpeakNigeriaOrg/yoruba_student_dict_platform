@@ -43,28 +43,30 @@ export function SearchBox<T>({
 
   return (
     <div>
-      <input
-        type="text"
-        value={query}
-        placeholder={placeholder}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') runSearch();
-        }}
-      />
-      <button type="button" onClick={runSearch}>
-        Search
-      </button>
-      {error ? <p role="alert">{error}</p> : null}
+      <div className="search-row">
+        <input
+          type="text"
+          value={query}
+          placeholder={placeholder}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runSearch();
+          }}
+        />
+        <button type="button" className="btn btn-secondary" onClick={runSearch}>
+          Search
+        </button>
+      </div>
+      {error ? <p role="alert" className="error-banner">{error}</p> : null}
       {results ? (
         results.length === 0 ? (
           <p>No results.</p>
         ) : (
-          <ul aria-label={resultsAriaLabel}>
+          <ul aria-label={resultsAriaLabel} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {results.map((result, i) => (
-              <li key={i}>
-                {renderResult(result)}{' '}
-                <button type="button" onClick={() => onSelect(result)}>
+              <li key={i} className="search-result-row">
+                <span className="result-text">{renderResult(result)}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => onSelect(result)}>
                   {selectLabel}
                 </button>
               </li>

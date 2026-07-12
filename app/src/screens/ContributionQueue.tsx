@@ -47,7 +47,7 @@ export function ContributionQueue() {
     }
   }
 
-  if (error) return <p role="alert">Couldn't load contributions: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load contributions: {error}</p>;
   if (!contributions) return <p>Loading contributions...</p>;
 
   return (
@@ -55,9 +55,9 @@ export function ContributionQueue() {
       {contributions.length === 0 ? (
         <p>No pending contributions.</p>
       ) : (
-        <ul aria-label="Pending contributions">
+        <ul aria-label="Pending contributions" className="card-list">
           {contributions.map((c) => (
-            <li key={c.contributionId}>
+            <li key={c.contributionId} className="card-row">
               <strong>{c.axis}</strong>
               {c.wordId ? (
                 <>
@@ -75,18 +75,19 @@ export function ContributionQueue() {
                   Note: {c.note}
                 </>
               ) : null}
-              <br />
-              <button type="button" onClick={() => approve(c.contributionId)}>
-                Approve
-              </button>
-              <button type="button" onClick={() => reject(c.contributionId)}>
-                Reject
-              </button>
+              <div className="btn-row">
+                <button type="button" className="btn btn-primary" onClick={() => approve(c.contributionId)}>
+                  Approve
+                </button>
+                <button type="button" className="btn btn-danger" onClick={() => reject(c.contributionId)}>
+                  Reject
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       )}
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>
   );
 }

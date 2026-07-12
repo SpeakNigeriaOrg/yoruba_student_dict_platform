@@ -98,13 +98,13 @@ export function DefinitionReview({ wordId, isCurator }: DefinitionReviewProps) {
     if (result.glosses.length > 0) setDraftText(result.glosses[0]);
   }
 
-  if (error) return <p role="alert">Couldn't load definition data: {error}</p>;
+  if (error) return <p role="alert" className="error-banner">Couldn't load definition data: {error}</p>;
   if (!review) return <p>Loading definition data...</p>;
 
   const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
 
   return (
-    <section aria-label="Definition review">
+    <section aria-label="Definition review" className={`card${review.axisDecided.definition ? ' decided' : ''}`}>
       <AxisBanner
         displayText={review.displayText}
         syllables={review.syllables}
@@ -124,9 +124,8 @@ export function DefinitionReview({ wordId, isCurator }: DefinitionReviewProps) {
         ) : null}
       </p>
 
-      <div>
+      <div className="field">
         <label htmlFor="definition-text-field">Definition text</label>
-        <br />
         <textarea
           id="definition-text-field"
           value={draftText}
@@ -135,9 +134,8 @@ export function DefinitionReview({ wordId, isCurator }: DefinitionReviewProps) {
         />
       </div>
 
-      <div>
+      <div className="field">
         <label htmlFor="definition-note-field">Note</label>
-        <br />
         <textarea id="definition-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
       </div>
 
@@ -155,18 +153,18 @@ export function DefinitionReview({ wordId, isCurator }: DefinitionReviewProps) {
         resultsAriaLabel="Kaikki search results"
       />
 
-      <div>
-        <button type="button" onClick={confirmCurrent} disabled={!review.definitionCurrent}>
+      <div className="btn-row">
+        <button type="button" className="btn btn-secondary" onClick={confirmCurrent} disabled={!review.definitionCurrent}>
           {label('Confirm current definition')}
         </button>
-        <button type="button" onClick={acceptProposed} disabled={!review.definitionProposed}>
+        <button type="button" className="btn btn-primary" onClick={acceptProposed} disabled={!review.definitionProposed}>
           {label('Accept proposed definition')}
         </button>
-        <button type="button" onClick={saveCustomText}>
+        <button type="button" className="btn btn-secondary" onClick={saveCustomText}>
           {label('Save as custom text')}
         </button>
       </div>
-      {status ? <p role="status">{status}</p> : null}
+      {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>
   );
 }
