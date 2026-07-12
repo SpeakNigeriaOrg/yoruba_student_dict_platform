@@ -69,8 +69,13 @@ jobs:
           api_location: "api" # already-built api, including flattened node_modules - see custom build steps above
           output_location: "" # app_location IS the built output already; nothing further to append
           skip_app_build: true
-          skip_api_build: true
-          github_id_token: ${{ steps.idtoken.outputs.result }}
+          # This action version has no skip_api_build input (Azure's
+          # auto-generated template assumed one that supports it) - Oryx
+          # will still run its own npm install/build inside api/, which is
+          # redundant but harmless: npm's workspace-root detection still
+          # finds the monorepo root from api/, so "shared" resolves as a
+          # workspace link rather than a failed registry fetch, and
+          # re-running tsc just reproduces the dist/ we already built.
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:

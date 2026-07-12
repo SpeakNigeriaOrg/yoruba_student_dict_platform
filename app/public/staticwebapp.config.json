@@ -6,7 +6,7 @@
     { "route": "/api/words/*", "allowedRoles": ["curator"] },
     { "route": "/api/phrases", "allowedRoles": ["curator"] },
     { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
-    { "route": "/api/contributions/*/approve", "allowedRoles": ["curator"] },
+    { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/contributions", "allowedRoles": ["authenticated"] },
