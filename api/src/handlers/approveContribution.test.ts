@@ -16,12 +16,12 @@ let curatorUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const volunteer = await pool.query<{ user_id: string }>(
-    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer@example.com`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = volunteer.rows[0].user_id;
   const curator = await pool.query<{ user_id: string }>(
-    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}curator@example.com`, 'Test Curator', 'curator'],
   );
   curatorUserId = curator.rows[0].user_id;

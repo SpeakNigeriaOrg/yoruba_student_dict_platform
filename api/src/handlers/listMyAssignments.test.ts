@@ -10,12 +10,12 @@ let userBId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const userA = await pool.query<{ user_id: string }>(
-    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}a@example.com`, 'User A', 'volunteer'],
   );
   userAId = userA.rows[0].user_id;
   const userB = await pool.query<{ user_id: string }>(
-    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}b@example.com`, 'User B', 'volunteer'],
   );
   userBId = userB.rows[0].user_id;
@@ -55,7 +55,7 @@ describe('listMyAssignments', () => {
 
   it('returns an empty list for a user with no assignments', async () => {
     const noAssignmentsUser = await pool.query<{ user_id: string }>(
-      'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+      'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
       [`${NS}nobody@example.com`, 'Nobody', 'volunteer'],
     );
     const assignments = await listMyAssignments(pool, noAssignmentsUser.rows[0].user_id);

@@ -19,17 +19,24 @@ Implemented:
 - `GET|POST /GetRoles` (`src/functions/getRoles.ts` / `src/handlers/getRoles.ts`)
   - the custom role-source function `staticwebapp.config.json`'s
     `auth.rolesSource` points at. Upserts a `users` row (defaulting to
-    `volunteer`) for a not-yet-seen authenticated email, then reports
-    `['curator']` or `[]` - SWA's built-in `anonymous`/`authenticated`
-    roles are granted automatically regardless of what this returns.
+    `volunteer`) for a not-yet-seen authenticated GitHub username, then
+    reports `['curator']` or `[]` - SWA's built-in `anonymous`/
+    `authenticated` roles are granted automatically regardless of what
+    this returns.
   - **Open verification item**: SWA's documented contract for this
     function's response is a plain JSON array of role strings, not
     verified against a real deployed instance yet.
-  - **Open verification item**: resolving identity by email (`users.email`)
-    assumes the configured auth provider's claims include an email claim -
-    GitHub in particular requires the `user:email` scope be explicitly
-    requested for this to be populated. Not something this codebase can
-    confirm without a real deployment.
+  - **Resolved while prepping for deployment**: identity used to be
+    resolved by email (`users.email`), which would never have worked -
+    confirmed against current Microsoft Learn docs that SWA's GitHub
+    provider (default *or* custom-registered) only ever exposes a
+    `userDetails` username claim, never email, and its registration schema
+    has no scope/login customization to request one either (unlike the
+    generic OpenID Connect provider type). `users.username` (SWA's
+    `userDetails`) is what's actually used now (`db/migrations/
+    0004_users_identify_by_username.sql`, `auth.ts`) - still worth a real
+    end-to-end login test once deployed, but no longer blocked on an
+    email claim that GitHub's provider was never going to supply.
 - `POST /words`, `POST /phrases` (`src/functions/words.ts` /
   `src/functions/phrases.ts`, `src/handlers/createWord.ts` /
   `createPhrase.ts`) - curator-gated direct insert into

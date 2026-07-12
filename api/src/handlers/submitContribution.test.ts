@@ -10,7 +10,7 @@ let volunteerUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer@example.com`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = result.rows[0].user_id;

@@ -4,6 +4,15 @@
 // into every authenticated request, and resolves it against the users
 // table. SSO alone only proves WHO logged in, not that they're the
 // intended curator - that's what the users table lookup is for.
+//
+// Identity is resolved by GitHub username (userDetails), not email.
+// Confirmed against current Microsoft Learn docs while prepping for
+// deployment: SWA's GitHub provider - default or custom-registered via
+// `identityProviders.gitHub` - only ever exposes a username claim, never
+// email, and that provider's registration schema has no scope/login
+// customization to request one either (unlike the generic OpenID Connect
+// provider type). userDetails is always present for an authenticated
+// GitHub request, so it's what's used here instead.
 
 import type { Queryable } from './db.js';
 
@@ -43,37 +52,25 @@ export function parseClientPrincipal(headerValue: string | null | undefined): Cl
   }
 }
 
-const EMAIL_CLAIM_TYPES = new Set(['email', 'emails', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress']);
-
-/** Not every identity provider's claim set is guaranteed to include an
- * email claim by default (GitHub in particular requires the user:email
- * scope be requested) - this is an integration point that needs
- * verification once a real provider is wired up, not something that can be
- * confirmed from this codebase alone. */
-export function findEmailClaim(principal: ClientPrincipal): string | null {
-  const claim = (principal.claims ?? []).find((c) => EMAIL_CLAIM_TYPES.has(c.typ.toLowerCase()));
-  return claim ? claim.val : null;
-}
-
 export interface AppUser {
   userId: string;
-  email: string;
+  username: string;
   displayName: string | null;
   role: 'curator' | 'volunteer';
 }
 
-/** Looks up the users row for this principal's email - null if there's no
- * email claim, or no matching row (e.g. GetRoles hasn't run yet for this
- * session; GetRoles is what upserts the row on first sight of a new
- * authenticated user, see handlers/getRoles.ts). */
+/** Looks up the users row for this principal's GitHub username - null if
+ * there's no username on the principal, or no matching row yet (e.g.
+ * GetRoles hasn't run yet for this session; GetRoles is what upserts the
+ * row on first sight of a new authenticated user, see
+ * handlers/getRoles.ts). */
 export async function resolveUser(db: Queryable, principal: ClientPrincipal): Promise<AppUser | null> {
-  const email = findEmailClaim(principal);
-  if (!email) return null;
-  const result = await db.query<{ user_id: string; email: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
-    'select user_id, email, display_name, role from users where email = $1',
-    [email],
+  if (!principal.userDetails) return null;
+  const result = await db.query<{ user_id: string; username: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
+    'select user_id, username, display_name, role from users where username = $1',
+    [principal.userDetails],
   );
   const row = result.rows[0];
   if (!row) return null;
-  return { userId: row.user_id, email: row.email, displayName: row.display_name, role: row.role };
+  return { userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role };
 }

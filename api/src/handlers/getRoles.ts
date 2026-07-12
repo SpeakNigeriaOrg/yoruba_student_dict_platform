@@ -4,9 +4,12 @@
 // auth.rolesSource points at. SWA already grants the built-in
 // 'anonymous'/'authenticated' roles on its own regardless of what this
 // returns - only the custom 'curator' role needs to be decided here.
+//
+// Identifies users by GitHub username (userDetails) - see auth.ts's
+// header comment for why this isn't email.
 
 import type { Queryable } from '../db.js';
-import { findEmailClaim, type ClientPrincipal } from '../auth.js';
+import type { ClientPrincipal } from '../auth.js';
 
 export interface GetRolesResult {
   roles: string[];
@@ -19,16 +22,15 @@ export interface GetRolesResult {
  * foreign key), the row is already there. SWA calls this once per
  * session/token-refresh, ahead of the user taking any action in the app. */
 export async function getRoles(db: Queryable, principal: ClientPrincipal | null): Promise<GetRolesResult> {
-  if (!principal) return { roles: [] };
-  const email = findEmailClaim(principal);
-  if (!email) return { roles: [] };
+  if (!principal || !principal.userDetails) return { roles: [] };
+  const username = principal.userDetails;
 
-  await db.query('insert into users (email, display_name) values ($1, $2) on conflict (email) do nothing', [
-    email,
-    principal.userDetails || null,
+  await db.query('insert into users (username, display_name) values ($1, $2) on conflict (username) do nothing', [
+    username,
+    username,
   ]);
 
-  const result = await db.query<{ role: string }>('select role from users where email = $1', [email]);
+  const result = await db.query<{ role: string }>('select role from users where username = $1', [username]);
   const role = result.rows[0]?.role;
   return { roles: role === 'curator' ? ['curator'] : [] };
 }

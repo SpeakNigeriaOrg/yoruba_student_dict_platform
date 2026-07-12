@@ -44,16 +44,16 @@ export function getTestPool(): pg.Pool {
  *   4. users. */
 export async function cleanUpTestData(pool: pg.Pool, namespace: string): Promise<void> {
   const wordPattern = `${namespace}%`;
-  const emailPattern = `${namespace}%@example.com`;
+  const usernamePattern = `${namespace}%`;
 
   await pool.query('delete from golden_record_components where word_id like $1 or component_word_id like $1', [wordPattern]);
   await pool.query(
     `delete from contributions
      where word_id like $1
-        or submitted_by in (select user_id from users where email like $2)
-        or reviewed_by in (select user_id from users where email like $2)`,
-    [wordPattern, emailPattern],
+        or submitted_by in (select user_id from users where username like $2)
+        or reviewed_by in (select user_id from users where username like $2)`,
+    [wordPattern, usernamePattern],
   );
   await pool.query('delete from golden_record where word_id like $1', [wordPattern]);
-  await pool.query('delete from users where email like $1', [emailPattern]);
+  await pool.query('delete from users where username like $1', [usernamePattern]);
 }
