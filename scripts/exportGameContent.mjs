@@ -310,9 +310,13 @@ async function main() {
     for (const [wordId, entry] of Object.entries(vocab)) {
       if (!wordAudio.has(wordId)) continue;
       const allSyllablesCovered = entry.syllables.every((s) => syllableAudio.has(s));
-      if (allSyllablesCovered) {
-        covered.push({ wordId, displayText: entry.displayText, syllables: entry.syllables });
-      }
+      if (!allSyllablesCovered) continue;
+      // Image coverage is a hard gate here too, not optional metadata -
+      // a word with no real image must never be presented with a
+      // placeholder standing in for it (see publishToR2.mjs's identical
+      // check for the full rationale).
+      if (!imagesByWord.get(wordId)?.size) continue;
+      covered.push({ wordId, displayText: entry.displayText, syllables: entry.syllables });
     }
     coveredWordsBySpeaker.set(speaker, covered);
     console.log(`      ${speaker}: ${covered.length} / ${wordsResult.rows.length} words fully playable`);

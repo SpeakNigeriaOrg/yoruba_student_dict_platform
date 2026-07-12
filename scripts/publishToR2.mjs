@@ -337,10 +337,18 @@ async function main() {
     for (const [wordId, entry] of Object.entries(vocab)) {
       if (!wordAudio.has(wordId)) continue;
       const allSyllablesCovered = entry.syllables.every((s) => syllableAudio.has(s));
-      if (allSyllablesCovered) covered.push({ wordId, displayText: entry.displayText, syllables: entry.syllables });
+      if (!allSyllablesCovered) continue;
+      // A word with no real image must never be presented with a
+      // placeholder standing in for it - that's fabricated content, not
+      // a graceful degrade. Image coverage is a hard gate here, same as
+      // audio, not optional metadata (see conversation: this was
+      // previously NOT gated, and app.js silently substituted a
+      // placeholder graphic for any word missing art).
+      if (!verifiedImageKey.get(wordId)?.size) continue;
+      covered.push({ wordId, displayText: entry.displayText, syllables: entry.syllables });
     }
     coveredWordsBySpeaker.set(speaker, covered);
-    console.log(`      ${speaker}: ${covered.length} / ${wordsResult.rows.length} words fully playable`);
+    console.log(`      ${speaker}: ${covered.length} / ${wordsResult.rows.length} words fully playable (audio + image)`);
   }
 
   console.log('[5/6] Building sessions.json (levels)...');
