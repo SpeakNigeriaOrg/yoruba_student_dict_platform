@@ -15,28 +15,38 @@ end-to-end; the business logic they call (`src/handlers/*.ts`) is the part
 that's actually exercised against real data, kept deliberately thin-wrapper
 so there's as little untested glue as possible.
 
+Curator role assignment: Azure Static Web Apps' built-in **manual invite**
+flow, not a custom `rolesSource` function - that feature (a function SWA
+calls to compute additional roles dynamically) is **Standard-plan-only**,
+confirmed by a real deployment rejection on the Free plan ("The 'auth'
+configuration in staticwebapp.config.json is only supported on the
+Standard SKU"). There used to be a `GetRoles` function backing
+`auth.rolesSource`; it's been removed along with that config block. An
+admin now invites a specific GitHub username to the `curator` role
+directly in the Azure Portal (Static Web App resource -> Role management),
+and that invited role shows up in `x-ms-client-principal.userRoles` on
+every one of that user's authenticated requests from then on - no custom
+function call needed for SWA's own route-level `allowedRoles` gating to
+keep working.
+
+`auth.ts`'s `resolveUser` upserts and **syncs** (not just first-sight
+provisions) the `users` row from `principal.userRoles` on every
+authenticated request: a brand-new username gets a row created with
+`role` set from whether SWA currently reports `'curator'` in
+`userRoles`, and an *existing* user's `role` is kept in sync both ways -
+an admin revoking curator access in Azure actually takes effect on that
+user's next request, not just blocking new grants. This replaces what the
+old `GetRoles` function did (which only provisioned once, defaulting to
+`volunteer`, and never re-synced or supported downgrade).
+
+Identity is resolved by GitHub username (`users.username`), not email -
+confirmed against current Microsoft Learn docs that SWA's GitHub provider
+(default *or* custom-registered) only ever exposes a `userDetails`
+username claim, never email, and its registration schema has no
+scope/login customization to request one either (unlike the generic
+OpenID Connect provider type).
+
 Implemented:
-- `GET|POST /GetRoles` (`src/functions/getRoles.ts` / `src/handlers/getRoles.ts`)
-  - the custom role-source function `staticwebapp.config.json`'s
-    `auth.rolesSource` points at. Upserts a `users` row (defaulting to
-    `volunteer`) for a not-yet-seen authenticated GitHub username, then
-    reports `['curator']` or `[]` - SWA's built-in `anonymous`/
-    `authenticated` roles are granted automatically regardless of what
-    this returns.
-  - **Open verification item**: SWA's documented contract for this
-    function's response is a plain JSON array of role strings, not
-    verified against a real deployed instance yet.
-  - **Resolved while prepping for deployment**: identity used to be
-    resolved by email (`users.email`), which would never have worked -
-    confirmed against current Microsoft Learn docs that SWA's GitHub
-    provider (default *or* custom-registered) only ever exposes a
-    `userDetails` username claim, never email, and its registration schema
-    has no scope/login customization to request one either (unlike the
-    generic OpenID Connect provider type). `users.username` (SWA's
-    `userDetails`) is what's actually used now (`db/migrations/
-    0004_users_identify_by_username.sql`, `auth.ts`) - still worth a real
-    end-to-end login test once deployed, but no longer blocked on an
-    email claim that GitHub's provider was never going to supply.
 - `POST /words`, `POST /phrases` (`src/functions/words.ts` /
   `src/functions/phrases.ts`, `src/handlers/createWord.ts` /
   `createPhrase.ts`) - curator-gated direct insert into

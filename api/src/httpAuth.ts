@@ -22,16 +22,14 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Re-checks the caller's role against the database rather than trusting
- * SWA's own injected userRoles on the header - defense in depth, matching
- * this repo's general "check again server-side, never trust the caller"
- * principle (e.g. Add Phrase's strict component check is enforced
- * server-side too, not just in the UI). */
+/** resolveUser upserts/syncs the users row from principal.userRoles (SWA's
+ * own reflection of Azure's manual curator-invite state) on every call, so
+ * this always returns a user for any authenticated principal. */
 export async function requireUser(request: HttpRequest): Promise<AppUser> {
   const principal = parseClientPrincipal(request.headers.get('x-ms-client-principal'));
   if (!principal) throw new UnauthenticatedError();
   const user = await resolveUser(getPool(), principal);
-  if (!user) throw new UnauthenticatedError('no users row for this principal yet - GetRoles should provision one per session');
+  if (!user) throw new UnauthenticatedError();
   return user;
 }
 

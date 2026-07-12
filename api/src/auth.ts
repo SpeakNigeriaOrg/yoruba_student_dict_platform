@@ -59,18 +59,29 @@ export interface AppUser {
   role: 'curator' | 'volunteer';
 }
 
-/** Looks up the users row for this principal's GitHub username - null if
- * there's no username on the principal, or no matching row yet (e.g.
- * GetRoles hasn't run yet for this session; GetRoles is what upserts the
- * row on first sight of a new authenticated user, see
- * handlers/getRoles.ts). */
+/** Upserts and syncs the users row for this principal's GitHub username -
+ * null only when there's no username on the principal at all (an
+ * unauthenticated request).
+ *
+ * Curator role assignment is via Azure Static Web Apps' built-in manual
+ * invite flow, not a custom rolesSource function - that feature is
+ * Standard-plan-only, and this project is on Free. So `principal.userRoles`
+ * (SWA's own server-injected reflection of who an admin has invited to the
+ * 'curator' role) is the authoritative source here, synced into the users
+ * table on every authenticated request rather than read once at
+ * first-sight: an admin revoking curator access in Azure should actually
+ * take effect on this user's next request, not just block new grants. */
 export async function resolveUser(db: Queryable, principal: ClientPrincipal): Promise<AppUser | null> {
   if (!principal.userDetails) return null;
+  const username = principal.userDetails;
+  const role: 'curator' | 'volunteer' = principal.userRoles.includes('curator') ? 'curator' : 'volunteer';
   const result = await db.query<{ user_id: string; username: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
-    'select user_id, username, display_name, role from users where username = $1',
-    [principal.userDetails],
+    `insert into users (username, display_name, role)
+     values ($1, $2, $3)
+     on conflict (username) do update set role = excluded.role
+     returning user_id, username, display_name, role`,
+    [username, username, role],
   );
   const row = result.rows[0];
-  if (!row) return null;
   return { userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role };
 }
