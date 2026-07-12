@@ -273,37 +273,19 @@ export function rejectContribution(contributionId: string): Promise<void> {
   return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/reject`, { method: 'POST' });
 }
 
-// Mirrors api/src/handlers/issueUploadSasToken.ts's UploadSasTokenResult.
-export interface UploadSasTokenResult {
-  containerUrl: string;
-  sasQuery: string;
-  blobPrefix: string;
-  expiresAt: string;
-}
-
-export function getUploadSasToken(wordId: string): Promise<UploadSasTokenResult> {
-  return fetchJson('/api/utterances/sas-token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wordId }),
-  });
-}
-
-/** Uploads a blob directly to Azure Blob Storage using an already-issued
- * SAS token - not a fetchJson call (the response isn't JSON, and a
- * successful PUT returns an empty 201 body). */
-export async function uploadBlob(token: UploadSasTokenResult, blobName: string, blob: Blob): Promise<string> {
-  const blobPath = `${token.blobPrefix}${blobName}`;
-  const url = `${token.containerUrl}/${blobPath}?${token.sasQuery}`;
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': blob.type || 'application/octet-stream' },
-    body: blob,
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, `blob upload failed: ${response.status}`);
+// Audio is sent inline (base64) and stored directly in Postgres, not
+// Azure Blob Storage - see db/migrations/0005_utterance_inline_audio.sql
+// and registerUtterance.ts's file header for the short-term rationale.
+// Clips here are short (single word / single syllable), so base64 JSON
+// overhead is negligible.
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const CHUNK_SIZE = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
   }
-  return blobPath;
+  return btoa(binary);
 }
 
 // Mirrors api/src/handlers/registerUtterance.ts's RegisterUtteranceInput/Result.
@@ -312,23 +294,47 @@ export interface RegisterSegmentInput {
   startTimeS: number;
   endTimeS: number;
   confidence: number;
-  blobPath: string;
+  clip: Blob;
 }
 
 export interface RegisterUtteranceInput {
   wordId: string;
   takeNumber: number;
-  blobPath: string;
-  rawBlobPath?: string;
+  audio: Blob;
+  // The pronunciation actually spoken in this recording - may diverge
+  // from golden_record's current spelling/syllabification (e.g. recorded
+  // before a later spelling decision converged on something else).
+  recordedDisplayText: string;
+  recordedSyllables: string[];
   durationS?: number;
   sampleRate?: number;
   segments?: RegisterSegmentInput[];
 }
 
-export function registerUtterance(input: RegisterUtteranceInput): Promise<{ utteranceId: string }> {
+export async function registerUtterance(input: RegisterUtteranceInput): Promise<{ utteranceId: string }> {
+  const body = {
+    wordId: input.wordId,
+    takeNumber: input.takeNumber,
+    audioDataBase64: await blobToBase64(input.audio),
+    recordedDisplayText: input.recordedDisplayText,
+    recordedSyllables: input.recordedSyllables,
+    durationS: input.durationS,
+    sampleRate: input.sampleRate,
+    segments: input.segments
+      ? await Promise.all(
+          input.segments.map(async (segment) => ({
+            syllablePosition: segment.syllablePosition,
+            startTimeS: segment.startTimeS,
+            endTimeS: segment.endTimeS,
+            confidence: segment.confidence,
+            audioDataBase64: await blobToBase64(segment.clip),
+          })),
+        )
+      : undefined,
+  };
   return fetchJson('/api/utterances/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }

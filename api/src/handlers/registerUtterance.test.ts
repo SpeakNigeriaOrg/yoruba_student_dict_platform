@@ -47,53 +47,88 @@ async function insertWord(wordId: string, syllables: string[]): Promise<void> {
   ]);
 }
 
+const FAKE_AUDIO = Buffer.from('fake wav bytes');
+
 describe('registerUtterance', () => {
-  it('registers a whole-word take with no segments, creating a speaker for a first-time user', async () => {
+  it('registers a whole-word take with no segments, storing its audio bytes, recorded pronunciation, and a logical blob_path', async () => {
     const wordId = `${NS}word_one`;
-    await insertWord(wordId, ['kà', 'sù']);
-
-    const result = await registerUtterance(
-      pool,
-      { wordId, takeNumber: 1, blobPath: `utterances/${wordId}/take1.wav`, durationS: 1.2, sampleRate: 48000 },
-      userId,
-      username,
-    );
-
-    expect(result.utteranceId).toBeDefined();
-    const row = await pool.query<{ status: string; blob_path: string }>(
-      'select status, blob_path from utterances where utterance_id = $1',
-      [result.utteranceId],
-    );
-    expect(row.rows[0].status).toBe('pending_processing');
-    expect(row.rows[0].blob_path).toBe(`utterances/${wordId}/take1.wav`);
-
-    const speaker = await pool.query('select speaker_id from speakers where user_id = $1', [userId]);
-    expect(speaker.rowCount).toBe(1);
-  });
-
-  it('reuses the same speaker on a second registration from the same user', async () => {
-    const wordId = `${NS}word_two`;
-    await insertWord(wordId, ['bá']);
-    await registerUtterance(pool, { wordId, takeNumber: 1, blobPath: 'x' }, userId, username);
-    await registerUtterance(pool, { wordId, takeNumber: 1, blobPath: 'y' }, userId, username);
-
-    const speakers = await pool.query('select speaker_id from speakers where user_id = $1', [userId]);
-    expect(speakers.rowCount).toBe(1);
-  });
-
-  it('registers segments, deriving syllable_text/tone_insensitive/orthography_insensitive from golden_record.syllables', async () => {
-    const wordId = `${NS}word_three`;
     await insertWord(wordId, ['kà', 'sù']);
 
     const result = await registerUtterance(
       pool,
       {
         wordId,
+        takeNumber: 1,
+        audioData: FAKE_AUDIO,
+        recordedDisplayText: 'kàsù',
+        recordedSyllables: ['kà', 'sù'],
+        durationS: 1.2,
+        sampleRate: 48000,
+      },
+      userId,
+      username,
+    );
+
+    expect(result.utteranceId).toBeDefined();
+    const speaker = await pool.query<{ speaker_id: string }>('select speaker_id from speakers where user_id = $1', [userId]);
+    expect(speaker.rowCount).toBe(1);
+
+    const row = await pool.query<{
+      status: string;
+      blob_path: string;
+      audio_data: Buffer;
+      recorded_display_text: string;
+      recorded_syllables: string[];
+    }>(
+      'select status, blob_path, audio_data, recorded_display_text, recorded_syllables from utterances where utterance_id = $1',
+      [result.utteranceId],
+    );
+    expect(row.rows[0].status).toBe('pending_processing');
+    expect(row.rows[0].blob_path).toBe(`utterances/${wordId}/${speaker.rows[0].speaker_id}/take1.wav`);
+    expect(Buffer.compare(row.rows[0].audio_data, FAKE_AUDIO)).toBe(0);
+    expect(row.rows[0].recorded_display_text).toBe('kàsù');
+    expect(row.rows[0].recorded_syllables).toEqual(['kà', 'sù']);
+  });
+
+  it('reuses the same speaker on a second registration from the same user', async () => {
+    const wordId = `${NS}word_two`;
+    await insertWord(wordId, ['bá']);
+    await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: FAKE_AUDIO, recordedDisplayText: 'bá', recordedSyllables: ['bá'] },
+      userId,
+      username,
+    );
+    await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: FAKE_AUDIO, recordedDisplayText: 'bá', recordedSyllables: ['bá'] },
+      userId,
+      username,
+    );
+
+    const speakers = await pool.query('select speaker_id from speakers where user_id = $1', [userId]);
+    expect(speakers.rowCount).toBe(1);
+  });
+
+  it('registers segments, deriving syllable_text/tone_insensitive/orthography_insensitive from the recorded (not golden_record) syllables', async () => {
+    const wordId = `${NS}word_three`;
+    // golden_record's current syllabification differs from what this
+    // speaker actually recorded - a real, expected case (recorded before
+    // a later spelling decision converged on something else), and exactly
+    // what recordedSyllables exists to capture faithfully.
+    await insertWord(wordId, ['kà', 'sún']);
+
+    const result = await registerUtterance(
+      pool,
+      {
+        wordId,
         takeNumber: 2,
-        blobPath: `utterances/${wordId}/take2.wav`,
+        audioData: FAKE_AUDIO,
+        recordedDisplayText: 'kàsù',
+        recordedSyllables: ['kà', 'sù'],
         segments: [
-          { syllablePosition: 0, startTimeS: 0, endTimeS: 0.3, confidence: 0.9, blobPath: `syllables/${wordId}/0.wav` },
-          { syllablePosition: 1, startTimeS: 0.5, endTimeS: 0.8, confidence: 0.85, blobPath: `syllables/${wordId}/1.wav` },
+          { syllablePosition: 0, startTimeS: 0, endTimeS: 0.3, confidence: 0.9, audioData: Buffer.from('seg0') },
+          { syllablePosition: 1, startTimeS: 0.5, endTimeS: 0.8, confidence: 0.85, audioData: Buffer.from('seg1') },
         ],
       },
       userId,
@@ -105,16 +140,22 @@ describe('registerUtterance', () => {
     ]);
     expect(utterance.rows[0].status).toBe('segmented');
 
-    const observations = await pool.query(
-      'select syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive, blob_path from syllable_observations where utterance_id = $1 order by syllable_position',
+    const observations = await pool.query<{
+      syllable_position: number;
+      syllable_text: string;
+      syllable_tone_insensitive: string;
+      syllable_orthography_insensitive: string;
+      blob_path: string;
+      audio_data: Buffer;
+    }>(
+      'select syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive, blob_path, audio_data from syllable_observations where utterance_id = $1 order by syllable_position',
       [result.utteranceId],
     );
     expect(observations.rows).toHaveLength(2);
-    expect(observations.rows[0]).toMatchObject({
-      syllable_position: 0,
-      syllable_text: 'kà',
-      blob_path: `syllables/${wordId}/0.wav`,
-    });
+    expect(observations.rows[0].syllable_position).toBe(0);
+    expect(observations.rows[0].syllable_text).toBe('kà');
+    expect(Buffer.compare(observations.rows[0].audio_data, Buffer.from('seg0'))).toBe(0);
+    // 'sù', not golden_record's current 'sún' - the recorded pronunciation wins.
     expect(observations.rows[1].syllable_text).toBe('sù');
   });
 
@@ -127,11 +168,13 @@ describe('registerUtterance', () => {
       {
         wordId,
         takeNumber: 2,
-        blobPath: 'a',
+        audioData: FAKE_AUDIO,
+        recordedDisplayText: 'tabasa',
+        recordedSyllables: ['ta', 'ba', 'sa'],
         segments: [
-          { syllablePosition: 0, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, blobPath: 'seg0' },
-          { syllablePosition: 1, startTimeS: 0.2, endTimeS: 0.3, confidence: 0.9, blobPath: 'seg1' },
-          { syllablePosition: 2, startTimeS: 0.4, endTimeS: 0.5, confidence: 0.9, blobPath: 'seg2' },
+          { syllablePosition: 0, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, audioData: Buffer.from('seg0') },
+          { syllablePosition: 1, startTimeS: 0.2, endTimeS: 0.3, confidence: 0.9, audioData: Buffer.from('seg1') },
+          { syllablePosition: 2, startTimeS: 0.4, endTimeS: 0.5, confidence: 0.9, audioData: Buffer.from('seg2') },
         ],
       },
       userId,
@@ -143,21 +186,25 @@ describe('registerUtterance', () => {
       {
         wordId,
         takeNumber: 2,
-        blobPath: 'b',
-        segments: [{ syllablePosition: 0, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, blobPath: 'reseg0' }],
+        audioData: FAKE_AUDIO,
+        recordedDisplayText: 'tabasa',
+        recordedSyllables: ['ta', 'ba', 'sa'],
+        segments: [{ syllablePosition: 0, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, audioData: Buffer.from('reseg0') }],
       },
       userId,
       username,
     );
 
     expect(second.utteranceId).toBe(first.utteranceId); // re-registering the same (word,speaker,take) upserts, not duplicates
-    const observations = await pool.query('select blob_path from syllable_observations where utterance_id = $1', [
-      second.utteranceId,
-    ]);
-    expect(observations.rows).toEqual([{ blob_path: 'reseg0' }]);
+    const observations = await pool.query<{ audio_data: Buffer }>(
+      'select audio_data from syllable_observations where utterance_id = $1',
+      [second.utteranceId],
+    );
+    expect(observations.rows).toHaveLength(1);
+    expect(Buffer.compare(observations.rows[0].audio_data, Buffer.from('reseg0'))).toBe(0);
   });
 
-  it('rejects a segment whose syllablePosition is out of range for the word', async () => {
+  it('rejects a segment whose syllablePosition is out of range for the recorded syllables', async () => {
     const wordId = `${NS}word_five`;
     await insertWord(wordId, ['lo']);
 
@@ -167,8 +214,10 @@ describe('registerUtterance', () => {
         {
           wordId,
           takeNumber: 2,
-          blobPath: 'x',
-          segments: [{ syllablePosition: 5, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, blobPath: 'seg' }],
+          audioData: FAKE_AUDIO,
+          recordedDisplayText: 'lo',
+          recordedSyllables: ['lo'],
+          segments: [{ syllablePosition: 5, startTimeS: 0, endTimeS: 0.1, confidence: 0.9, audioData: Buffer.from('seg') }],
         },
         userId,
         username,
@@ -178,7 +227,18 @@ describe('registerUtterance', () => {
 
   it('rejects a word_id that does not exist', async () => {
     await expect(
-      registerUtterance(pool, { wordId: `${NS}nonexistent`, takeNumber: 1, blobPath: 'x' }, userId, username),
+      registerUtterance(
+        pool,
+        {
+          wordId: `${NS}nonexistent`,
+          takeNumber: 1,
+          audioData: FAKE_AUDIO,
+          recordedDisplayText: 'x',
+          recordedSyllables: ['x'],
+        },
+        userId,
+        username,
+      ),
     ).rejects.toThrow(WordNotFoundError);
   });
 });

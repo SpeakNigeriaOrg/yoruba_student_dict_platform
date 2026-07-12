@@ -1,23 +1,34 @@
 // screens/AudioRecording.tsx
 //
 // The 4th axis tab: records the two-take protocol (see
-// REMOTE_ACCESS_DISCUSSION.md's "Audio pipeline" section) - take 1, a
-// clean whole-word recording; take 2, the same word spoken with
-// deliberate pauses between syllables, which gets decoded, segmented
+// REMOTE_ACCESS_DISCUSSION.md's "Audio pipeline" section) - recording 1,
+// the speaker saying the word naturally, just once; recording 2, the
+// speaker saying it again but enunciating each syllable individually and
+// cleanly, with a pause between syllables, which gets decoded, segmented
 // (segmentSyllables.ts), and sliced into one WAV clip per detected
 // syllable for review before submitting.
 //
-// Real backend (issueUploadSasToken/registerUtterance), but genuinely
-// unverified end-to-end without a real Azure Storage Account existing -
-// stated plainly, not glossed over, same as this project's other
-// infra-gated pieces.
+// Real backend (registerUtterance), storing audio bytes directly in
+// Postgres rather than Blob Storage (short-term storage decision - see
+// api/src/handlers/registerUtterance.ts's file header) - no SAS token or
+// separate upload step needed, submit() sends the clips straight to the
+// register endpoint.
+//
+// Pronunciation, not just speaker identity, is tracked per recording: a
+// speaker may record under a tentative spelling/tone that golden_record
+// later converges on something different from, so this screen lets the
+// speaker confirm/edit the spelling and syllable split they're actually
+// about to say (defaulting to the word's current values) - that's what
+// gets sent as recordedDisplayText/recordedSyllables and is what the
+// segment-count check and syllable identities are actually based on, not
+// necessarily golden_record's current (possibly later-revised) values.
 
 import { useEffect, useState } from 'react';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
 import { sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
-import { getSpellingReview, getUploadSasToken, registerUtterance, uploadBlob } from '../api.js';
+import { getSpellingReview, registerUtterance } from '../api.js';
 
 export interface AudioRecordingProps {
   wordId: string;
@@ -29,9 +40,15 @@ interface SegmentReview {
 }
 
 export function AudioRecording({ wordId }: AudioRecordingProps) {
-  const [displayText, setDisplayText] = useState<string | null>(null);
-  const [expectedSyllables, setExpectedSyllables] = useState<string[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const [pronunciationText, setPronunciationText] = useState('');
+  const [pronunciationSyllablesText, setPronunciationSyllablesText] = useState('');
+  const recordedSyllables = pronunciationSyllablesText
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const recorder = useAudioRecorder();
   const [take1Blob, setTake1Blob] = useState<Blob | null>(null);
@@ -45,8 +62,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setDisplayText(null);
-    setExpectedSyllables(null);
+    setLoaded(false);
     setTake1Blob(null);
     setTake2Blob(null);
     setSegmentReviews(null);
@@ -54,8 +70,9 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
     getSpellingReview(wordId)
       .then((result) => {
         if (cancelled) return;
-        setDisplayText(result.displayText);
-        setExpectedSyllables(result.syllables);
+        setPronunciationText(result.displayText);
+        setPronunciationSyllablesText(result.syllables.join(','));
+        setLoaded(true);
       })
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
@@ -103,33 +120,38 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
     }
   }
 
-  const expectedCount = expectedSyllables?.length ?? null;
+  const expectedCount = recordedSyllables.length;
   const detectedCount = segmentReviews?.length ?? null;
-  const countsMatch = expectedCount !== null && detectedCount !== null && expectedCount === detectedCount;
+  const countsMatch = detectedCount !== null && expectedCount === detectedCount;
 
   async function submit() {
     if (!take1Blob || !take2Blob || !segmentReviews || !countsMatch) return;
     setSubmitting(true);
     setStatus(null);
     try {
-      const token = await getUploadSasToken(wordId);
+      await registerUtterance({
+        wordId,
+        takeNumber: 1,
+        audio: take1Blob,
+        recordedDisplayText: pronunciationText,
+        recordedSyllables,
+      });
 
-      const take1Path = await uploadBlob(token, 'take1.webm', take1Blob);
-      await registerUtterance({ wordId, takeNumber: 1, blobPath: take1Path });
-
-      const take2Path = await uploadBlob(token, 'take2.webm', take2Blob);
-      const segments = [];
-      for (const [i, review] of segmentReviews.entries()) {
-        const clipPath = await uploadBlob(token, `segment-${i}.wav`, review.clip);
-        segments.push({
-          syllablePosition: review.segment.syllablePosition,
-          startTimeS: review.segment.startTimeSeconds,
-          endTimeS: review.segment.endTimeSeconds,
-          confidence: review.segment.confidence,
-          blobPath: clipPath,
-        });
-      }
-      await registerUtterance({ wordId, takeNumber: 2, blobPath: take2Path, segments });
+      const segments = segmentReviews.map((review) => ({
+        syllablePosition: review.segment.syllablePosition,
+        startTimeS: review.segment.startTimeSeconds,
+        endTimeS: review.segment.endTimeSeconds,
+        confidence: review.segment.confidence,
+        clip: review.clip,
+      }));
+      await registerUtterance({
+        wordId,
+        takeNumber: 2,
+        audio: take2Blob,
+        recordedDisplayText: pronunciationText,
+        recordedSyllables,
+        segments,
+      });
 
       setStatus('Recording submitted.');
     } catch (err) {
@@ -140,15 +162,40 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
   }
 
   if (loadError) return <p role="alert">Couldn't load word data: {loadError}</p>;
-  if (!displayText || !expectedSyllables) return <p>Loading...</p>;
+  if (!loaded) return <p>Loading...</p>;
 
   return (
     <section aria-label="Audio recording" className="card">
-      <h2>{displayText}</h2>
-      <p>Expected syllables: {expectedSyllables.length}</p>
+      <h2>{pronunciationText}</h2>
+
+      <div className="take-step" aria-label="Pronunciation">
+        <h3>Pronunciation you're recording</h3>
+        <p>
+          Edit these if you're recording a different spelling or tone than what's shown - the recording is tied to
+          the pronunciation you actually say, not necessarily this word's current spelling.
+        </p>
+        <div className="field">
+          <label htmlFor="pronunciation-text-field">Spelling</label>
+          <input
+            id="pronunciation-text-field"
+            type="text"
+            value={pronunciationText}
+            onChange={(e) => setPronunciationText(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="pronunciation-syllables-field">Syllables (comma-separated)</label>
+          <input
+            id="pronunciation-syllables-field"
+            type="text"
+            value={pronunciationSyllablesText}
+            onChange={(e) => setPronunciationSyllablesText(e.target.value)}
+          />
+        </div>
+      </div>
 
       <div className="take-step">
-        <h3>Take 1: say the whole word clearly</h3>
+        <h3>Recording 1: say the word naturally, just once</h3>
         {take1Blob ? (
           <>
             <audio controls src={URL.createObjectURL(take1Blob)} />
@@ -164,14 +211,14 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
           </button>
         ) : (
           <button type="button" className="record-btn" onClick={() => recordTake('take1')}>
-            ● Record take 1
+            ● Record
           </button>
         )}
       </div>
 
       {take1Blob ? (
         <div className="take-step">
-          <h3>Take 2: say each syllable separately, with a pause between</h3>
+          <h3>Recording 2: say it again, enunciating each syllable individually and cleanly</h3>
           {take2Blob ? (
             <>
               <audio controls src={URL.createObjectURL(take2Blob)} />
@@ -187,7 +234,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
             </button>
           ) : (
             <button type="button" className="record-btn" onClick={() => recordTake('take2')}>
-              ● Record take 2
+              ● Record
             </button>
           )}
         </div>
@@ -202,8 +249,8 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
             <p className="status-banner">Detected {detectedCount} syllables, matching the expected count.</p>
           ) : (
             <p className="warning-banner">
-              Detected {detectedCount} syllables, but this word has {expectedCount}. Try re-recording take 2 with a
-              clearer pause between each syllable.
+              Detected {detectedCount} syllables, but the pronunciation above has {expectedCount}. Try re-recording
+              recording 2 with a clearer pause between each syllable, or correct the syllables field above.
             </p>
           )}
           <ul aria-label="Detected segments">

@@ -75,6 +75,13 @@ function installAudioMocks(decodedSamples: Float32Array) {
   (URL as unknown as { createObjectURL: () => string }).createObjectURL = () => 'blob:mock-url';
 }
 
+async function recordBothTakes(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /Record/ }));
+  await user.click(screen.getByRole('button', { name: /Stop/ }));
+  await user.click(screen.getByRole('button', { name: /Record/ }));
+  await user.click(screen.getByRole('button', { name: /Stop/ }));
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -87,28 +94,25 @@ describe('AudioRecording', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => spellingFixture }));
   });
 
-  it('shows the expected syllable count once the word loads', async () => {
+  it('defaults the pronunciation fields from the word being reviewed', async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
 
     await waitFor(() => {
       expect(screen.getByText('fixturegenspldef_kasu')).toBeInTheDocument();
     });
-    expect(screen.getByText('Expected syllables: 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Spelling')).toHaveValue('fixturegenspldef_kasu');
+    expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('ka,su');
   });
 
-  it('records take 1, then take 2, segments it, and reports a matching syllable count', async () => {
+  it('records recording 1, then recording 2, segments it, and reports a matching syllable count', async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
     await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
 
-    await user.click(screen.getByRole('button', { name: /Record take 1/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
-
-    await user.click(screen.getByRole('button', { name: /Record take 2/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
+    await recordBothTakes(user);
 
     await waitFor(() => {
       expect(screen.getByText(/Detected 2 syllables, matching the expected count\./)).toBeInTheDocument();
@@ -123,36 +127,41 @@ describe('AudioRecording', () => {
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
     await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
 
-    await user.click(screen.getByRole('button', { name: /Record take 1/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
-    await user.click(screen.getByRole('button', { name: /Record take 2/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
+    await recordBothTakes(user);
 
     await waitFor(() => {
-      expect(screen.getByText(/Detected 1 syllables, but this word has 2/)).toBeInTheDocument();
+      expect(screen.getByText(/Detected 1 syllables, but the pronunciation above has 2/)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Submit recording' })).toBeDisabled();
   });
 
-  it('submits both takes and every segment clip through the SAS-token upload + register flow', async () => {
+  it('re-checks the count against an edited syllables field, not the word\'s original syllabification', async () => {
+    // A speaker recording a pronunciation that legitimately differs from
+    // golden_record's current syllable split (e.g. before a later
+    // spelling decision converges on something else) edits the syllables
+    // field down to 1 - the 1-syllable synthetic audio should now match.
+    installAudioMocks(ONE_SYLLABLE_SAMPLES);
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+
+    const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
+    await user.clear(syllablesField);
+    await user.type(syllablesField, 'kasu');
+
+    await recordBothTakes(user);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Detected 1 syllables, matching the expected count\./)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Submit recording' })).toBeEnabled();
+  });
+
+  it('submits both takes (and every segment clip) inline as base64 audio, with the recorded pronunciation, to the register endpoint', async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
-      if (url.includes('/sas-token')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            containerUrl: 'https://fakeaccount.blob.core.windows.net/utterances',
-            sasQuery: 'sv=fake&sp=cw',
-            blobPrefix: 'utterances/fixturegenspldef_spellingword/fake-uuid/',
-            expiresAt: new Date(Date.now() + 900000).toISOString(),
-          }),
-        });
-      }
-      if (url.includes('blob.core.windows.net')) {
-        expect(init?.method).toBe('PUT');
-        return Promise.resolve({ ok: true, status: 201 });
-      }
       if (url.includes('/register')) {
         return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'fake-utterance-id' }) });
       }
@@ -164,10 +173,7 @@ describe('AudioRecording', () => {
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
     await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
 
-    await user.click(screen.getByRole('button', { name: /Record take 1/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
-    await user.click(screen.getByRole('button', { name: /Record take 2/ }));
-    await user.click(screen.getByRole('button', { name: /Stop/ }));
+    await recordBothTakes(user);
     await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
 
     await user.click(screen.getByRole('button', { name: 'Submit recording' }));
@@ -176,19 +182,23 @@ describe('AudioRecording', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Recording submitted.');
     });
 
-    const sasCall = fetchMock.mock.calls.find((c) => c[0].includes('/sas-token'));
-    expect(sasCall).toBeDefined();
-    expect(JSON.parse(sasCall![1].body)).toEqual({ wordId: 'fixturegenspldef_spellingword' });
-
-    const uploadCalls = fetchMock.mock.calls.filter((c) => c[0].includes('blob.core.windows.net'));
-    // take1 + take2 + 2 segment clips (matching the 2-syllable fixture).
-    expect(uploadCalls).toHaveLength(4);
+    // No separate blob upload step - just two /register calls, each
+    // carrying its own take's bytes inline.
+    expect(fetchMock.mock.calls.some((c) => c[0].includes('blob.core.windows.net'))).toBe(false);
 
     const registerCalls = fetchMock.mock.calls.filter((c) => c[0].includes('/register'));
     expect(registerCalls).toHaveLength(2);
-    const take2Register = registerCalls.map((c) => JSON.parse(c[1].body)).find((b) => b.takeNumber === 2);
+    const registeredBodies = registerCalls.map((c) => JSON.parse(c[1].body));
+    for (const body of registeredBodies) {
+      expect(typeof body.audioDataBase64).toBe('string');
+      expect(body.audioDataBase64.length).toBeGreaterThan(0);
+      expect(body.recordedDisplayText).toBe('fixturegenspldef_kasu');
+      expect(body.recordedSyllables).toEqual(['ka', 'su']);
+    }
+    const take2Register = registeredBodies.find((b) => b.takeNumber === 2);
     expect(take2Register.segments).toHaveLength(2);
     expect(take2Register.segments[0]).toMatchObject({ syllablePosition: 0 });
+    expect(typeof take2Register.segments[0].audioDataBase64).toBe('string');
   });
 
   it('shows a microphone error message when getUserMedia rejects', async () => {
@@ -202,7 +212,7 @@ describe('AudioRecording', () => {
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
     await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
 
-    await user.click(screen.getByRole('button', { name: /Record take 1/ }));
+    await user.click(screen.getByRole('button', { name: /Record/ }));
 
     await waitFor(() => {
       expect(screen.getByText(/Microphone error: permission denied/)).toBeInTheDocument();
