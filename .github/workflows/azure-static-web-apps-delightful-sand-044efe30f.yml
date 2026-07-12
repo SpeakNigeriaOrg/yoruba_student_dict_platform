@@ -33,14 +33,20 @@ jobs:
       - name: Build app (builds shared first, then app's own dist)
         run: npm run build:app
       - name: Flatten hoisted node_modules into api/ for standalone deployment
-        # npm workspaces hoists dependencies (and symlinks the `shared`
-        # workspace package) into the repo root's node_modules - but Azure
-        # zips up api_location in isolation, so api/ needs its own real,
-        # non-symlinked copy of everything it depends on (including
-        # shared's built dist) to run standalone once deployed.
+        # npm workspaces hoists third-party dependencies into the repo
+        # root's node_modules - but Azure zips up api_location in
+        # isolation, so api/ needs its own real copy to run standalone
+        # once deployed. The @yoruba-student-dict-platform/* scope is
+        # excluded: npm workspaces symlinks it back to the workspace
+        # folders themselves (e.g. .../api -> ../../api), and following
+        # that for "api" would copy api/ into itself. shared's built
+        # output - the one thing api actually needs from that scope - is
+        # copied in explicitly instead.
         run: |
           mkdir -p api/node_modules
-          cp -RL node_modules/. api/node_modules/
+          rsync -a --exclude='@yoruba-student-dict-platform' node_modules/ api/node_modules/
+          mkdir -p api/node_modules/@yoruba-student-dict-platform/shared
+          cp -r shared/dist shared/package.json api/node_modules/@yoruba-student-dict-platform/shared/
       - name: Install OIDC Client from Core Package
         run: npm install @actions/core@1.6.0 @actions/http-client
       - name: Get Id Token
