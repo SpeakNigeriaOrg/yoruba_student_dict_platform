@@ -260,6 +260,19 @@ describe('deriveSense / deriveSenses on the real corpus', () => {
     }
   });
 
+  it('passes etymologyText straight through from the canonical entry, including a plaintext entry whose template yields no real componentCandidates', () => {
+    // Real entry: 'o' (clipping of 'kò') has plaintext etymology prose,
+    // and its one etymology_template ("clipping") isn't a recognized
+    // decomposition (see the 'o' test above) - so componentCandidates
+    // ends up empty even though etymologyText has real content. Exactly
+    // the "no formal entry, just prose" case a curator should still see.
+    const entry = realEntries['en-o-yo-particle-ZTLMUbvy'];
+    expect(entry.etymologyText).toBe('Clipping of kò.');
+    const sense = deriveSense(entry);
+    expect(sense.etymologyText).toBe('Clipping of kò.');
+    expect(sense.componentCandidates).toEqual([]);
+  });
+
   it("regression: 'dodò' (dodo) ends up with di/odò as etymology_template component candidates", () => {
     const sense = deriveSense(realEntries['en-dodo-yo-verb-TzbxtbnG']);
     expect(sense.componentCandidates).toEqual([

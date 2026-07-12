@@ -69,6 +69,26 @@ describe('SearchBox', () => {
     expect(onSelect).toHaveBeenCalledWith({ id: 'a', label: 'Result A' });
   });
 
+  it('pre-fills the query and auto-runs the search once on mount when initialQuery is given', async () => {
+    const search = vi.fn().mockResolvedValue([{ id: 'a', label: 'Result A' }]);
+
+    render(
+      <SearchBox<TestResult>
+        search={search}
+        renderResult={(r) => r.label}
+        onSelect={vi.fn()}
+        resultsAriaLabel="Test results"
+        initialQuery="seeded query"
+      />,
+    );
+
+    expect(screen.getByRole('textbox')).toHaveValue('seeded query');
+    await waitFor(() => {
+      expect(search).toHaveBeenCalledWith('seeded query');
+    });
+    expect(screen.getByText('Result A')).toBeInTheDocument();
+  });
+
   it('shows an error message when the search fails', async () => {
     const search = vi.fn().mockRejectedValue(new Error('search failed'));
     const user = userEvent.setup();

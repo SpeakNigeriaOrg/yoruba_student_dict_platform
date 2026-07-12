@@ -34,13 +34,14 @@ async function insertKaikkiSense(
   orthographyKey: string,
   componentCandidates: Array<{ form: string; provenance: string }>,
   usedInCandidates: Array<{ form: string; provenance: string }>,
+  etymologyText: string | null = null,
 ): Promise<string> {
   const result = await pool.query<{ sense_id: string }>(
     `insert into kaikki_senses
-       (pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses)
-     values ('noun', $1, $2, 'explicit_canonical_tag', 1.0, $1, $3, $4)
+       (pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses, etymology_text)
+     values ('noun', $1, $2, 'explicit_canonical_tag', 1.0, $1, $3, $4, $5)
      returning sense_id`,
-    [headword, canonicalValue, [canonicalValue], ['test gloss']],
+    [headword, canonicalValue, [canonicalValue], ['test gloss'], etymologyText],
   );
   const senseId = result.rows[0].sense_id;
   seededKaikkiSenseIds.push(senseId);
@@ -102,6 +103,25 @@ describe('getEtymologyReview', () => {
       wordId: usedInTargetId,
       provenance: 'synthesized_from_etymology',
     });
+  });
+
+  it('surfaces plaintext etymologyText even when there are no structured component candidates to propose', async () => {
+    const wordId = `${NS}plaintext_word`;
+    await insertWord(wordId, `${NS}plaintextspelling`);
+
+    await insertKaikkiSense(
+      `${NS}plaintextspelling`,
+      `${NS}plaintextspelling`,
+      orthographyInsensitiveForm(`${NS}plaintextspelling`),
+      [],
+      [],
+      'Clipping of an older form; no structured breakdown recorded by Kaikki.',
+    );
+
+    const result = await getEtymologyReview(pool, wordId);
+
+    expect(result.componentsProposal).toEqual([]);
+    expect(result.etymologyText).toBe('Clipping of an older form; no structured breakdown recorded by Kaikki.');
   });
 
   it('defaults an atomic word (no Kaikki sense, no components) to a self-referencing components list with empty proposals', async () => {

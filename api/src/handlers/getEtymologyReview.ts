@@ -41,6 +41,12 @@ export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
    * interactive decision UI for) isn't left guessing whether spelling and
    * definition have been separately decided elsewhere. */
   axisDecided: AxisDecided;
+  /** Kaikki's free-text etymology prose for this word's matched sense, if
+   * any - distinct from componentsProposal (the structured
+   * decomposition). A real fraction of entries have only this, no
+   * structured template at all - worth surfacing even when nothing could
+   * be mechanically decomposed. */
+  etymologyText: string | null;
 }
 
 /** Only the one field componentsAxisFields actually reads from overrides
@@ -94,6 +100,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string): Pro
     syllables: entry.syllables,
     definition,
     axisDecided,
+    etymologyText: diagnosis.matchedEtymologyText ?? null,
     ...fields,
   };
 }

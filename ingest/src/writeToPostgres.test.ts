@@ -34,6 +34,7 @@ function makeSense(overrides: Partial<DerivedKaikkiSense> = {}): DerivedKaikkiSe
     entryId: 'x',
     pos: 'noun',
     etymologyNumber: null,
+    etymologyText: null,
     headword: 'x',
     canonicalForm: { value: 'x', inferenceMethod: 'fallback_headword', confidence: 0.5, originalValue: 'x' },
     standardForms: ['x'],
@@ -58,6 +59,7 @@ describe('writeSensesToPostgres', () => {
         indexKeys: ['ile'],
         componentCandidates: [{ form: 'foo', provenance: 'etymology_template' }],
         usedInCandidates: [{ form: 'iléeṣẹ́', provenance: 'synthesized_from_etymology' }],
+        etymologyText: 'From proto-Yoruba, cognate with...',
       }),
       makeSense({
         headword: 'dodo',
@@ -75,12 +77,12 @@ describe('writeSensesToPostgres', () => {
     const result = await writeSensesToPostgres(pool, senses, { sourceDate: '2026-07-06', contentHash: 'abc123' });
     expect(result.senseCount).toBe(2);
 
-    const senseRows = await pool.query<{ headword: string; standard_forms: string[]; glosses: string[] }>(
-      'select headword, standard_forms, glosses from kaikki_senses order by headword',
+    const senseRows = await pool.query<{ headword: string; standard_forms: string[]; glosses: string[]; etymology_text: string | null }>(
+      'select headword, standard_forms, glosses, etymology_text from kaikki_senses order by headword',
     );
     expect(senseRows.rows).toEqual([
-      { headword: 'dodo', standard_forms: ['dodò'], glosses: ['fried plantain'] },
-      { headword: 'ilé', standard_forms: ['ilé'], glosses: ['home', 'house'] },
+      { headword: 'dodo', standard_forms: ['dodò'], glosses: ['fried plantain'], etymology_text: null },
+      { headword: 'ilé', standard_forms: ['ilé'], glosses: ['home', 'house'], etymology_text: 'From proto-Yoruba, cognate with...' },
     ]);
 
     const keyRows = await pool.query<{ orthography_insensitive_key: string }>(

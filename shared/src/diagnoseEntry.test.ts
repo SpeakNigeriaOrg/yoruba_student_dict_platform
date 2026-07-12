@@ -64,13 +64,15 @@ function pickDiagnoseFields(entry: FullDiagnosticsReportEntry): Partial<Diagnose
   for (const key of DIAGNOSE_ENTRY_FIELDS) {
     if (key in entry) (picked as Record<string, unknown>)[key] = entry[key];
   }
-  // matchedUsedInCandidates predates this fixture entirely (the Python
-  // original never computed it, and the real fixtures have no
-  // usedInCandidates data on any KaikkiSense) - always [] whenever a
-  // "chosen" sense branch would have set matchedComponentCandidates too,
-  // since both are set together in the same diagnoseEntry.ts branch.
+  // matchedUsedInCandidates/matchedEtymologyText both postdate this
+  // fixture entirely (the Python original never computed either, and the
+  // real fixtures have neither usedInCandidates nor etymologyText data on
+  // any KaikkiSense) - always [] / null whenever a "chosen" sense branch
+  // would have set matchedComponentCandidates too, since all three are
+  // set together in the same diagnoseEntry.ts branch.
   if ('matchedComponentCandidates' in picked) {
     picked.matchedUsedInCandidates = [];
+    picked.matchedEtymologyText = null;
   }
   return picked;
 }

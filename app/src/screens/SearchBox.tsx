@@ -9,7 +9,7 @@
 // resolver.js's kaikkiSearchHtml/etymologyManualPickerHtml, both hitting
 // Enter-to-submit + a "Use this"/"Add" button per result.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export interface SearchBoxProps<T> {
   search: (query: string) => Promise<T[]>;
@@ -18,6 +18,11 @@ export interface SearchBoxProps<T> {
   selectLabel?: string;
   placeholder?: string;
   resultsAriaLabel: string;
+  /** Pre-fills the query and runs the search once on mount - for callers
+   * that already know roughly what to search for (e.g. a Kaikki-proposed
+   * component spelling that isn't in our vocab yet), rather than making
+   * the user retype something already known. */
+  initialQuery?: string;
 }
 
 export function SearchBox<T>({
@@ -27,19 +32,28 @@ export function SearchBox<T>({
   selectLabel = 'Use this',
   placeholder,
   resultsAriaLabel,
+  initialQuery,
 }: SearchBoxProps<T>) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<T[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function runSearch() {
+  async function runSearch(searchQuery = query) {
     setError(null);
     try {
-      setResults(await search(query));
+      setResults(await search(searchQuery));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
+
+  useEffect(() => {
+    if (initialQuery) runSearch(initialQuery);
+    // Only ever auto-runs once, on mount, from whatever initialQuery was
+    // passed in at that time - not re-run if the prop identity changes,
+    // same "seed the starting point, then it's the user's own input"
+    // behavior as an uncontrolled form field's defaultValue.
+  }, []);
 
   return (
     <div>
@@ -53,7 +67,7 @@ export function SearchBox<T>({
             if (e.key === 'Enter') runSearch();
           }}
         />
-        <button type="button" className="btn btn-secondary" onClick={runSearch}>
+        <button type="button" className="btn btn-secondary" onClick={() => runSearch()}>
           Search
         </button>
       </div>

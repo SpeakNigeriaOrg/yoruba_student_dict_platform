@@ -95,6 +95,17 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
   }, [wordId]);
 
   async function recordTake(take: 'take1' | 'take2') {
+    // Clear the previous blob (re-record case) *before* starting -
+    // otherwise the still-truthy take1Blob/take2Blob keeps the "already
+    // recorded" branch on screen even once a new recording has actually
+    // started, leaving no visible way to stop it.
+    if (take === 'take1') {
+      setTake1Blob(null);
+    } else {
+      setTake2Blob(null);
+      setSegmentReviews(null);
+      setProcessingError(null);
+    }
     setRecordingStep(take);
     try {
       await recorder.start();

@@ -75,6 +75,10 @@ export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
   syllables: string[];
   definition: string | null;
   axisDecided: AxisDecided;
+  // Kaikki's free-text etymology prose, distinct from componentsProposal
+  // (the structured decomposition) - present even for entries with no
+  // structured breakdown at all.
+  etymologyText: string | null;
 }
 
 export function getEtymologyReview(wordId: string): Promise<EtymologyReviewResult> {

@@ -212,4 +212,111 @@ describe('EtymologyReview', () => {
 
     expect(screen.getByText('No components picked yet.')).toBeInTheDocument();
   });
+
+  it('flags a plaintext-only etymology note as "no structured breakdown" when there is no proposal at all', async () => {
+    const fixture = { ...etymologyConfirmedFixture, componentsProposal: [], etymologyText: 'Clipping of an older form.' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+
+    const note = screen.getByLabelText('Kaikki etymology note');
+    expect(note).toHaveTextContent('No structured breakdown exists for this word');
+    expect(note).toHaveTextContent('Clipping of an older form.');
+  });
+
+  it('shows a plaintext etymology note as a supplement, not a warning, when a structured proposal also exists', async () => {
+    const fixture = { ...etymologyFixture, etymologyText: 'Also cognate with a related form.' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    const note = screen.getByLabelText('Kaikki etymology note');
+    expect(note).toHaveTextContent('Kaikki also has this plaintext etymology note, alongside the structured breakdown above');
+    expect(note).toHaveTextContent('Also cognate with a related form.');
+    expect(note.className).not.toContain('warning-banner');
+  });
+
+  it('does not render a Kaikki etymology note section when there is none', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByLabelText('Kaikki etymology note')).not.toBeInTheDocument();
+  });
+
+  it('lets a curator search Kaikki and create a missing proposed component inline, then refreshes the proposal', async () => {
+    const missingComponentFixture = {
+      ...etymologyFixture,
+      componentsProposal: [
+        {
+          kaikkiForm: 'fixturegen2_missingpart',
+          wordId: null,
+          targetSpellingConfirmed: false,
+          ambiguous: false,
+          possibleMatches: [],
+          provenance: 'etymology_template',
+          previewGlosses: ['a missing part'],
+          previewGlossesAreExactMatches: true,
+        },
+      ],
+    };
+    const resolvedFixture = {
+      ...missingComponentFixture,
+      componentsProposal: [{ ...missingComponentFixture.componentsProposal[0], wordId: 'fixturegen2_missingpart_newword' }],
+    };
+    let etymologyCallCount = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/etymology')) {
+        etymologyCallCount++;
+        return Promise.resolve({ ok: true, json: async () => (etymologyCallCount === 1 ? missingComponentFixture : resolvedFixture) });
+      }
+      if (url.includes('/kaikki-search')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            results: [
+              { form: 'fixturegen2_missingpart', pos: 'noun', glosses: ['a missing part'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['fixturegen2_missingpart'] },
+            ],
+          }),
+        });
+      }
+      if (url === '/api/words' && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ wordId: 'fixturegen2_missingpart_newword' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+    expect(screen.getByText(/not in golden_record yet/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add "fixturegen2_missingpart" to vocabulary' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    const hintField = screen.getByLabelText('Word ID hint (English meaning)');
+    await user.type(hintField, 'missing part');
+
+    await user.click(screen.getByRole('button', { name: 'Add & use as component' }));
+
+    const createCall = fetchMock.mock.calls.find((c) => c[0] === '/api/words' && c[1]?.method === 'POST');
+    expect(createCall).toBeDefined();
+    const createBody = JSON.parse(createCall![1].body);
+    expect(createBody).toMatchObject({
+      wordId: 'fixturegen2_missingpart_missing_part',
+      displayText: 'fixturegen2_missingpart',
+    });
+
+    // Refetches the whole review after creating the word - the proposal
+    // now resolves to the freshly-created word_id.
+    await waitFor(() => {
+      expect(screen.getByText(/→ resolves to fixturegen2_missingpart_newword/)).toBeInTheDocument();
+    });
+    expect(etymologyCallCount).toBe(2);
+  });
 });

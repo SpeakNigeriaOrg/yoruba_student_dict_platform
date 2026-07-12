@@ -123,6 +123,10 @@ export interface DiagnoseEntryResult {
   matchedAltOfTargets?: string[];
   matchedComponentCandidates?: ComponentCandidate[];
   matchedUsedInCandidates?: ComponentCandidate[];
+  /** Kaikki's free-text etymology prose for the matched sense, if any -
+   * distinct from matchedComponentCandidates (the structured
+   * decomposition); see KaikkiSense.etymologyText's own comment. */
+  matchedEtymologyText?: string | null;
   resolvedBy?: 'manual_selection_via_search' | 'manual_selection' | 'keep_ours' | 'adopt_kaikki_pending';
   candidatesConsidered?: CandidateConsidered[];
   discoveredViaRelaxedMatch?: true;
@@ -278,6 +282,7 @@ export function diagnoseEntry(
     matchedAltOfTargets: chosen.altOfTargets ?? [],
     matchedComponentCandidates: chosen.componentCandidates ?? [],
     matchedUsedInCandidates: chosen.usedInCandidates ?? [],
+    matchedEtymologyText: chosen.etymologyText ?? null,
   };
   if (manuallySelected) {
     result.resolvedBy = foundViaSearch ? 'manual_selection_via_search' : 'manual_selection';

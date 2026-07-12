@@ -18,7 +18,7 @@ import { randomUUID } from 'node:crypto';
 import type { Queryable } from './db.js';
 import type { DerivedKaikkiSense } from './types.js';
 
-const SENSE_BATCH_SIZE = 500; // 11 columns/row * 500 = 5,500 params, well under Postgres's 65,535 limit
+const SENSE_BATCH_SIZE = 500; // 12 columns/row * 500 = 6,000 params, well under Postgres's 65,535 limit
 const FLAT_BATCH_SIZE = 2000; // 2-4 columns/row
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -32,7 +32,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], senseIds: string[]): Promise<void> {
   const rows = senses.map((sense, i) => ({ senseId: senseIds[i], sense }));
   for (const batch of chunk(rows, SENSE_BATCH_SIZE)) {
-    const columnsPerRow = 11;
+    const columnsPerRow = 12;
     const placeholders: string[] = [];
     const values: unknown[] = [];
     batch.forEach(({ senseId, sense }, i) => {
@@ -43,6 +43,7 @@ async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], sen
         senseId,
         sense.pos,
         sense.etymologyNumber,
+        sense.etymologyText,
         sense.headword,
         sense.canonicalForm.value,
         sense.canonicalForm.inferenceMethod,
@@ -55,7 +56,7 @@ async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], sen
     });
     await client.query(
       `insert into kaikki_senses
-         (sense_id, pos, etymology_number, headword, canonical_value, canonical_inference_method,
+         (sense_id, pos, etymology_number, etymology_text, headword, canonical_value, canonical_inference_method,
           canonical_confidence, canonical_original_value, standard_forms, glosses, alt_of_targets)
        values ${placeholders.join(', ')}`,
       values,

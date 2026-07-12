@@ -16,10 +16,13 @@
 // whatever the automatic proposal suggested.
 
 import { useEffect, useState } from 'react';
-import type { ComponentsProposalItem, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
+import type { ComponentsProposalItem, KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
+import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import {
+  createWord,
   getEtymologyReview,
   postEtymologyDecision,
+  searchKaikki,
   searchVocab,
   submitEtymologyContribution,
   type ApplyEtymologyDecisionInput,
@@ -33,7 +36,105 @@ export interface EtymologyReviewProps {
   isCurator: boolean;
 }
 
-function ProposalItemRow({ item }: { item: ComponentsProposalItem }) {
+// A Kaikki-proposed component that resolves to no existing word_id at
+// all (not ambiguous, no tone-shifted near-miss - genuinely absent from
+// golden_record) is otherwise a dead end: nothing lets a curator act on
+// it. This searches Kaikki (pre-seeded with the candidate's own
+// spelling, since that's already known) and creates the missing word,
+// which both adds it to golden_record AND resolves this candidate in one
+// action, rather than requiring a separate trip through Add Word first.
+function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAdded: (wordId: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
+  const [selectedForm, setSelectedForm] = useState('');
+  const [syllablesText, setSyllablesText] = useState('');
+  const [hint, setHint] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+
+  function pickResult(result: KaikkiSearchResult) {
+    setSelected(result);
+    const form = result.standardForms[0] ?? result.form;
+    setSelectedForm(form);
+    setSyllablesText(syllabifyWord(form).join(','));
+  }
+
+  const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
+
+  async function submit() {
+    if (!wordIdPreview) {
+      setStatus('Enter a word_id hint first.');
+      return;
+    }
+    try {
+      const result = await createWord({
+        wordId: wordIdPreview,
+        displayText: selectedForm,
+        syllables: syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      onAdded(result.wordId);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  if (!expanded) {
+    return (
+      <button type="button" className="btn btn-secondary" onClick={() => setExpanded(true)}>
+        Add "{kaikkiForm}" to vocabulary
+      </button>
+    );
+  }
+
+  return (
+    <div className="field" aria-label={`Add ${kaikkiForm} to vocabulary`}>
+      <SearchBox
+        search={searchKaikki}
+        initialQuery={kaikkiForm}
+        renderResult={(r) => (
+          <>
+            <strong>{r.form}</strong> ({r.pos}) - {r.glosses.join('; ')}
+          </>
+        )}
+        onSelect={pickResult}
+        selectLabel="Select"
+        placeholder="Search Kaikki by spelling or meaning..."
+        resultsAriaLabel="Kaikki search results for missing component"
+      />
+      {selected ? (
+        <>
+          <div className="field">
+            <label htmlFor={`missing-component-syllables-${kaikkiForm}`}>Syllables (comma-separated)</label>
+            <input
+              id={`missing-component-syllables-${kaikkiForm}`}
+              type="text"
+              value={syllablesText}
+              onChange={(e) => setSyllablesText(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor={`missing-component-hint-${kaikkiForm}`}>Word ID hint (English meaning)</label>
+            <input
+              id={`missing-component-hint-${kaikkiForm}`}
+              type="text"
+              value={hint}
+              onChange={(e) => setHint(e.target.value.replace(/\s+/g, '_'))}
+            />
+          </div>
+          <p>
+            Word ID: <strong>{wordIdPreview || '(enter a hint)'}</strong>
+          </p>
+          <button type="button" className="btn btn-primary" onClick={submit}>
+            Add & use as component
+          </button>
+        </>
+      ) : null}
+      {status ? <p role="alert">{status}</p> : null}
+    </div>
+  );
+}
+
+function ProposalItemRow({ item, onAdded }: { item: ComponentsProposalItem; onAdded: (wordId: string) => void }) {
+  const notInVocabYet = !item.wordId && !item.ambiguous && item.possibleMatches.length === 0;
   return (
     <li>
       <strong>{item.kaikkiForm}</strong>
@@ -47,6 +148,11 @@ function ProposalItemRow({ item }: { item: ComponentsProposalItem }) {
         <span> — not in golden_record yet</span>
       )}
       {item.previewGlosses.length > 0 ? <span> ({item.previewGlosses.join('; ')})</span> : null}
+      {notInVocabYet ? (
+        <div className="btn-row">
+          <AddMissingComponent kaikkiForm={item.kaikkiForm} onAdded={onAdded} />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -80,6 +186,19 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
       cancelled = true;
     };
   }, [wordId]);
+
+  // Re-fetches after a missing component is added to golden_record mid-
+  // review (AddMissingComponent) - a fresh load correctly re-resolves
+  // that candidate to its new word_id, same as a page reload would,
+  // without needing to hand-patch nested proposal state.
+  async function refreshAfterAddingComponent() {
+    try {
+      const result = await getEtymologyReview(wordId);
+      setReview(result);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function submit(input: ApplyEtymologyDecisionInput, successMessage: string) {
     try {
@@ -156,10 +275,24 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
       ) : (
         <ul aria-label="Proposed components">
           {review.componentsProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} />
+            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} />
           ))}
         </ul>
       )}
+
+      {review.etymologyText ? (
+        <div aria-label="Kaikki etymology note" className={review.componentsProposal.length === 0 ? 'warning-banner' : undefined}>
+          {review.componentsProposal.length === 0 ? (
+            <p>
+              <strong>No structured breakdown exists for this word</strong> - Kaikki only has this plaintext
+              etymology note:
+            </p>
+          ) : (
+            <p>Kaikki also has this plaintext etymology note, alongside the structured breakdown above:</p>
+          )}
+          <p><em>{review.etymologyText}</em></p>
+        </div>
+      ) : null}
 
       <h3>Used in (other words that use this one as a component)</h3>
       {review.usedInProposal.length === 0 ? (
@@ -167,7 +300,7 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
       ) : (
         <ul aria-label="Used in proposals">
           {review.usedInProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} />
+            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} />
           ))}
         </ul>
       )}

@@ -248,6 +248,29 @@ describe('AudioRecording', () => {
     expect(list).toHaveTextContent('pending_processing');
   });
 
+  it('lets take 1 be re-recorded - clicking Re-record shows the Stop button, not a stuck Re-record button', async () => {
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+
+    await user.click(screen.getByRole('button', { name: /Record/ }));
+    await user.click(screen.getByRole('button', { name: /Stop/ }));
+    expect(screen.getByRole('button', { name: 'Re-record' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Re-record' }));
+
+    // The bug: take1Blob never cleared, so this stayed on the
+    // already-recorded branch (audio player + Re-record button) forever,
+    // even though a new recording had silently started underneath.
+    expect(screen.getByRole('button', { name: /Stop/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-record' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Stop/ }));
+    expect(screen.getByRole('button', { name: 'Re-record' })).toBeInTheDocument();
+  });
+
   it('shows a microphone error message when getUserMedia rejects', async () => {
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia: vi.fn().mockRejectedValue(new Error('permission denied')) },

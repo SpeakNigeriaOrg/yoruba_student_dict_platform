@@ -31,6 +31,14 @@ export interface ComponentCandidate {
 export interface KaikkiSense {
   pos: string;
   etymologyNumber: string | null;
+  /** Kaikki/Wiktionary's free-text etymology prose - distinct from
+   * componentCandidates (the structured decomposition). A real, sizeable
+   * fraction of entries have only this, no structured template at all -
+   * worth surfacing to a curator even when nothing could be mechanically
+   * decomposed from it. Optional/nullable for the same reason
+   * usedInCandidates is - older fixtures/callers that only need the rest
+   * of the shape don't need to supply it. */
+  etymologyText?: string | null;
   headword: string;
   canonicalForm: CanonicalFormInfo;
   standardForms: string[] | null;

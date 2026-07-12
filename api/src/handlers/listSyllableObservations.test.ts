@@ -41,14 +41,25 @@ async function insertWord(wordId: string, syllables: string[]): Promise<void> {
 }
 
 describe('listSyllableObservations', () => {
+  // Synthetic, NS-prefixed syllable spellings throughout this file -
+  // NOT real Yoruba syllables like plain "kò" - this project's own real
+  // migrated production data (migrateLegacyAudio.mjs's speaker3
+  // recordings) genuinely contains common real syllables, so a real-
+  // looking syllable here would silently pick up unrelated real rows
+  // from a query that is deliberately global/unscoped by design (that's
+  // the whole point of this handler) rather than being namespaced like
+  // every word_id/username elsewhere in this test.
+  const targetSyllable = `${NS}kò`;
+  const differentToneSyllable = `${NS}ko`;
+
   it('finds every recording of one exact tone-marked syllable, across different words, each carrying its own origin', async () => {
     const wordA = `${NS}word_a`;
     const wordB = `${NS}word_b`;
-    // 'kò' appears in wordA at position 1 (repeated syllable within the
-    // same word - "ìkòkò"-style) and in wordB at position 0, from the
-    // same speaker across two separate registrations.
-    await insertWord(wordA, ['ì', 'kò', 'kò']);
-    await insertWord(wordB, ['kò', 'ta']);
+    // targetSyllable appears in wordA at position 1 (repeated syllable
+    // within the same word - "ìkòkò"-style) and in wordB at position 0,
+    // from the same speaker across two separate registrations.
+    await insertWord(wordA, ['ì', targetSyllable, targetSyllable]);
+    await insertWord(wordB, [targetSyllable, 'ta']);
 
     await registerUtterance(
       pool,
@@ -57,7 +68,7 @@ describe('listSyllableObservations', () => {
         takeNumber: 2,
         audioData: Buffer.from('wordA-take2'),
         recordedDisplayText: 'ìkòkò',
-        recordedSyllables: ['ì', 'kò', 'kò'],
+        recordedSyllables: ['ì', targetSyllable, targetSyllable],
         segments: [
           { syllablePosition: 0, startTimeS: 0, endTimeS: 0.2, confidence: 0.9, audioData: Buffer.from('wordA-seg0-i') },
           { syllablePosition: 1, startTimeS: 0.3, endTimeS: 0.5, confidence: 0.9, audioData: Buffer.from('wordA-seg1-ko') },
@@ -74,7 +85,7 @@ describe('listSyllableObservations', () => {
         takeNumber: 2,
         audioData: Buffer.from('wordB-take2'),
         recordedDisplayText: 'kòta',
-        recordedSyllables: ['kò', 'ta'],
+        recordedSyllables: [targetSyllable, 'ta'],
         segments: [
           { syllablePosition: 0, startTimeS: 0, endTimeS: 0.2, confidence: 0.9, audioData: Buffer.from('wordB-seg0-ko') },
           { syllablePosition: 1, startTimeS: 0.3, endTimeS: 0.5, confidence: 0.9, audioData: Buffer.from('wordB-seg1-ta') },
@@ -84,7 +95,7 @@ describe('listSyllableObservations', () => {
       username,
     );
 
-    const results = await listSyllableObservations(pool, 'kò');
+    const results = await listSyllableObservations(pool, targetSyllable);
     // wordA contributes 2 (positions 1 and 2 - the repeated occurrence),
     // wordB contributes 1 (position 0) - 'ta'/'ì' are excluded entirely.
     expect(results).toHaveLength(3);
@@ -104,7 +115,7 @@ describe('listSyllableObservations', () => {
 
   it('excludes a different tone of what is otherwise the same base syllable', async () => {
     const wordId = `${NS}word_c`;
-    await insertWord(wordId, ['ko']);
+    await insertWord(wordId, [differentToneSyllable]);
 
     await registerUtterance(
       pool,
@@ -112,18 +123,18 @@ describe('listSyllableObservations', () => {
         wordId,
         takeNumber: 2,
         audioData: Buffer.from('wordC-take2'),
-        recordedDisplayText: 'ko',
-        recordedSyllables: ['ko'],
+        recordedDisplayText: differentToneSyllable,
+        recordedSyllables: [differentToneSyllable],
         segments: [{ syllablePosition: 0, startTimeS: 0, endTimeS: 0.2, confidence: 0.9, audioData: Buffer.from('wordC-seg0') }],
       },
       userId,
       username,
     );
 
-    expect(await listSyllableObservations(pool, 'kò')).toEqual(
+    expect(await listSyllableObservations(pool, targetSyllable)).toEqual(
       expect.not.arrayContaining([expect.objectContaining({ wordId })]),
     );
-    const plainMatches = await listSyllableObservations(pool, 'ko');
+    const plainMatches = await listSyllableObservations(pool, differentToneSyllable);
     expect(plainMatches.some((r) => r.wordId === wordId)).toBe(true);
   });
 

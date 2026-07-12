@@ -15,6 +15,7 @@ import type { Queryable } from './db.js';
 interface KaikkiSenseRow {
   pos: string | null;
   etymology_number: string | null;
+  etymology_text: string | null;
   headword: string;
   canonical_value: string;
   canonical_inference_method: string;
@@ -31,6 +32,7 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
   return {
     pos: row.pos ?? '',
     etymologyNumber: row.etymology_number,
+    etymologyText: row.etymology_text,
     headword: row.headword,
     canonicalForm: {
       value: row.canonical_value,
@@ -54,7 +56,7 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
 
 export async function loadKaikkiSensesForKey(client: Queryable, orthographyInsensitiveKey: string): Promise<KaikkiSense[]> {
   const { rows } = await client.query<KaikkiSenseRow>(
-    `select s.pos, s.etymology_number, s.headword, s.canonical_value,
+    `select s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
             s.canonical_inference_method, s.canonical_confidence,
             s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
             coalesce(
@@ -85,7 +87,7 @@ export async function loadKaikkiSensesForKey(client: Queryable, orthographyInsen
 export async function loadFullKaikkiLexicon(client: Queryable): Promise<KaikkiLexicon> {
   const { rows } = await client.query<KaikkiSenseRow & { orthography_insensitive_key: string }>(
     `select k.orthography_insensitive_key,
-            s.pos, s.etymology_number, s.headword, s.canonical_value,
+            s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
             s.canonical_inference_method, s.canonical_confidence,
             s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
             coalesce(

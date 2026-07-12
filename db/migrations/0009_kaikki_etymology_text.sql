@@ -1,0 +1,14 @@
+-- Kaikki/Wiktionary's free-text etymology prose, distinct from the
+-- already-ingested structured componentCandidates (parsed from
+-- etymology_templates). Many entries have only one of the two - a real,
+-- substantial fraction (274 of 6,273 Yoruba entries as of this writing)
+-- have plaintext etymology prose with NO structured template at all, so
+-- there's real information here worth surfacing to a curator even when
+-- nothing could be mechanically decomposed from it.
+--
+-- This column was always available in ingest/'s own canonical artifact
+-- (CanonicalEntry.etymologyText) but got dropped in the derivation step
+-- before ever reaching Postgres - this migration + the corresponding
+-- ingest/writeToPostgres.ts change complete that pipeline, no new data
+-- collection needed.
+alter table kaikki_senses add column etymology_text text;

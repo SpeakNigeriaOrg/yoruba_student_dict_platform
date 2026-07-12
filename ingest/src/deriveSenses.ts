@@ -151,6 +151,7 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     entryId: entry.id,
     pos: entry.pos,
     etymologyNumber: entry.etymologyNumber,
+    etymologyText: entry.etymologyText,
     headword: entry.headword,
     canonicalForm: entry.canonicalForm,
     standardForms: deriveStandardForms(entry),

@@ -110,6 +110,14 @@ export interface DerivedKaikkiSense {
   entryId: string;
   pos: string | null;
   etymologyNumber: string | null;
+  /** Kaikki/Wiktionary's free-text etymology prose, straight from the
+   * canonical artifact - distinct from componentCandidates (parsed from
+   * etymologyTemplates). Many entries have only one of the two (see
+   * kaikki-yoruba's own etymologyText/etymologyTemplates fields) - a
+   * plaintext-only entry has real etymological information a curator
+   * should see, even though nothing could be structurally decomposed
+   * from it. */
+  etymologyText: string | null;
   headword: string;
   canonicalForm: CanonicalFormInfo;
   standardForms: string[];
