@@ -1,0 +1,27 @@
+{
+  "assignments": [
+    {
+      "wordId": "fixturegenadmin_word1",
+      "displayText": "epo",
+      "syllables": [
+        "e",
+        "po"
+      ],
+      "definition": "oil",
+      "entryType": null,
+      "assignedAt": "2026-07-21T14:46:47.836Z",
+      "assignedByUsername": "fixturegenadmin_curator",
+      "axisDecided": {
+        "spelling": false,
+        "definition": false,
+        "etymology": false,
+        "audio": false
+      },
+      "reviewStatus": {
+        "spelling": "in_review",
+        "definition": "not_started",
+        "etymology": "not_started"
+      }
+    }
+  ]
+}

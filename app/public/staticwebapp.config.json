@@ -9,7 +9,9 @@
     { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/assignments/me", "allowedRoles": ["authenticated"] },
+    { "route": "/api/assignments", "methods": ["POST"], "allowedRoles": ["curator"] },
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
+    { "route": "/api/users", "allowedRoles": ["curator"] },
 
     { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
     { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["authenticated"] },

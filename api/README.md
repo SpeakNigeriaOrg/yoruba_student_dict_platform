@@ -106,9 +106,21 @@ Implemented:
 - `GET /assignments/me` (`src/functions/assignmentsMe.ts`,
   `src/handlers/listMyAssignments.ts`) - any authenticated user; the
   calling user's assigned word_id batch, joined with `golden_record` for
-  the fields a "my assignments" screen needs. A curator's bulk view over
-  everyone's assignments (`/api/assignments/*` in
-  `staticwebapp.config.json`) isn't implemented yet.
+  the fields a "my assignments" screen needs.
+- `GET /assignments/{userId}`, `POST /assignments`, `DELETE
+  /assignments/{userId}/{wordId}` (`src/functions/assignments.ts`) -
+  curator-only. The bulk admin view: one user's assigned words plus
+  per-axis `reviewStatus` (`not_started`/`in_review`/`passed`, computed at
+  query time from `word_decisions` + `contributions` - see
+  `reviewShared.ts`'s `loadReviewStatusBatch`, no new schema needed),
+  assigning word(s) to a user (`ON CONFLICT DO NOTHING`, since
+  re-submitting an overlapping list is expected, not exceptional), and
+  unassigning one word.
+- `GET /users`, `POST /users` (`src/functions/users.ts`) - curator-only.
+  Every user account plus assigned/in-review/passed summary counts, and
+  pre-registering a user by username ahead of their first login (see
+  `createUser.ts`'s header for why a pre-set `role: 'curator'` isn't
+  durable on its own without an Azure Portal role invite too).
 
 Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`
 - these need a real Azure Storage account to test the SAS-token flow

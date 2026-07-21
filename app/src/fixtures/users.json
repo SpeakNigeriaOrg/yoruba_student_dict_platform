@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "userId": "18b977f2-b500-4298-abe2-f64c38a04f4d",
+      "username": "fixturegenadmin_curator",
+      "displayName": "Fixture Curator",
+      "role": "curator",
+      "assignedWordCount": 0,
+      "inReviewCount": 0,
+      "passedCount": 0
+    },
+    {
+      "userId": "7d2910ba-0aab-43c4-a251-a762ebb563dd",
+      "username": "fixturegenadmin_volunteer",
+      "displayName": "Fixture Volunteer",
+      "role": "volunteer",
+      "assignedWordCount": 1,
+      "inReviewCount": 1,
+      "passedCount": 0
+    }
+  ]
+}

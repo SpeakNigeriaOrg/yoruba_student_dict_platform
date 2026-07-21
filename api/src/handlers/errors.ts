@@ -20,3 +20,34 @@ export class WordIdAlreadyExistsError extends Error {
     this.name = 'WordIdAlreadyExistsError';
   }
 }
+
+export class UserNotFoundError extends Error {
+  constructor(public readonly userId: string) {
+    super(`user '${userId}' not found`);
+    this.name = 'UserNotFoundError';
+  }
+}
+
+export class UsernameAlreadyExistsError extends Error {
+  constructor(public readonly username: string) {
+    super(`username '${username}' already exists`);
+    this.name = 'UsernameAlreadyExistsError';
+  }
+}
+
+export class WordIdsNotFoundError extends Error {
+  constructor(public readonly wordIds: string[]) {
+    super(`word_id(s) not found in golden_record: ${wordIds.join(', ')}`);
+    this.name = 'WordIdsNotFoundError';
+  }
+}
+
+export class AssignmentNotFoundError extends Error {
+  constructor(
+    public readonly userId: string,
+    public readonly wordId: string,
+  ) {
+    super(`no assignment of word '${wordId}' to user '${userId}'`);
+    this.name = 'AssignmentNotFoundError';
+  }
+}

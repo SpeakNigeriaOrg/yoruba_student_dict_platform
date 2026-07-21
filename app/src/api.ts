@@ -51,6 +51,96 @@ export function getMyAssignments(): Promise<AssignmentSummary[]> {
   return fetchJson('/api/assignments/me');
 }
 
+// Mirrors api/src/handlers/listUsers.ts's UserSummary.
+export interface UserSummary {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  role: 'curator' | 'volunteer';
+  assignedWordCount: number;
+  inReviewCount: number;
+  passedCount: number;
+}
+
+export function getUsers(): Promise<UserSummary[]> {
+  return fetchJson<{ users: UserSummary[] }>('/api/users').then((r) => r.users);
+}
+
+// Mirrors api/src/handlers/createUser.ts's CreateUserInput/CreatedUser -
+// pre-registers a user account by username ahead of their first login.
+// See that handler's header comment: role: 'curator' here is only durable
+// if this username is ALSO invited to the curator role via the Azure
+// Static Web Apps portal (Free plan has no custom roles-source function,
+// so auth.ts resyncs role from the SWA principal on every login).
+export interface CreateUserInput {
+  username: string;
+  displayName?: string | null;
+  role: 'curator' | 'volunteer';
+}
+
+export interface CreatedUser {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  role: 'curator' | 'volunteer';
+}
+
+export function createUser(input: CreateUserInput): Promise<CreatedUser> {
+  return fetchJson('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+// Mirrors api/src/reviewShared.ts's ReviewStatus - per-axis
+// not_started/in_review/passed, independent of AxisDecided (which is
+// boolean-only and global-per-decided-axis).
+export interface ReviewStatus {
+  spelling: 'not_started' | 'in_review' | 'passed';
+  definition: 'not_started' | 'in_review' | 'passed';
+  etymology: 'not_started' | 'in_review' | 'passed';
+}
+
+// Mirrors api/src/handlers/listUserAssignments.ts's UserAssignmentSummary.
+export interface UserAssignmentSummary {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  entryType: 'phrase' | null;
+  assignedAt: string;
+  assignedByUsername: string | null;
+  axisDecided: AxisDecided;
+  reviewStatus: ReviewStatus;
+}
+
+export function getUserAssignments(userId: string): Promise<UserAssignmentSummary[]> {
+  return fetchJson<{ assignments: UserAssignmentSummary[] }>(`/api/assignments/${encodeURIComponent(userId)}`).then(
+    (r) => r.assignments,
+  );
+}
+
+// Mirrors api/src/handlers/createAssignments.ts's CreateAssignmentsResult.
+export interface CreateAssignmentsResult {
+  created: string[];
+  alreadyAssigned: string[];
+}
+
+export function assignWords(userId: string, wordIds: string[]): Promise<CreateAssignmentsResult> {
+  return fetchJson('/api/assignments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, wordIds }),
+  });
+}
+
+export function unassignWord(userId: string, wordId: string): Promise<{ userId: string; wordId: string; status: string }> {
+  return fetchJson(`/api/assignments/${encodeURIComponent(userId)}/${encodeURIComponent(wordId)}`, {
+    method: 'DELETE',
+  });
+}
+
 // Mirrors api/src/reviewShared.ts's AxisDecided - whether each of the three
 // decision-driven review axes already has a word_decisions row, plus
 // whether audio has at least one registered recording - shown as

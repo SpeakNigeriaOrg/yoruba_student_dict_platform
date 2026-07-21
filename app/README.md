@@ -65,10 +65,15 @@ logic itself is tested, against mocked (but realistically-shaped) `fetch`
 responses.
 
 Not yet built: spelling/definition axis decision UI (etymology only, for
-now - see the approved plan for why), the contribution-review queue, the
-bulk curator assignment view, and the audio recorder pipeline described
-below (`src/audio/segmentSyllables.ts` is the one piece of that already
-built and tested).
+now - see the approved plan for why), and the audio recorder pipeline
+described below (`src/audio/segmentSyllables.ts` is the one piece of that
+already built and tested).
+
+The bulk curator assignment view is built: `AdminUsers.tsx` (every user
+account plus assigned/in-review/passed counts, and an add-user form) and
+`AdminUserDetail.tsx` (one user's assigned words, per-axis `AxisStatusBadges`
++ `AxisReviewBadges`, assign-more-words via `WordAssignPicker.tsx`, and
+unassign).
 
 **Validated against real recordings**, not just synthetic test tones:
 `yoruba-student-dict/content/incoming/*.mp4` (raw recordings: whole word,

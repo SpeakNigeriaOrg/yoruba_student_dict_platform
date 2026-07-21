@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { AddWord } from './screens/AddWord.js';
+import { AdminUsers } from './screens/AdminUsers.js';
 import { AllWordsList } from './screens/AllWordsList.js';
 import { AssignmentsList } from './screens/AssignmentsList.js';
 import { AudioRecording } from './screens/AudioRecording.js';
@@ -27,12 +28,13 @@ const AXES: Array<{ key: Axis; label: string }> = [
   { key: 'audio', label: 'Audio' },
 ];
 
-type MainView = 'assignments' | 'allWords' | 'addWord' | 'contributions';
+type MainView = 'assignments' | 'allWords' | 'addWord' | 'contributions' | 'adminUsers';
 const MAIN_VIEWS: Array<{ key: MainView; label: string; icon: string }> = [
   { key: 'assignments', label: 'Assignments', icon: '📋' },
   { key: 'allWords', label: 'Browse', icon: '🔍' },
   { key: 'addWord', label: 'Add', icon: '➕' },
   { key: 'contributions', label: 'Review', icon: '✅' },
+  { key: 'adminUsers', label: 'Users', icon: '👥' },
 ];
 
 export default function App() {
@@ -125,6 +127,8 @@ export default function App() {
                 <AddWord />
               ) : mainView === 'contributions' && isCurator ? (
                 <ContributionQueue />
+              ) : mainView === 'adminUsers' && isCurator ? (
+                <AdminUsers onSelectWord={selectWord} />
               ) : (
                 <AssignmentsList onSelect={selectWord} />
               )}

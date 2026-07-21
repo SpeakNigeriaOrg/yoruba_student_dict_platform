@@ -9,6 +9,8 @@ import './functions/decisions.js';
 import './functions/contributions.js';
 import './functions/approveContribution.js';
 import './functions/assignmentsMe.js';
+import './functions/assignments.js';
+import './functions/users.js';
 import './functions/etymologyReview.js';
 import './functions/spellingReview.js';
 import './functions/definitionReview.js';

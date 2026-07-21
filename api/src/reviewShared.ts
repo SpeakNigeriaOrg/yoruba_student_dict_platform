@@ -122,6 +122,65 @@ export async function loadAxisDecidedBatch(
   return result;
 }
 
+export type AxisReviewStatus = 'not_started' | 'in_review' | 'passed';
+
+export interface ReviewStatus {
+  spelling: AxisReviewStatus;
+  definition: AxisReviewStatus;
+  etymology: AxisReviewStatus;
+}
+
+/** Per-axis passed/in_review/not_started for a set of words, scoped to one
+ * user's own pending contributions - same "2 queries total, not N+1" shape
+ * as loadAxisDecidedBatch, for the admin assignment view (listUserAssignments.ts).
+ * 'passed' mirrors word_decisions (global, same as AxisDecided); 'in_review'
+ * is this user's own pending contribution on that axis - contributions has
+ * no FK to assignments, so this is scoped by submitted_by, not by
+ * assignment row (the best available signal given the current schema). */
+export async function loadReviewStatusBatch(
+  client: Queryable,
+  wordIds: string[],
+  userId: string,
+): Promise<Map<string, ReviewStatus>> {
+  const [decisionRows, pendingRows] = await Promise.all([
+    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
+      'select word_id, axis from word_decisions where word_id = any($1)',
+      [wordIds],
+    ),
+    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
+      `select word_id, axis from contributions
+       where status = 'pending' and submitted_by = $1 and word_id = any($2)
+         and axis in ('spelling', 'definition', 'etymology')`,
+      [userId, wordIds],
+    ),
+  ]);
+  const passedByWord = new Map<string, Set<string>>();
+  for (const row of decisionRows.rows) {
+    const existing = passedByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else passedByWord.set(row.word_id, new Set([row.axis]));
+  }
+  const pendingByWord = new Map<string, Set<string>>();
+  for (const row of pendingRows.rows) {
+    const existing = pendingByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else pendingByWord.set(row.word_id, new Set([row.axis]));
+  }
+
+  const axes = ['spelling', 'definition', 'etymology'] as const;
+  const result = new Map<string, ReviewStatus>();
+  for (const wordId of wordIds) {
+    const passed = passedByWord.get(wordId) ?? new Set<string>();
+    const pending = pendingByWord.get(wordId) ?? new Set<string>();
+    const entry = {} as ReviewStatus;
+    for (const axis of axes) {
+      entry[axis] = passed.has(axis) ? 'passed' : pending.has(axis) ? 'in_review' : 'not_started';
+    }
+    result.set(wordId, entry);
+  }
+  return result;
+}
+
 export async function loadDefinition(client: Queryable, wordId: string): Promise<string | null> {
   const result = await client.query<{ definition: string | null }>(
     'select definition from golden_record where word_id = $1',
