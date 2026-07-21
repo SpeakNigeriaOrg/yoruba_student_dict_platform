@@ -27,7 +27,7 @@ describe('AdminUserDetail', () => {
   });
 
   it("assigning via the paste-textarea calls assignWords with the parsed word_id list and shows created/alreadyAssigned counts", async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         return Promise.resolve({ ok: true, json: async () => ({ created: ['wordA', 'wordB'], alreadyAssigned: ['wordC'] }) });
       }
@@ -57,7 +57,7 @@ describe('AdminUserDetail', () => {
   });
 
   it('clicking Unassign calls the delete endpoint and reloads the list', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') {
         return Promise.resolve({
           ok: true,
