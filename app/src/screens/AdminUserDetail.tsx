@@ -8,7 +8,14 @@
 // (WordAssignPicker).
 
 import { useEffect, useState } from 'react';
-import { assignWords, getUserAssignments, unassignWord, type UserAssignmentSummary } from '../api.js';
+import {
+  assignWords,
+  assignWordsByScope,
+  getUserAssignments,
+  unassignWord,
+  type AssignmentScope,
+  type UserAssignmentSummary,
+} from '../api.js';
 import { AxisStatusBadges } from './AxisStatusBadges.js';
 import { AxisReviewBadges } from './AxisReviewBadges.js';
 import { WordAssignPicker } from './WordAssignPicker.js';
@@ -35,9 +42,9 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
 
   useEffect(reload, [userId]);
 
-  async function handleAssign(wordIds: string[]) {
+  async function runAssign(assign: () => Promise<{ created: string[]; alreadyAssigned: string[] }>) {
     try {
-      const result = await assignWords(userId, wordIds);
+      const result = await assign();
       setStatus(
         `Assigned ${result.created.length} word(s).` +
           (result.alreadyAssigned.length > 0 ? ` (${result.alreadyAssigned.length} were already assigned.)` : ''),
@@ -47,6 +54,14 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  function handleAssign(wordIds: string[]) {
+    return runAssign(() => assignWords(userId, wordIds));
+  }
+
+  function handleAssignScope(scope: AssignmentScope) {
+    return runAssign(() => assignWordsByScope(userId, scope));
   }
 
   async function handleUnassign(wordId: string) {
@@ -66,7 +81,7 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
         ← Back
       </button>
 
-      <WordAssignPicker onAssign={handleAssign} />
+      <WordAssignPicker onAssign={handleAssign} onAssignScope={handleAssignScope} />
 
       {error ? <p role="alert" className="error-banner">Couldn't load assignments: {error}</p> : null}
       {!assignments ? (

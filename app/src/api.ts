@@ -135,6 +135,19 @@ export function assignWords(userId: string, wordIds: string[]): Promise<CreateAs
   });
 }
 
+// Mirrors api/src/handlers/createAssignments.ts's AssignmentScope: the
+// server resolves the word list so it can't go stale between the curator
+// loading a list and pressing the button.
+export type AssignmentScope = 'all' | 'incomplete';
+
+export function assignWordsByScope(userId: string, scope: AssignmentScope): Promise<CreateAssignmentsResult> {
+  return fetchJson('/api/assignments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, scope }),
+  });
+}
+
 export function unassignWord(userId: string, wordId: string): Promise<{ userId: string; wordId: string; status: string }> {
   return fetchJson(`/api/assignments/${encodeURIComponent(userId)}/${encodeURIComponent(wordId)}`, {
     method: 'DELETE',

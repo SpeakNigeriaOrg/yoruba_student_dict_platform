@@ -10,6 +10,12 @@ let curatorId: string;
 let volunteerId: string;
 
 beforeAll(async () => {
+  // Speakers aren't covered by cleanUpTestData and hold FKs to users, so
+  // they (and their utterances) are cleared explicitly first.
+  await pool.query('delete from utterances where speaker_id in (select speaker_id from speakers where display_name like $1)', [
+    `${NS}%`,
+  ]);
+  await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
 
   const curator = await pool.query<{ user_id: string }>(
@@ -34,6 +40,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Speakers aren't covered by cleanUpTestData and hold FKs to users, so
+  // they (and their utterances) are cleared explicitly first.
+  await pool.query('delete from utterances where speaker_id in (select speaker_id from speakers where display_name like $1)', [
+    `${NS}%`,
+  ]);
+  await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
   await pool.end();
 });
@@ -64,6 +76,58 @@ describe('createAssignments', () => {
     await expect(
       createAssignments(pool, { userId: volunteerId, wordIds: [`${NS}word1`, `${NS}nonexistent`] }, curatorId),
     ).rejects.toBeInstanceOf(WordIdsNotFoundError);
+  });
+
+  it("scope 'all' assigns every golden_record word without naming any of them", async () => {
+    const other = await pool.query<{ user_id: string }>(
+      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      [`${NS}scopeall`, 'Scope All Volunteer'],
+    );
+    const result = await createAssignments(pool, { userId: other.rows[0].user_id, scope: 'all' }, curatorId);
+    // Only asserts our own namespaced words are all present - other test
+    // files' golden_record rows may come and go concurrently, so an exact
+    // whole-table count would be flaky.
+    const assigned = new Set([...result.created, ...result.alreadyAssigned]);
+    for (const w of [`${NS}word1`, `${NS}word2`, `${NS}word3`]) expect(assigned.has(w)).toBe(true);
+  });
+
+  it("scope 'incomplete' skips words with all four layers done and includes the rest", async () => {
+    const other = await pool.query<{ user_id: string }>(
+      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      [`${NS}scopeinc`, 'Scope Incomplete Volunteer'],
+    );
+    const otherId = other.rows[0].user_id;
+
+    // word1 gets all three curator decisions plus a recording BY THIS USER -
+    // the only fully-complete-for-them word.
+    for (const axis of ['spelling', 'definition', 'etymology']) {
+      await pool.query(
+        "insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, '{}'::jsonb, $3) on conflict do nothing",
+        [`${NS}word1`, axis, curatorId],
+      );
+    }
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (user_id, display_name) values ($1, $2) returning speaker_id',
+      [otherId, `${NS}speaker`],
+    );
+    await pool.query('insert into utterances (word_id, speaker_id, blob_path) values ($1, $2, $3)', [
+      `${NS}word1`,
+      speaker.rows[0].speaker_id,
+      `utterances/${NS}word1.wav`,
+    ]);
+    // word2 has the decisions but no recording by this user - still incomplete.
+    for (const axis of ['spelling', 'definition', 'etymology']) {
+      await pool.query(
+        "insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, '{}'::jsonb, $3) on conflict do nothing",
+        [`${NS}word2`, axis, curatorId],
+      );
+    }
+
+    const result = await createAssignments(pool, { userId: otherId, scope: 'incomplete' }, curatorId);
+    const assigned = new Set([...result.created, ...result.alreadyAssigned]);
+    expect(assigned.has(`${NS}word1`)).toBe(false);
+    expect(assigned.has(`${NS}word2`)).toBe(true);
+    expect(assigned.has(`${NS}word3`)).toBe(true);
   });
 
   it('throws UserNotFoundError for an unknown user id', async () => {

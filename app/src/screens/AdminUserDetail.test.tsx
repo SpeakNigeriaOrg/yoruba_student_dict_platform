@@ -56,6 +56,55 @@ describe('AdminUserDetail', () => {
     });
   });
 
+  it('posts a scope instead of a word list when assigning all incomplete words, after a confirm step', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ created: ['wordA'], alreadyAssigned: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => userAssignmentsFixture });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
+    await waitFor(() => screen.getByText('epo'));
+
+    await user.click(screen.getByRole('button', { name: 'Assign all incomplete words' }));
+    // Arming alone must not post - the confirm click is what submits.
+    expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === 'POST')).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: /Yes, assign all incomplete words/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Assigned 1 word(s).');
+    });
+    const postCall = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'POST');
+    expect(JSON.parse((postCall?.[1] as RequestInit).body as string)).toEqual({ userId: 'u1', scope: 'incomplete' });
+  });
+
+  it('posts scope "all" for the assign-all-words shortcut', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ created: ['wordA'], alreadyAssigned: ['wordB'] }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => userAssignmentsFixture });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
+    await waitFor(() => screen.getByText('epo'));
+
+    await user.click(screen.getByRole('button', { name: 'Assign all words' }));
+    await user.click(screen.getByRole('button', { name: /Yes, assign all words/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Assigned 1 word(s). (1 were already assigned.)');
+    });
+    const postCall = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'POST');
+    expect(JSON.parse((postCall?.[1] as RequestInit).body as string)).toEqual({ userId: 'u1', scope: 'all' });
+  });
+
   it('clicking Unassign calls the delete endpoint and reloads the list', async () => {
     const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') {

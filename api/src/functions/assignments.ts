@@ -3,7 +3,8 @@
 // Curator-only admin assignment management, separate from
 // assignmentsMe.ts's own read-only "my assignments" self-view:
 //   GET    /api/assignments/{userId}          - one user's assigned words + status
-//   POST   /api/assignments                   - assign word(s) to a user (single or bulk)
+//   POST   /api/assignments                   - assign word(s) to a user
+//                                                (explicit wordIds, or scope: 'all' | 'incomplete')
 //   DELETE /api/assignments/{userId}/{wordId}  - unassign one word from a user
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
@@ -43,6 +44,13 @@ function parseCreateAssignmentsInput(body: unknown): CreateAssignmentsInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
   const b = body as Record<string, unknown>;
   if (typeof b.userId !== 'string' || !b.userId) throw new Error('userId is required');
+  // Either an explicit word list or a server-resolved scope, never both -
+  // accepting both would leave it ambiguous which one wins.
+  if (b.scope !== undefined) {
+    if (b.wordIds !== undefined) throw new Error('provide either wordIds or scope, not both');
+    if (b.scope !== 'all' && b.scope !== 'incomplete') throw new Error("scope must be 'all' or 'incomplete'");
+    return { userId: b.userId, scope: b.scope };
+  }
   if (!Array.isArray(b.wordIds) || b.wordIds.length === 0 || !b.wordIds.every((w) => typeof w === 'string')) {
     throw new Error('wordIds must be a non-empty array of strings');
   }

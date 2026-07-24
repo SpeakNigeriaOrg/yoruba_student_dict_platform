@@ -9,19 +9,33 @@
 // Kept as its own component rather than extending SearchBox itself, which
 // is already reused 3 times with a single-shot onSelect contract that
 // shouldn't have to change for this one caller's needs.
+//
+// Alongside those, two whole-vocabulary shortcuts (all words / all words
+// still missing a verification layer). They don't go through `pending`:
+// the server resolves the word set at submit time, so the curator can't
+// act on a list that went stale, and the UI never has to hold thousands
+// of chips. Both are two-step (click, then confirm) since there's no
+// bulk unassign to walk them back.
 
 import { useState } from 'react';
-import { searchVocab } from '../api.js';
+import { searchVocab, type AssignmentScope } from '../api.js';
 import { SearchBox } from './SearchBox.js';
 
 export interface WordAssignPickerProps {
   onAssign: (wordIds: string[]) => Promise<void>;
+  onAssignScope: (scope: AssignmentScope) => Promise<void>;
 }
 
-export function WordAssignPicker({ onAssign }: WordAssignPickerProps) {
+const SCOPE_LABELS: Record<AssignmentScope, string> = {
+  all: 'all words',
+  incomplete: 'all incomplete words',
+};
+
+export function WordAssignPicker({ onAssign, onAssignScope }: WordAssignPickerProps) {
   const [pending, setPending] = useState<string[]>([]);
   const [pasteText, setPasteText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [armedScope, setArmedScope] = useState<AssignmentScope | null>(null);
 
   function addWordId(wordId: string) {
     setPending((prev) => (prev.includes(wordId) ? prev : [...prev, wordId]));
@@ -47,6 +61,16 @@ export function WordAssignPicker({ onAssign }: WordAssignPickerProps) {
     try {
       await onAssign(pending);
       setPending([]);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAssignScope(scope: AssignmentScope) {
+    setSubmitting(true);
+    try {
+      await onAssignScope(scope);
+      setArmedScope(null);
     } finally {
       setSubmitting(false);
     }
@@ -91,6 +115,40 @@ export function WordAssignPicker({ onAssign }: WordAssignPickerProps) {
           </div>
         </div>
       ) : null}
+      <div className="field">
+        {armedScope ? (
+          <>
+            <p role="alert">Assign {SCOPE_LABELS[armedScope]} to this user? Words already assigned are left as they are.</p>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleAssignScope(armedScope)}
+                disabled={submitting}
+              >
+                {submitting ? 'Assigning...' : `Yes, assign ${SCOPE_LABELS[armedScope]}`}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setArmedScope(null)} disabled={submitting}>
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="btn-row">
+            <button type="button" className="btn btn-secondary" onClick={() => setArmedScope('all')} disabled={submitting}>
+              Assign all words
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setArmedScope('incomplete')}
+              disabled={submitting}
+            >
+              Assign all incomplete words
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
