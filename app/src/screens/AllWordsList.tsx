@@ -19,8 +19,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
   const [words, setWords] = useState<AllWordsListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [textFilter, setTextFilter] = useState('');
-  const [hideSpellingDecided, setHideSpellingDecided] = useState(false);
-  const [hideDefinitionDecided, setHideDefinitionDecided] = useState(false);
+  const [hideEntryDecided, setHideEntryDecided] = useState(false);
   const [hideEtymologyDecided, setHideEtymologyDecided] = useState(false);
 
   useEffect(() => {
@@ -36,8 +35,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
     if (textFilter && !w.displayText.toLowerCase().includes(textFilter.toLowerCase()) && !w.wordId.includes(textFilter)) {
       return false;
     }
-    if (hideSpellingDecided && w.axisDecided.spelling) return false;
-    if (hideDefinitionDecided && w.axisDecided.definition) return false;
+    if (hideEntryDecided && w.axisDecided.entry) return false;
     if (hideEtymologyDecided && w.axisDecided.etymology) return false;
     return true;
   });
@@ -55,12 +53,8 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       </div>
       <div aria-label="Hide decided filters">
         <label className="field-inline">
-          <input type="checkbox" checked={hideSpellingDecided} onChange={(e) => setHideSpellingDecided(e.target.checked)} />
-          Hide spelling-decided
-        </label>
-        <label className="field-inline">
-          <input type="checkbox" checked={hideDefinitionDecided} onChange={(e) => setHideDefinitionDecided(e.target.checked)} />
-          Hide definition-decided
+          <input type="checkbox" checked={hideEntryDecided} onChange={(e) => setHideEntryDecided(e.target.checked)} />
+          Hide entry-decided
         </label>
         <label className="field-inline">
           <input type="checkbox" checked={hideEtymologyDecided} onChange={(e) => setHideEtymologyDecided(e.target.checked)} />
@@ -73,8 +67,7 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       ) : (
         <ul aria-label="All words" className="card-list">
           {filtered.map((w) => {
-            const allDecided =
-              w.axisDecided.spelling && w.axisDecided.definition && w.axisDecided.etymology && w.axisDecided.audio;
+            const allDecided = w.axisDecided.entry && w.axisDecided.etymology && w.axisDecided.audio;
             return (
               <li key={w.wordId} className={`card-row${allDecided ? ' decided' : ''}`}>
                 <button type="button" className="row-title" onClick={() => onSelect(w.wordId)}>

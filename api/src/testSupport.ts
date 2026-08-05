@@ -5,14 +5,36 @@
 // used everywhere else in this repo) rather than mocking pg. Not imported
 // by any non-test code.
 //
-// Vitest runs test files concurrently by default, and they all share this
-// one real database - so cleanup is scoped by a per-FILE namespace prefix
-// (e.g. "testcw_" for createWord.test.ts), not a single global pattern.
-// Two files racing to clean up the SAME broad pattern is exactly what
-// caused real cross-file test failures the first time this was written
-// with one shared "test_" prefix for everything.
+// All test files share this one real database, so cleanup is scoped by a
+// per-FILE namespace prefix (e.g. "testcw_" for createWord.test.ts), not a
+// single global pattern. Two files racing to clean up the SAME broad
+// pattern is exactly what caused real cross-file test failures the first
+// time this was written with one shared "test_" prefix for everything.
+//
+// Two things make that scoping actually hold, both learned the hard way:
+//
+//   1. The namespace is escaped for LIKE below. Every namespace here ends
+//      in '_', which is LIKE's single-character WILDCARD - so an unescaped
+//      "testlu_%" (listUsers.test.ts) also matches "testlua_word1"
+//      (listUserAssignments.test.ts), and one file silently deleted the
+//      other's rows mid-run. That produced exactly the intermittent
+//      cross-file failures the namespace scheme was introduced to prevent.
+//
+//   2. vitest.config.ts sets fileParallelism: false. Namespacing keeps
+//      files from deleting each other's rows, but it cannot make
+//      whole-table operations safe: createAssignments' scope: 'all' reads
+//      every golden_record row and then inserts assignments referencing
+//      them, so a concurrent file dropping one of its own words between
+//      those two statements breaks the FK. One shared mutable database
+//      means one test file at a time.
 
 import pg from 'pg';
+
+/** Escapes LIKE's wildcards (% and _) so a namespace prefix matches
+ * literally. See note 1 above - this is not cosmetic. */
+function likePrefix(namespace: string): string {
+  return `${namespace.replace(/([%_\\])/g, '\\$1')}%`;
+}
 
 export function getTestPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
@@ -38,22 +60,39 @@ export function getTestPool(): pg.Pool {
  *      ON DELETE CASCADE never reaches it, and contributions.submitted_by
  *      has no ON DELETE CASCADE either, so an orphaned row here blocks
  *      step 4 from deleting the user that submitted it.
- *   3. golden_record itself - cascades word_decisions/assignments/
+ *   3. assignments, explicitly, matched by word_id OR by user_id/assigned_by
+ *      belonging to a namespaced user - assigned_by has no ON DELETE
+ *      CASCADE (only user_id does), so an assignment this namespace's
+ *      curator made against a word OUTSIDE the namespace survives step 4's
+ *      golden_record delete and then blocks step 5 on
+ *      assignments_assigned_by_fkey. That is not hypothetical: the
+ *      scope: 'all' path assigns every row in golden_record, so any word
+ *      this test file didn't create - a real dev vocabulary, another
+ *      namespace's leftovers - lands here. Without this step
+ *      createAssignments.test.ts passes only against an empty database.
+ *   4. golden_record itself - cascades word_decisions/assignments/
  *      utterances/its own components rows and any now-empty contributions
  *      reference.
- *   4. users. */
+ *   5. users. */
 export async function cleanUpTestData(pool: pg.Pool, namespace: string): Promise<void> {
-  const wordPattern = `${namespace}%`;
-  const usernamePattern = `${namespace}%`;
+  const wordPattern = likePrefix(namespace);
+  const usernamePattern = likePrefix(namespace);
 
   await pool.query('delete from golden_record_components where word_id like $1 or component_word_id like $1', [wordPattern]);
   await pool.query(
     `delete from contributions
      where word_id like $1
-        or submitted_by in (select user_id from users where username like $2)
-        or reviewed_by in (select user_id from users where username like $2)`,
+        or submitted_by in (select user_id from users where email like $2)
+        or reviewed_by in (select user_id from users where email like $2)`,
+    [wordPattern, usernamePattern],
+  );
+  await pool.query(
+    `delete from assignments
+     where word_id like $1
+        or user_id in (select user_id from users where email like $2)
+        or assigned_by in (select user_id from users where email like $2)`,
     [wordPattern, usernamePattern],
   );
   await pool.query('delete from golden_record where word_id like $1', [wordPattern]);
-  await pool.query('delete from users where username like $1', [usernamePattern]);
+  await pool.query('delete from users where email like $1', [usernamePattern]);
 }

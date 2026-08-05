@@ -54,7 +54,7 @@ export function getMyAssignments(): Promise<AssignmentSummary[]> {
 // Mirrors api/src/handlers/listUsers.ts's UserSummary.
 export interface UserSummary {
   userId: string;
-  username: string;
+  email: string;
   displayName: string | null;
   role: 'curator' | 'volunteer';
   assignedWordCount: number;
@@ -67,20 +67,22 @@ export function getUsers(): Promise<UserSummary[]> {
 }
 
 // Mirrors api/src/handlers/createUser.ts's CreateUserInput/CreatedUser -
-// pre-registers a user account by username ahead of their first login.
-// See that handler's header comment: role: 'curator' here is only durable
-// if this username is ALSO invited to the curator role via the Azure
-// Static Web Apps portal (Free plan has no custom roles-source function,
-// so auth.ts resyncs role from the SWA principal on every login).
+// registers a user account by Google email ahead of their first login. This is
+// the access gate: an unregistered address can authenticate with Google and
+// still be granted no roles, so it can reach nothing.
+//
+// The old caveat here (that a 'curator' role also needed an Azure Static Web
+// Apps portal invite to survive first login) is gone - the SWA is on Standard
+// and the roles-source function reads users.role.
 export interface CreateUserInput {
-  username: string;
+  email: string;
   displayName?: string | null;
   role: 'curator' | 'volunteer';
 }
 
 export interface CreatedUser {
   userId: string;
-  username: string;
+  email: string;
   displayName: string | null;
   role: 'curator' | 'volunteer';
 }
@@ -93,12 +95,25 @@ export function createUser(input: CreateUserInput): Promise<CreatedUser> {
   });
 }
 
+// Mirrors api/src/handlers/updateUserRole.ts. Role management lives here now
+// rather than in the Azure Portal - that only became possible on the Standard
+// plan, where a roles-source function can read users.role.
+//
+// Takes effect on the user's NEXT LOGIN, because SWA caches roles into the
+// session token; server-side curator checks re-read the database immediately.
+export function updateUserRole(userId: string, role: 'curator' | 'volunteer'): Promise<CreatedUser> {
+  return fetchJson(`/api/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+}
+
 // Mirrors api/src/reviewShared.ts's ReviewStatus - per-axis
 // not_started/in_review/passed, independent of AxisDecided (which is
 // boolean-only and global-per-decided-axis).
 export interface ReviewStatus {
-  spelling: 'not_started' | 'in_review' | 'passed';
-  definition: 'not_started' | 'in_review' | 'passed';
+  entry: 'not_started' | 'in_review' | 'passed';
   etymology: 'not_started' | 'in_review' | 'passed';
 }
 
@@ -110,7 +125,7 @@ export interface UserAssignmentSummary {
   definition: string | null;
   entryType: 'phrase' | null;
   assignedAt: string;
-  assignedByUsername: string | null;
+  assignedByEmail: string | null;
   axisDecided: AxisDecided;
   reviewStatus: ReviewStatus;
 }
@@ -154,13 +169,16 @@ export function unassignWord(userId: string, wordId: string): Promise<{ userId: 
   });
 }
 
-// Mirrors api/src/reviewShared.ts's AxisDecided - whether each of the three
+// Mirrors api/src/reviewShared.ts's AxisDecided - whether each of the two
 // decision-driven review axes already has a word_decisions row, plus
 // whether audio has at least one registered recording - shown as
 // read-only context on every review screen.
+//
+// 'entry' covers a word's written form AND its meaning together; they were
+// separate 'spelling'/'definition' axes until db/migrations/
+// 0011_merge_entry_axis.sql merged them.
 export interface AxisDecided {
-  spelling: boolean;
-  definition: boolean;
+  entry: boolean;
   etymology: boolean;
   audio: boolean;
 }
@@ -206,57 +224,38 @@ export function postEtymologyDecision(wordId: string, input: ApplyEtymologyDecis
   });
 }
 
-// Mirrors api/src/handlers/getSpellingReview.ts's SpellingReviewResult.
-export interface SpellingReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult {
+// Mirrors api/src/handlers/getEntryReview.ts's EntryReviewResult - the
+// written-form fields (DiagnoseEntryResult + CheckSyllableSplitResult) and
+// the meaning fields (CheckDefinitionResult) arrive in ONE response, because
+// they are reviewed as one task.
+export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
   syllables: string[];
-  definition: string | null;
   axisDecided: AxisDecided;
 }
 
-export function getSpellingReview(wordId: string): Promise<SpellingReviewResult> {
-  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/spelling`);
+export function getEntryReview(wordId: string): Promise<EntryReviewResult> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/entry`);
 }
 
-// Mirrors api/src/handlers/applySpellingDecision.ts's ApplySpellingDecisionInput.
-export interface ApplySpellingDecisionInput {
+// Mirrors api/src/handlers/applyEntryDecision.ts's ApplyEntryDecisionInput.
+// The server REQUIRES both `action` and `definitionAction` - an entry
+// decision covers spelling and meaning together or not at all. They are
+// optional here only so the screen can hold a partly-filled draft before the
+// user commits it.
+export interface ApplyEntryDecisionInput {
   action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki';
   candidateForm?: string;
   newDisplayText?: string;
   syllableAction?: 'keep_manual' | 'accept_programmatic';
   syllableNote?: string;
-  note?: string;
-}
-
-export function postSpellingDecision(wordId: string, input: ApplySpellingDecisionInput): Promise<void> {
-  return fetchJson(`/api/decisions/spelling`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wordId, ...input }),
-  });
-}
-
-// Mirrors api/src/handlers/getDefinitionReview.ts's DefinitionReviewResult.
-export interface DefinitionReviewResult extends CheckDefinitionResult {
-  wordId: string;
-  displayText: string;
-  syllables: string[];
-  axisDecided: AxisDecided;
-}
-
-export function getDefinitionReview(wordId: string): Promise<DefinitionReviewResult> {
-  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/definition`);
-}
-
-// Mirrors api/src/handlers/applyDefinitionDecision.ts's ApplyDefinitionDecisionInput.
-export interface ApplyDefinitionDecisionInput {
-  definitionAction: 'confirm' | 'custom';
+  definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
   definitionSourceForm?: string;
   note?: string;
 }
 
-export function postDefinitionDecision(wordId: string, input: ApplyDefinitionDecisionInput): Promise<void> {
-  return fetchJson(`/api/decisions/definition`, {
+export function postEntryDecision(wordId: string, input: ApplyEntryDecisionInput): Promise<void> {
+  return fetchJson(`/api/decisions/entry`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wordId, ...input }),
@@ -339,19 +338,11 @@ export function createPhrase(input: CreatePhraseInput): Promise<{ wordId: string
 // a volunteer's (or curator's) proposed decision, applied only once a
 // curator approves it. Same flat per-axis field shape as the direct
 // decision endpoints (POST /api/decisions/{axis}), plus axis + wordId.
-export function submitSpellingContribution(wordId: string, input: ApplySpellingDecisionInput): Promise<{ contributionId: string }> {
+export function submitEntryContribution(wordId: string, input: ApplyEntryDecisionInput): Promise<{ contributionId: string }> {
   return fetchJson('/api/contributions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ axis: 'spelling', wordId, ...input }),
-  });
-}
-
-export function submitDefinitionContribution(wordId: string, input: ApplyDefinitionDecisionInput): Promise<{ contributionId: string }> {
-  return fetchJson('/api/contributions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ axis: 'definition', wordId, ...input }),
+    body: JSON.stringify({ axis: 'entry', wordId, ...input }),
   });
 }
 
@@ -368,7 +359,9 @@ export interface ContributionListItem {
   contributionId: string;
   wordId: string | null;
   wordDisplayText: string | null;
-  axis: 'spelling' | 'definition' | 'etymology' | 'new_entry';
+  /** 'spelling'/'definition' only appear on pre-merge rows a curator already
+   * reviewed - see api/src/handlers/listContributions.ts. */
+  axis: 'entry' | 'etymology' | 'new_entry' | 'spelling' | 'definition';
   proposedValue: unknown;
   note: string | null;
   submittedBy: string;

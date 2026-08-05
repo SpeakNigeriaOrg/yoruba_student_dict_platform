@@ -12,19 +12,19 @@ beforeAll(async () => {
   await cleanUpTestData(pool, NS);
 
   const curator = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
     [`${NS}curator`, 'Test Curator'],
   );
   curatorId = curator.rows[0].user_id;
 
   const volunteer = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}volunteer`, 'Test Volunteer'],
   );
   volunteerId = volunteer.rows[0].user_id;
 
   const idle = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}idle`, 'Idle Volunteer'],
   );
   idleUserId = idle.rows[0].user_id;
@@ -41,15 +41,15 @@ beforeAll(async () => {
     `${NS}word2`,
   ]);
 
-  // word1: one pending contribution on 'spelling' -> in review, not passed.
+  // word1: one pending contribution on 'entry' -> in review, not passed.
   await pool.query(
     `insert into contributions (word_id, axis, proposed_value, submitted_by, status)
-     values ($1, 'spelling', '{}', $2, 'pending')`,
+     values ($1, 'entry', '{}', $2, 'pending')`,
     [`${NS}word1`, volunteerId],
   );
 
-  // word2: all 3 axes decided -> passed.
-  for (const axis of ['spelling', 'definition', 'etymology']) {
+  // word2: both decision axes decided -> passed.
+  for (const axis of ['entry', 'etymology']) {
     await pool.query('insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, $3, $4)', [
       `${NS}word2`,
       axis,
@@ -67,15 +67,15 @@ afterAll(async () => {
 describe('listUsers', () => {
   it('returns every user, including one with zero assignments', async () => {
     const users = await listUsers(pool);
-    const usernames = users.filter((u) => u.username.startsWith(NS)).map((u) => u.username);
-    expect(usernames.sort()).toEqual([`${NS}curator`, `${NS}idle`, `${NS}volunteer`].sort());
+    const emails = users.filter((u) => u.email.startsWith(NS)).map((u) => u.email);
+    expect(emails.sort()).toEqual([`${NS}curator`, `${NS}idle`, `${NS}volunteer`].sort());
   });
 
   it('computes assigned/inReview/passed counts per user from word_decisions and contributions', async () => {
     const users = await listUsers(pool);
     const volunteer = users.find((u) => u.userId === volunteerId)!;
     expect(volunteer).toMatchObject({
-      username: `${NS}volunteer`,
+      email: `${NS}volunteer`,
       role: 'volunteer',
       assignedWordCount: 2,
       inReviewCount: 1,

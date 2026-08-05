@@ -12,13 +12,13 @@ beforeAll(async () => {
   await cleanUpTestData(pool, NS);
 
   const curator = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
     [`${NS}curator`, 'Test Curator'],
   );
   curatorId = curator.rows[0].user_id;
 
   const volunteer = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}volunteer`, 'Test Volunteer'],
   );
   volunteerId = volunteer.rows[0].user_id;
@@ -30,12 +30,12 @@ beforeAll(async () => {
   await pool.query('insert into assignments (word_id, user_id) values ($1, $2)', [`${NS}word1`, volunteerId]);
   await pool.query(
     `insert into contributions (word_id, axis, proposed_value, submitted_by, status)
-     values ($1, 'spelling', '{}', $2, 'pending')`,
+     values ($1, 'entry', '{}', $2, 'pending')`,
     [`${NS}word1`, volunteerId],
   );
   await pool.query('insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, $3, $4)', [
     `${NS}word1`,
-    'definition',
+    'entry',
     '{}',
     curatorId,
   ]);

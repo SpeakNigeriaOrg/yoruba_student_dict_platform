@@ -33,6 +33,9 @@ html,
 body {
   margin: 0;
   padding: 0;
+  /* The page itself must never scroll sideways; anything genuinely wide gets
+     its own scroll container instead. */
+  overflow-x: hidden;
 }
 
 body {
@@ -51,7 +54,48 @@ textarea {
 main {
   max-width: 640px;
   margin: 0 auto;
-  padding: 16px 16px calc(var(--nav-height) + 24px);
+  /* The bottom nav is fixed and now stays visible on review screens too, so
+     this reserve is always correct - it previously reserved height on exactly
+     the screens where the nav was hidden. env() needs viewport-fit=cover in
+     index.html to be non-zero. */
+  padding: 16px 16px calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 24px);
+}
+
+/* Baseline element styling. There was none at all, so 13 <h3>s and every
+   <p>/<ul> rendered at browser defaults - which on a phone means oversized
+   headings and ~40px of list indent before any content. */
+h2 {
+  font-size: 1.35rem;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+h3 {
+  font-size: 0.95rem;
+  line-height: 1.3;
+  margin: 18px 0 8px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+p {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+li {
+  margin-bottom: 6px;
+  line-height: 1.45;
+}
+/* A native player wants 250-300px; unconstrained it overflows a 360px screen
+   once any list indent is in front of it. */
+audio {
+  width: 100%;
+  max-width: 100%;
+  margin: 6px 0;
+  display: block;
 }
 
 /* ---- Header ---- */
@@ -61,6 +105,16 @@ main {
   color: #fff;
   padding: 16px;
   margin: -16px -16px 16px;
+  /* Sticky so the identity line and log-out stay reachable while working
+     down a long review screen. */
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+}
+.topbar h2,
+.topbar h3 {
+  color: inherit;
 }
 .topbar h1 {
   font-size: 1.05rem;
@@ -132,6 +186,11 @@ main {
 .axis-tabs button {
   position: relative;
   flex: 1;
+  /* min-width: 0 lets a flex item actually shrink below its content width;
+     without it the label plus its 7px status dot overflows the track at
+     360px. The merge from four axes to three bought most of the headroom
+     back, but the ellipsis is the guarantee. */
+  min-width: 0;
   border: none;
   background: transparent;
   color: var(--ink-soft);
@@ -140,6 +199,9 @@ main {
   min-height: 44px;
   border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .axis-tabs button[aria-current='page'] {
   background: var(--card-bg);
@@ -249,6 +311,38 @@ main {
   color: var(--ink-soft);
 }
 
+/* Chip row - wraps rather than overflowing on a narrow screen, and gaps the
+   badges without relying on {' '} text nodes between them. */
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---- Utilities ---- */
+
+/* Replaces four copies of an inline {listStyle:'none',margin:0,padding:0}
+   object (SearchBox, AddWord, WordAssignPicker, EtymologyReview). */
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Visible to screen readers only - for context the layout conveys visually
+   (e.g. which axis tab is open) but that has no accessible equivalent. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---- Buttons ---- */
 
 .btn {
@@ -267,6 +361,36 @@ main {
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+/* body sets -webkit-tap-highlight-color: transparent, which removes the
+   native tap flash - and nothing replaced it, so no button in the app gave
+   any feedback on touch. These do. */
+.btn:active:not(:disabled),
+.record-btn:active,
+.bottom-nav button:active,
+.axis-tabs button:active,
+.back-btn:active,
+.card-row button.row-title:active {
+  transform: scale(0.98);
+  filter: brightness(0.94);
+}
+.btn:focus-visible,
+.record-btn:focus-visible,
+.bottom-nav button:focus-visible,
+.axis-tabs button:focus-visible,
+.back-btn:focus-visible,
+.card-row button.row-title:focus-visible,
+.field input:focus-visible,
+.field textarea:focus-visible,
+.field select:focus-visible,
+.search-row input:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+/* Pressed state for the entry screen's spelling/syllable choice groups,
+   where a button represents an armed selection rather than an action. */
+.btn[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--indigo);
 }
 .btn-primary {
   background: var(--indigo);
@@ -305,11 +429,20 @@ main {
   color: var(--ink-soft);
   margin-bottom: 6px;
 }
+/* .search-row input is included deliberately: SearchBox is the most-reused
+   control in the app (6 call sites) but renders into .search-row, not .field,
+   so it had no padding, border, radius, or min-height in 5 of them - and was
+   styled in the 6th only because that one happened to wrap it in a .field.
+
+   font-size is 1rem, not 0.95rem: iOS Safari auto-zooms on focus for any
+   input below 16px, which it was (~15.2px) across all ~15 fields. */
 .field input[type='text'],
+.field input[type='email'],
 .field textarea,
-.field select {
+.field select,
+.search-row input {
   width: 100%;
-  font-size: 0.95rem;
+  font-size: 1rem;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -408,6 +541,48 @@ main {
   font-size: 0.88rem;
 }
 
+/* ---- Contribution queue ---- */
+
+.proposed-value {
+  margin: 6px 0 8px;
+  font-size: 0.85rem;
+}
+.proposed-value .proposed-key {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* ---- Task queue ---- */
+
+.queue-header {
+  margin-bottom: 14px;
+}
+.queue-progress {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+  margin: 0 0 6px;
+}
+.progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 3px;
+  transition: width 200ms ease-out;
+}
+.queue-task-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 10px 0 0;
+}
+
 /* ---- Audio recording ---- */
 
 .record-btn {
@@ -429,4 +604,15 @@ main {
 }
 .take-step {
   margin-bottom: 16px;
+}
+/* Per-syllable clips under one take: a small left rule reads as nesting
+   without the double list indent that pushed the audio players off-screen. */
+.segment-list {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.segment-list li {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
 }

@@ -12,12 +12,12 @@ let curatorUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const volunteer = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = volunteer.rows[0].user_id;
   const curator = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}curator`, 'Test Curator', 'curator'],
   );
   curatorUserId = curator.rows[0].user_id;
@@ -36,7 +36,7 @@ describe('rejectContribution', () => {
     ]);
     const submitted = await submitContribution(
       pool,
-      { axis: 'definition', wordId, proposedValue: { definitionAction: 'custom', definitionText: 'should never be applied' } },
+      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'custom', definitionText: 'should never be applied' } },
       volunteerUserId,
     );
 
@@ -66,7 +66,7 @@ describe('rejectContribution', () => {
     ]);
     const submitted = await submitContribution(
       pool,
-      { axis: 'definition', wordId, proposedValue: { definitionAction: 'confirm' } },
+      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
       volunteerUserId,
     );
     await rejectContribution(pool, submitted.contributionId, curatorUserId);

@@ -10,9 +10,8 @@
 
 import type { Queryable } from '../db.js';
 import { WordNotFoundError } from './errors.js';
-import type { ApplyDefinitionDecisionInput } from './applyDefinitionDecision.js';
+import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import type { ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
-import type { ApplySpellingDecisionInput } from './applySpellingDecision.js';
 
 export interface NewEntryProposedValue {
   proposedWordId: string;
@@ -28,8 +27,7 @@ export interface NewEntryProposedValue {
 }
 
 export type SubmitContributionInput =
-  | { axis: 'spelling'; wordId: string; proposedValue: ApplySpellingDecisionInput; note?: string }
-  | { axis: 'definition'; wordId: string; proposedValue: ApplyDefinitionDecisionInput; note?: string }
+  | { axis: 'entry'; wordId: string; proposedValue: ApplyEntryDecisionInput; note?: string }
   | { axis: 'etymology'; wordId: string; proposedValue: ApplyEtymologyDecisionInput; note?: string }
   | { axis: 'new_entry'; proposedValue: NewEntryProposedValue; note?: string };
 

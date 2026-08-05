@@ -14,7 +14,7 @@ import { UserNotFoundError, WordIdsNotFoundError } from './errors.js';
 
 /** Server-resolved alternatives to spelling out every word_id: 'all' is
  * the whole golden_record, 'incomplete' is every word still missing at
- * least one verification layer FOR THIS ASSIGNEE - the same four layers
+ * least one verification layer FOR THIS ASSIGNEE - the same three layers
  * AxisDecided reports, so what a curator sees as a non-green badge in
  * AdminUserDetail is exactly what 'incomplete' picks up. Audio is
  * per-user by design (see AxisDecided.audio), so 'incomplete' is
@@ -82,8 +82,8 @@ async function resolveScope(db: Queryable, scope: AssignmentScope, userId: strin
     `select g.word_id from golden_record g
      where (
        select count(distinct d.axis) from word_decisions d
-       where d.word_id = g.word_id and d.axis in ('spelling', 'definition', 'etymology')
-     ) < 3
+       where d.word_id = g.word_id and d.axis in ('entry', 'etymology')
+     ) < 2
      or not exists (
        select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
        where u.word_id = g.word_id and s.user_id = $1

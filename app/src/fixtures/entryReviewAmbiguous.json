@@ -41,10 +41,17 @@
   "syllables": [
     "fixturegenambig_ambigspelling"
   ],
-  "definition": null,
+  "definitionCandidateGlosses": [
+    "unrelated gloss one"
+  ],
+  "definitionSourceForm": "fixturegenambig_ambigspelling",
+  "definitionSourceIsCrossReference": false,
+  "definitionLinkedSameAsSpelling": true,
+  "definitionStatus": "proposed",
+  "definitionCurrent": null,
+  "definitionProposed": "unrelated gloss one",
   "axisDecided": {
-    "spelling": false,
-    "definition": false,
+    "entry": false,
     "etymology": false,
     "audio": false
   }

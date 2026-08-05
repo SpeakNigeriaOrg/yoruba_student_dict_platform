@@ -28,10 +28,17 @@ export class UserNotFoundError extends Error {
   }
 }
 
-export class UsernameAlreadyExistsError extends Error {
-  constructor(public readonly username: string) {
-    super(`username '${username}' already exists`);
-    this.name = 'UsernameAlreadyExistsError';
+export class EmailAlreadyExistsError extends Error {
+  constructor(public readonly email: string) {
+    super(`a user with email '${email}' already exists`);
+    this.name = 'EmailAlreadyExistsError';
+  }
+}
+
+export class UserNotRegisteredError extends Error {
+  constructor(public readonly email: string) {
+    super(`'${email}' is not registered for the platform`);
+    this.name = 'UserNotRegisteredError';
   }
 }
 

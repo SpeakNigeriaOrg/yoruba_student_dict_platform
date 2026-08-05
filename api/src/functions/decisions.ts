@@ -1,24 +1,30 @@
 // functions/decisions.ts
 //
 // POST /api/decisions/{axis} - a curator's direct decision on one of the
-// three review axes, applied immediately (content change + word_decisions
+// two review axes, applied immediately (content change + word_decisions
 // upsert, in one transaction - see the handlers for each axis).
+//
+// 'spelling' and 'definition' were separate axes here until
+// 0011_merge_entry_axis.sql folded them into 'entry'; they are deliberately
+// NOT accepted as aliases, so a stale client gets a 404 naming the axis
+// rather than silently writing half an entry decision.
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
-import { parseDefinitionInput, parseEtymologyInput, parseSpellingInput } from '../decisionInputParsing.js';
+import { parseEntryInput, parseEtymologyInput } from '../decisionInputParsing.js';
 import { ForbiddenError, requireCurator, UnauthenticatedError } from '../httpAuth.js';
-import { applyDefinitionDecision, MissingDefinitionTextError } from '../handlers/applyDefinitionDecision.js';
 import {
   applyEtymologyDecision,
   ComponentsNotFoundError,
   ComponentsRequiredError,
 } from '../handlers/applyEtymologyDecision.js';
 import {
-  applySpellingDecision,
+  applyEntryDecision,
+  IncompleteEntryDecisionError,
+  KaikkiVerificationMismatchError,
+  MissingDefinitionTextError,
   NewDisplayTextRequiredError,
-  NoDecisionProvidedError,
-} from '../handlers/applySpellingDecision.js';
+} from '../handlers/applyEntryDecision.js';
 import { WordNotFoundError } from '../handlers/errors.js';
 
 function requireWordId(b: Record<string, unknown>): string {
@@ -36,11 +42,8 @@ export async function decisionsFunction(request: HttpRequest, _context: Invocati
     const wordId = requireWordId(b);
 
     switch (axis) {
-      case 'spelling':
-        await applySpellingDecision(getPool(), wordId, parseSpellingInput(b), user.userId);
-        break;
-      case 'definition':
-        await applyDefinitionDecision(getPool(), wordId, parseDefinitionInput(b), user.userId);
+      case 'entry':
+        await applyEntryDecision(getPool(), wordId, parseEntryInput(b), user.userId);
         break;
       case 'etymology':
         await applyEtymologyDecision(getPool(), wordId, parseEtymologyInput(b), user.userId);
@@ -58,7 +61,8 @@ export async function decisionsFunction(request: HttpRequest, _context: Invocati
       err instanceof ComponentsRequiredError ||
       err instanceof ComponentsNotFoundError ||
       err instanceof NewDisplayTextRequiredError ||
-      err instanceof NoDecisionProvidedError
+      err instanceof IncompleteEntryDecisionError ||
+      err instanceof KaikkiVerificationMismatchError
     ) {
       return { status: 400, jsonBody: { error: err.message } };
     }

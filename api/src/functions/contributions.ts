@@ -6,8 +6,9 @@
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
-import { parseDefinitionInput, parseEtymologyInput, parseSpellingInput } from '../decisionInputParsing.js';
+import { parseEntryInput, parseEtymologyInput } from '../decisionInputParsing.js';
 import { ForbiddenError, requireCurator, requireUser, UnauthenticatedError } from '../httpAuth.js';
+import { validateEntryDecisionInput } from '../handlers/applyEntryDecision.js';
 import { submitContribution, type NewEntryProposedValue, type SubmitContributionInput } from '../handlers/submitContribution.js';
 import { listContributions } from '../handlers/listContributions.js';
 import { WordNotFoundError } from '../handlers/errors.js';
@@ -39,16 +40,20 @@ function parseNewEntryInput(b: Record<string, unknown>): NewEntryProposedValue {
 function parseSubmitContributionInput(b: Record<string, unknown>): SubmitContributionInput {
   const note = typeof b.note === 'string' ? b.note : undefined;
   switch (b.axis) {
-    case 'spelling':
-      return { axis: 'spelling', wordId: requireWordId(b), proposedValue: parseSpellingInput(b), note };
-    case 'definition':
-      return { axis: 'definition', wordId: requireWordId(b), proposedValue: parseDefinitionInput(b), note };
+    case 'entry': {
+      // Validated at submission rather than only at approval: a volunteer
+      // who proposes half an entry should be told immediately, not have it
+      // sit in the queue until a curator hits the same error.
+      const proposedValue = parseEntryInput(b);
+      validateEntryDecisionInput(proposedValue);
+      return { axis: 'entry', wordId: requireWordId(b), proposedValue, note };
+    }
     case 'etymology':
       return { axis: 'etymology', wordId: requireWordId(b), proposedValue: parseEtymologyInput(b), note };
     case 'new_entry':
       return { axis: 'new_entry', proposedValue: parseNewEntryInput(b), note };
     default:
-      throw new Error("axis must be one of 'spelling', 'definition', 'etymology', 'new_entry'");
+      throw new Error("axis must be one of 'entry', 'etymology', 'new_entry'");
   }
 }
 

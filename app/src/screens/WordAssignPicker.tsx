@@ -98,11 +98,11 @@ export function WordAssignPicker({ onAssign, onAssignScope }: WordAssignPickerPr
       {pending.length > 0 ? (
         <div>
           <p>{pending.length} word(s) pending assignment:</p>
-          <ul aria-label="Pending word assignments" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul aria-label="Pending word assignments" className="plain-list">
             {pending.map((wordId) => (
               <li key={wordId}>
                 {wordId}{' '}
-                <button type="button" className="btn-danger" onClick={() => removeWordId(wordId)} aria-label={`Remove ${wordId}`}>
+                <button type="button" className="btn btn-danger" onClick={() => removeWordId(wordId)} aria-label={`Remove ${wordId}`}>
                   x
                 </button>
               </li>

@@ -12,7 +12,7 @@ let userId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}requester`, 'Test Requester'],
   );
   userId = result.rows[0].user_id;
@@ -151,10 +151,10 @@ describe('getEtymologyReview', () => {
       'a definition for context testing',
     ]);
     const curatorResult = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
       [`${NS}context_curator`, 'Test Curator'],
     );
-    await pool.query(`insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'definition', $2, $3)`, [
+    await pool.query(`insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'entry', $2, $3)`, [
       wordId,
       JSON.stringify({ definitionAction: 'confirm' }),
       curatorResult.rows[0].user_id,
@@ -164,7 +164,7 @@ describe('getEtymologyReview', () => {
 
     expect(result.syllables).toEqual([`${NS}context`, 'spelling']);
     expect(result.definition).toBe('a definition for context testing');
-    expect(result.axisDecided).toEqual({ spelling: false, definition: true, etymology: false, audio: false });
+    expect(result.axisDecided).toEqual({ entry: true, etymology: false, audio: false });
   });
 
   it('reports definition as null and every axis undecided for a freshly-added word', async () => {
@@ -174,6 +174,6 @@ describe('getEtymologyReview', () => {
     const result = await getEtymologyReview(pool, wordId, userId);
 
     expect(result.definition).toBeNull();
-    expect(result.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
+    expect(result.axisDecided).toEqual({ entry: false, etymology: false, audio: false });
   });
 });

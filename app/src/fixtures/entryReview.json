@@ -17,10 +17,17 @@
     "ka",
     "su"
   ],
-  "definition": null,
+  "definitionCandidateGlosses": [
+    "to fail"
+  ],
+  "definitionSourceForm": "fixturegenspldef_kásù",
+  "definitionSourceIsCrossReference": false,
+  "definitionLinkedSameAsSpelling": true,
+  "definitionStatus": "proposed",
+  "definitionCurrent": null,
+  "definitionProposed": "to fail",
   "axisDecided": {
-    "spelling": false,
-    "definition": false,
+    "entry": false,
     "etymology": false,
     "audio": false
   }

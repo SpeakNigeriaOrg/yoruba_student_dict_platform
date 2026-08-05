@@ -36,10 +36,13 @@ import { decodeToSamples } from '../audio/decodeToSamples.js';
 import { sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
-import { base64ToAudioUrl, getSpellingReview, listUtterances, registerUtterance, type UtteranceSummary } from '../api.js';
+import { base64ToAudioUrl, getEntryReview, listUtterances, registerUtterance, type UtteranceSummary } from '../api.js';
 
 export interface AudioRecordingProps {
   wordId: string;
+  /** Called after a recording is successfully registered, so the task queue
+   * can advance. */
+  onDecided?: () => void;
 }
 
 interface SegmentReview {
@@ -78,12 +81,14 @@ function UtteranceRow({ u, showSpeakerName }: { u: UtteranceSummary; showSpeaker
           <audio controls src={base64ToAudioUrl(u.audioDataBase64)} />
         </>
       ) : null}
+      {/* plain-list, not a default <ul>: this is a list nested inside an <li>,
+          so browser default indentation stacked twice and pushed a ~250-300px
+          native audio player ~80px in from the left on a 360px screen. */}
       {u.segments.length > 0 ? (
-        <ul aria-label={`take ${u.takeNumber} segments`}>
+        <ul aria-label={`take ${u.takeNumber} segments`} className="plain-list segment-list">
           {u.segments.map((seg) => (
             <li key={seg.syllablePosition}>
               Syllable {seg.syllablePosition + 1} ({seg.syllableText})
-              <br />
               <audio controls src={base64ToAudioUrl(seg.audioDataBase64)} />
             </li>
           ))}
@@ -93,7 +98,7 @@ function UtteranceRow({ u, showSpeakerName }: { u: UtteranceSummary; showSpeaker
   );
 }
 
-export function AudioRecording({ wordId }: AudioRecordingProps) {
+export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -132,7 +137,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
     setStatus(null);
     setPreviousRecordings(null);
     setPreviousRecordingsError(null);
-    getSpellingReview(wordId)
+    getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
         setPronunciationText(result.displayText);
@@ -235,6 +240,7 @@ export function AudioRecording({ wordId }: AudioRecordingProps) {
 
       setStatus('Recording submitted.');
       loadPreviousRecordings();
+      onDecided?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {

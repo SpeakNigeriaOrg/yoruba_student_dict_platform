@@ -35,11 +35,11 @@ export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
   displayText: string;
   syllables: string[];
   definition: string | null;
-  /** Whether each of the platform's three review axes already has a
+  /** Whether each of the platform's review axes already has a
    * word_decisions row for this word - shown as read-only context so a
    * curator reviewing etymology (the only axis this screen has an
-   * interactive decision UI for) isn't left guessing whether spelling and
-   * definition have been separately decided elsewhere. */
+   * interactive decision UI for) isn't left guessing whether the entry
+   * axis has been decided elsewhere. */
   axisDecided: AxisDecided;
   /** Kaikki's free-text etymology prose for this word's matched sense, if
    * any - distinct from componentsProposal (the structured
@@ -51,12 +51,17 @@ export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
 
 /** Only the one field componentsAxisFields actually reads from overrides
  * (targetSpellingConfirmed - whether a resolved target word already has a
- * confirmed spelling decision) - no need to merge all four decision axes
- * into a full DiagnosticsOverrides map for that single check. */
+ * confirmed spelling decision) - no need to merge every decision axis
+ * into a full DiagnosticsOverrides map for that single check.
+ *
+ * Reads the 'entry' axis: since 0011_merge_entry_axis.sql the spelling
+ * `action` lives on the merged entry decision alongside the definition
+ * fields, so a word's spelling is confirmed exactly when its entry
+ * decision carries an action. */
 async function loadSpellingConfirmedOverrides(client: Queryable): Promise<DiagnosticsOverrides> {
   const rows = await client.query<{ word_id: string; action: string | null }>(
     `select word_id, decision->>'action' as action from word_decisions
-     where axis = 'spelling' and decision->>'action' is not null`,
+     where axis = 'entry' and decision->>'action' is not null`,
   );
   const overrides: DiagnosticsOverrides = {};
   for (const row of rows.rows) {

@@ -191,7 +191,7 @@ function PhraseTab() {
       {components.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
-        <ul aria-label="Phrase components" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        <ul aria-label="Phrase components" className="plain-list">
           {components.map((c) => (
             <li key={c.wordId} className="search-result-row">
               <span className="result-text">

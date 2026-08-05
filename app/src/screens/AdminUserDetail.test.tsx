@@ -20,9 +20,9 @@ describe('AdminUserDetail', () => {
     await waitFor(() => {
       expect(screen.getByText('epo')).toBeInTheDocument();
     });
-    expect(screen.getByText('spelling: not yet decided')).toBeInTheDocument();
+    expect(screen.getByText('entry: not yet decided')).toBeInTheDocument();
     expect(screen.getByText('audio: not yet recorded')).toBeInTheDocument();
-    expect(screen.getByText('spelling: in review')).toBeInTheDocument();
+    expect(screen.getByText('entry: in review')).toBeInTheDocument();
     expect(screen.getByText('etymology: not started')).toBeInTheDocument();
   });
 

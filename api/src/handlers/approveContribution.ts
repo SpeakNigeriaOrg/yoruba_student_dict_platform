@@ -11,9 +11,12 @@
 
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
-import { applyDefinitionDecisionInTransaction, type ApplyDefinitionDecisionInput } from './applyDefinitionDecision.js';
+import {
+  applyEntryDecisionInTransaction,
+  validateEntryDecisionInput,
+  type ApplyEntryDecisionInput,
+} from './applyEntryDecision.js';
 import { applyEtymologyDecisionInTransaction, type ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
-import { applySpellingDecisionInTransaction, type ApplySpellingDecisionInput } from './applySpellingDecision.js';
 import { createPhraseInTransaction } from './createPhrase.js';
 import { createWord } from './createWord.js';
 import type { NewEntryProposedValue } from './submitContribution.js';
@@ -35,7 +38,26 @@ export class ContributionAlreadyReviewedError extends Error {
   }
 }
 
-type ContributionAxis = 'spelling' | 'definition' | 'etymology' | 'new_entry';
+/** 'spelling' and 'definition' are retained here because contributions is
+ * HISTORY: 0011_merge_entry_axis.sql rejected every pending row on those
+ * axes but deliberately left already-reviewed rows readable under the axis
+ * they were actually submitted under. They are unapprovable, not unknown -
+ * see LegacyAxisNotApprovableError below. */
+type ContributionAxis = 'entry' | 'etymology' | 'new_entry' | 'spelling' | 'definition';
+
+/** A pending contribution on a pre-merge axis. Should be unreachable -
+ * 0011 rejected all of them and nothing writes those values anymore - but
+ * surfaced loudly rather than silently skipped, because the switch below
+ * previously had no default: an unhandled axis would mark the contribution
+ * approved while applying nothing, which is the worst available outcome. */
+export class LegacyAxisNotApprovableError extends Error {
+  constructor(contributionId: string, axis: string) {
+    super(
+      `contribution '${contributionId}' is on the pre-merge '${axis}' axis and cannot be approved - spelling and definition are now decided together as one 'entry' contribution, which must be resubmitted`,
+    );
+    this.name = 'LegacyAxisNotApprovableError';
+  }
+}
 
 interface ContributionRow {
   contribution_id: string;
@@ -67,22 +89,19 @@ async function approveInTransaction(client: Queryable, contributionId: string, a
   }
 
   switch (contribution.axis) {
+    case 'entry': {
+      // Re-validated here, not just at submission: a proposed_value stored
+      // before the merge (or hand-edited) must not be able to apply as half
+      // an entry decision - the invariant belongs to the write path, not to
+      // whichever endpoint happened to accept it.
+      const proposedValue = contribution.proposed_value as ApplyEntryDecisionInput;
+      validateEntryDecisionInput(proposedValue);
+      await applyEntryDecisionInTransaction(client, requireContributionWordId(contribution), proposedValue, approvedBy);
+      break;
+    }
     case 'spelling':
-      await applySpellingDecisionInTransaction(
-        client,
-        requireContributionWordId(contribution),
-        contribution.proposed_value as ApplySpellingDecisionInput,
-        approvedBy,
-      );
-      break;
     case 'definition':
-      await applyDefinitionDecisionInTransaction(
-        client,
-        requireContributionWordId(contribution),
-        contribution.proposed_value as ApplyDefinitionDecisionInput,
-        approvedBy,
-      );
-      break;
+      throw new LegacyAxisNotApprovableError(contribution.contribution_id, contribution.axis);
     case 'etymology':
       await applyEtymologyDecisionInTransaction(
         client,

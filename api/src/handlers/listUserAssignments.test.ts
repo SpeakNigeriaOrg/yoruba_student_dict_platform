@@ -13,13 +13,13 @@ beforeAll(async () => {
   await cleanUpTestData(pool, NS);
 
   const curator = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
     [`${NS}curator`, 'Assigning Curator'],
   );
   curatorId = curator.rows[0].user_id;
 
   const target = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}target`, 'Target User'],
   );
   targetUserId = target.rows[0].user_id;
@@ -38,7 +38,7 @@ beforeAll(async () => {
   // definition not_started, etymology passed.
   await pool.query(
     `insert into contributions (word_id, axis, proposed_value, submitted_by, status)
-     values ($1, 'spelling', '{}', $2, 'pending')`,
+     values ($1, 'entry', '{}', $2, 'pending')`,
     [`${NS}word1`, targetUserId],
   );
   await pool.query('insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, $3, $4)', [
@@ -55,18 +55,17 @@ afterAll(async () => {
 });
 
 describe('listUserAssignments', () => {
-  it("returns the target user's assignments with assignedByUsername and independent per-axis reviewStatus", async () => {
+  it("returns the target user's assignments with assignedByEmail and independent per-axis reviewStatus", async () => {
     const assignments = await listUserAssignments(pool, targetUserId);
     expect(assignments).toHaveLength(1);
     const word1 = assignments[0];
     expect(word1).toMatchObject({
       wordId: `${NS}word1`,
       displayText: 'epo',
-      assignedByUsername: `${NS}curator`,
+      assignedByEmail: `${NS}curator`,
     });
     expect(word1.reviewStatus).toEqual({
-      spelling: 'in_review',
-      definition: 'not_started',
+      entry: 'in_review',
       etymology: 'passed',
     });
   });

@@ -1,3 +1,17 @@
+// Unlike every other api test file, this one reads the REAL ingested Kaikki
+// corpus rather than seeding what it needs - that is the point, it verifies
+// ingest/'s output round-trips through kaikkiData.ts's queries.
+//
+// Consequence worth knowing: `npm run test:ingest` TRUNCATES kaikki_senses
+// (ingest/src/writeToPostgres.test.ts does it before each test), so running
+// the ingest suite against the same database leaves the tests here failing on
+// an empty corpus. Repair with:
+//
+//   npm run --workspace=ingest run
+//
+// That re-ingests the current kaikki-yoruba release, so counts can shift
+// slightly from whatever was loaded before - see the mọ̀ test below.
+
 import { afterAll, describe, expect, it } from 'vitest';
 import { getTestPool } from './testSupport.js';
 import { loadKaikkiSensesForKey } from './kaikkiData.js';
@@ -31,11 +45,17 @@ describe('loadKaikkiSensesForKey', () => {
     expect(ile!.derivedForms).toEqual([]);
   });
 
-  it("round-trips mọ̀'s real usedInCandidates from the ingested corpus (33 distinct compounds)", async () => {
+  it("round-trips mọ̀'s real usedInCandidates from the ingested corpus", async () => {
+    // Asserts a lower bound plus a known member, NOT an exact count. This
+    // read 33 when written; the corpus is re-ingested from whatever
+    // kaikki-yoruba release is current (build-9 gives 32), and an exact
+    // count makes an upstream data revision look like a code regression.
+    // What the test is actually for is that reciprocal synthesis survives
+    // the Postgres round trip with its provenance intact.
     const senses = await loadKaikkiSensesForKey(pool, 'mo');
     const mo = senses.find((s) => s.canonicalForm.value === 'mọ̀');
     expect(mo).toBeDefined();
-    expect(mo!.usedInCandidates).toHaveLength(33);
+    expect(mo!.usedInCandidates!.length).toBeGreaterThan(25);
     expect(mo!.usedInCandidates!.every((c) => c.provenance === 'synthesized_from_etymology')).toBe(true);
     expect(mo!.usedInCandidates!.map((c) => c.form)).toContain('àmọ̀tẹ́kùn');
   });

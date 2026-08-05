@@ -10,7 +10,7 @@ let volunteerUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer@example.com`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = result.rows[0].user_id;
@@ -28,10 +28,14 @@ afterAll(async () => {
 });
 
 describe('submitContribution', () => {
-  it('records a pending spelling contribution against an existing word', async () => {
+  it('records a pending entry contribution against an existing word', async () => {
     const { contributionId } = await submitContribution(
       pool,
-      { axis: 'spelling', wordId: `${NS}existing_word`, proposedValue: { action: 'keep_ours' } },
+      {
+        axis: 'entry',
+        wordId: `${NS}existing_word`,
+        proposedValue: { action: 'keep_ours', definitionAction: 'confirm' },
+      },
       volunteerUserId,
     );
 
@@ -40,7 +44,7 @@ describe('submitContribution', () => {
     ]);
     expect(row.rows[0]).toEqual({
       word_id: `${NS}existing_word`,
-      axis: 'spelling',
+      axis: 'entry',
       status: 'pending',
       submitted_by: volunteerUserId,
     });
@@ -62,11 +66,15 @@ describe('submitContribution', () => {
     expect(row.rows[0].word_id).toBeNull();
   });
 
-  it('rejects a spelling/definition/etymology contribution against a nonexistent word_id', async () => {
+  it('rejects an entry/etymology contribution against a nonexistent word_id', async () => {
     await expect(
       submitContribution(
         pool,
-        { axis: 'definition', wordId: `${NS}nonexistent`, proposedValue: { definitionAction: 'confirm' } },
+        {
+          axis: 'entry',
+          wordId: `${NS}nonexistent`,
+          proposedValue: { action: 'keep_ours', definitionAction: 'confirm' },
+        },
         volunteerUserId,
       ),
     ).rejects.toThrow(WordNotFoundError);
@@ -76,9 +84,9 @@ describe('submitContribution', () => {
     const { contributionId } = await submitContribution(
       pool,
       {
-        axis: 'definition',
+        axis: 'entry',
         wordId: `${NS}existing_word`,
-        proposedValue: { definitionAction: 'custom', definitionText: 'new meaning' },
+        proposedValue: { action: 'keep_ours', definitionAction: 'custom', definitionText: 'new meaning' },
         note: 'found a better gloss',
       },
       volunteerUserId,
@@ -89,6 +97,10 @@ describe('submitContribution', () => {
       [contributionId],
     );
     expect(row.rows[0].note).toBe('found a better gloss');
-    expect(row.rows[0].proposed_value).toEqual({ definitionAction: 'custom', definitionText: 'new meaning' });
+    expect(row.rows[0].proposed_value).toEqual({
+      action: 'keep_ours',
+      definitionAction: 'custom',
+      definitionText: 'new meaning',
+    });
   });
 });

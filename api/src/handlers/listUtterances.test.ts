@@ -21,7 +21,7 @@ beforeAll(async () => {
   await cleanUpSpeakers();
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [username, 'Test User'],
   );
   userId = result.rows[0].user_id;
@@ -107,7 +107,7 @@ describe('listUtterances', () => {
 
     const otherUsername = `${NS}other_user`;
     const otherUser = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
       [otherUsername, 'Other Test User'],
     );
 

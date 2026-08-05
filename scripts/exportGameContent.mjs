@@ -92,16 +92,22 @@
 //
 // 7. Images now load from Postgres too (0010_word_images.sql - mirrors
 //    audio's storage design, "art_style" playing speakers' role as the
-//    multi-variant category). Unlike audio, image coverage is NOT used
-//    to gate level generation - only 56/92 words have any labeled image
-//    at all today (the rest of the ~350 generated images in yoruba-
-//    student-dict/content/pending_images/ were never matched to a
-//    word_id - see migrateStagedImages.mjs's header), so an all-or-
-//    nothing image gate would eliminate most content. Each word's
-//    vocab.json entry instead gets an honest `imageStyles` array (which
-//    styles actually have art for THIS word); app.js's existing
-//    onerror->placeholder.png fallback remains the real safety net for
-//    the common case of no art yet.
+//    multi-variant category). Image coverage IS a hard gate on level
+//    generation, exactly like audio: a word with no real art must never be
+//    presented with a placeholder standing in for it, because that is
+//    fabricated content rather than a graceful degrade (see the identical
+//    check in publishToR2.mjs). Each word's vocab.json entry also gets an
+//    honest `imageStyles` array naming which styles actually have art for
+//    THIS word.
+//
+//    This costs real coverage and that is accepted: only 56/92 words have
+//    any labeled image today (the rest of the ~350 generated images in
+//    yoruba-student-dict/content/pending_images/ were never matched to a
+//    word_id - see migrateStagedImages.mjs's header), so gating here
+//    genuinely does eliminate most candidate words until more art is
+//    labeled. This comment previously claimed the opposite - that image
+//    coverage was NOT gated - which stopped being true when the gate was
+//    added and was never updated.
 //
 // REMAINING TODOs (not done by this script - see conversation log):
 //   - True endless/dynamic mode needs a richer client (round assembly

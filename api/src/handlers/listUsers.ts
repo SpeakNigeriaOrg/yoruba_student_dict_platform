@@ -3,15 +3,16 @@
 // Backs GET /api/users - curator-only. Every user account plus a
 // per-user summary of their assigned words: how many are assigned, how
 // many have at least one axis in_review (and aren't fully passed yet),
-// and how many have all three axes (spelling/definition/etymology)
-// passed. Real gap this closes: assignments could only ever be inspected
-// via direct SQL before this.
+// and how many have both decision axes (entry/etymology) passed. Real gap
+// this closes: assignments could only ever be inspected via direct SQL
+// before this.
 
+import type { DecisionAxis } from '../reviewShared.js';
 import type { Queryable } from '../db.js';
 
 export interface UserSummary {
   userId: string;
-  username: string;
+  email: string;
   displayName: string | null;
   role: 'curator' | 'volunteer';
   assignedWordCount: number;
@@ -19,20 +20,21 @@ export interface UserSummary {
   passedCount: number;
 }
 
-const AXES = ['spelling', 'definition', 'etymology'] as const;
+const AXES = ['entry', 'etymology'] as const;
 
 export async function listUsers(client: Queryable): Promise<UserSummary[]> {
   const [users, assignments, decisions, pending] = await Promise.all([
-    client.query<{ user_id: string; username: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
-      'select user_id, username, display_name, role from users order by username',
+    client.query<{ user_id: string; email: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
+      'select user_id, email, display_name, role from users order by email',
     ),
     client.query<{ user_id: string; word_id: string }>('select user_id, word_id from assignments'),
-    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
-      'select word_id, axis from word_decisions',
-    ),
-    client.query<{ word_id: string; submitted_by: string; axis: 'spelling' | 'definition' | 'etymology' }>(
+    client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions'),
+    // Axes named explicitly rather than taking whatever contributions
+    // holds: pre-merge 'spelling'/'definition' rows survive there as
+    // history and must not count toward a word's live review state.
+    client.query<{ word_id: string; submitted_by: string; axis: DecisionAxis }>(
       `select word_id, submitted_by, axis from contributions
-       where status = 'pending' and axis in ('spelling', 'definition', 'etymology')`,
+       where status = 'pending' and axis in ('entry', 'etymology')`,
     ),
   ]);
 
@@ -72,7 +74,7 @@ export async function listUsers(client: Queryable): Promise<UserSummary[]> {
     }
     return {
       userId: user.user_id,
-      username: user.username,
+      email: user.email,
       displayName: user.display_name,
       role: user.role,
       assignedWordCount: wordIds.length,

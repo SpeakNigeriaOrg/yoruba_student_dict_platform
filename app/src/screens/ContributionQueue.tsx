@@ -14,6 +14,82 @@ import {
   type ContributionListItem,
 } from '../api.js';
 
+/** Human labels for the fields a proposed_value can carry. Same flat
+ * vocabulary the decision endpoints use (see api/src/handlers/
+ * applyEntryDecision.ts), so this covers both halves of an entry proposal and
+ * etymology's own fields. */
+const FIELD_LABELS: Record<string, string> = {
+  action: 'Spelling',
+  candidateForm: 'Candidate',
+  newDisplayText: 'New spelling',
+  syllableAction: 'Syllables',
+  syllableNote: 'Syllable note',
+  definitionAction: 'Definition',
+  definitionText: 'Definition text',
+  definitionSourceForm: 'Definition source',
+  componentsAction: 'Components',
+  components: 'Component words',
+  proposedWordId: 'Word ID',
+  displayText: 'Spelling',
+  syllables: 'Syllables',
+  type: 'Type',
+};
+
+const VALUE_LABELS: Record<string, string> = {
+  keep_ours: 'keep ours',
+  adopt_kaikki: "adopt Kaikki's",
+  select_candidate: 'use selected candidate',
+  keep_manual: 'keep manual split',
+  accept_programmatic: 'accept programmatic split',
+  confirm: 'confirm current',
+  custom: 'custom text',
+  confirm_atomic: 'atomic (no parts)',
+  confirm_existing: 'confirm existing parts',
+  reject_proposed: 'reject proposal',
+  accept_proposed: 'accept proposal',
+};
+
+/** Renders proposed_value as labelled rows. It was JSON.stringify'd, which on
+ * a phone card is a single unreadable line - and this is the screen a curator
+ * makes approve/reject decisions from. */
+function ProposedValue({ value }: { value: unknown }) {
+  if (!value || typeof value !== 'object') return null;
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    ([, v]) => v !== undefined && v !== null && v !== '',
+  );
+  if (entries.length === 0) return null;
+
+  return (
+    <ul aria-label="Proposed value" className="plain-list proposed-value">
+      {entries.map(([key, v]) => (
+        <li key={key}>
+          <span className="proposed-key">{FIELD_LABELS[key] ?? key}:</span>{' '}
+          {Array.isArray(v)
+            ? v.join(', ')
+            : typeof v === 'string'
+              ? (VALUE_LABELS[v] ?? v)
+              : String(v)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Locale-formatted rather than a raw ISO string. Falls back to the original
+ * text if it isn't parseable, so a bad value shows something rather than
+ * "Invalid Date". */
+function formatSubmittedAt(submittedAt: string): string {
+  const parsed = new Date(submittedAt);
+  if (Number.isNaN(parsed.getTime())) return submittedAt;
+  return parsed.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function ContributionQueue() {
   const [contributions, setContributions] = useState<ContributionListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,9 +142,8 @@ export function ContributionQueue() {
                 </>
               ) : null}
               <br />
-              Proposed: {JSON.stringify(c.proposedValue)}
-              <br />
-              Submitted by {c.submittedBy} at {c.submittedAt}
+              <ProposedValue value={c.proposedValue} />
+              Submitted by {c.submittedBy} · {formatSubmittedAt(c.submittedAt)}
               {c.note ? (
                 <>
                   <br />

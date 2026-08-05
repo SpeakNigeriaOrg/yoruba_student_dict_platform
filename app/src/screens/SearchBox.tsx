@@ -76,7 +76,7 @@ export function SearchBox<T>({
         results.length === 0 ? (
           <p>No results.</p>
         ) : (
-          <ul aria-label={resultsAriaLabel} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul aria-label={resultsAriaLabel} className="plain-list">
             {results.map((result, i) => (
               <li key={i} className="search-result-row">
                 <span className="result-text">{renderResult(result)}</span>

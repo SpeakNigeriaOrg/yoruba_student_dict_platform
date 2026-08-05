@@ -1,0 +1,19 @@
+{
+  "name": "Yorùbá Student Dictionary - Curation",
+  "short_name": "Yorùbá Dict",
+  "description": "Confirm spellings and meanings, check word parts, and record pronunciations.",
+  "start_url": "/#/queue",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f5f2",
+  "theme_color": "#21295c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

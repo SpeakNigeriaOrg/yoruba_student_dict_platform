@@ -2,7 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is load-bearing, not decoration: without it
+         env(safe-area-inset-*) resolves to 0, which made index.css's
+         padding-bottom on .bottom-nav dead code and left the nav sitting
+         under the iPhone home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Matches --indigo, so the browser chrome continues the topbar instead
+         of cutting it off with a white or grey band. -->
+    <meta name="theme-color" content="#21295c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Yorùbá Dict" />
+    <!-- Inline SVG data URIs rather than binary assets: no build step, no
+         404 for /favicon.ico, and nothing extra to keep in sync. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2321295c'/%3E%3Ctext x='16' y='23' font-family='-apple-system,Segoe UI,sans-serif' font-size='19' font-weight='600' fill='%23fff' text-anchor='middle'%3EY%3C/text%3E%3C/svg%3E"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%2321295c'/%3E%3Ctext x='90' y='128' font-family='-apple-system,Segoe UI,sans-serif' font-size='108' font-weight='600' fill='%23fff' text-anchor='middle'%3EY%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Yoruba Student Dict - Curation Platform</title>
   </head>
   <body>

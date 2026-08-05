@@ -14,7 +14,7 @@ beforeAll(async () => {
   await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}requester`, 'Test Requester'],
   );
   userId = result.rows[0].user_id;
@@ -43,23 +43,23 @@ describe('getAxisStatus', () => {
     await insertWord(wordId);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
+    expect(result).toEqual({ entry: false, etymology: false, audio: false });
   });
 
   it('reports spelling as decided once a word_decisions row exists', async () => {
     const wordId = `${NS}word_two`;
     await insertWord(wordId);
     const user = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
       [`${NS}decider`, 'Test Decider'],
     );
-    await pool.query("insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'spelling', '{}', $2)", [
+    await pool.query("insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'entry', '{}', $2)", [
       wordId,
       user.rows[0].user_id,
     ]);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ spelling: true, definition: false, etymology: false, audio: false });
+    expect(result).toEqual({ entry: true, etymology: false, audio: false });
   });
 
   it('reports audio as recorded once the REQUESTING user has their own utterance registered', async () => {
@@ -83,7 +83,7 @@ describe('getAxisStatus', () => {
     const wordId = `${NS}word_four`;
     await insertWord(wordId);
     const otherUser = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
       [`${NS}otheruser`, 'Other User'],
     );
     const speaker = await pool.query<{ speaker_id: string }>(

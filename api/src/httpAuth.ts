@@ -22,14 +22,17 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** resolveUser upserts/syncs the users row from principal.userRoles (SWA's
- * own reflection of Azure's manual curator-invite state) on every call, so
- * this always returns a user for any authenticated principal. */
+/** resolveUser is a lookup against the users table, so this rejects an
+ * authenticated principal whose email was never registered - a successful
+ * Google login is not by itself authorization (see auth.ts). The
+ * roles-source function withholds the 'member' role for the same accounts,
+ * making this the server-side half of one gate rather than a second,
+ * different rule. */
 export async function requireUser(request: HttpRequest): Promise<AppUser> {
   const principal = parseClientPrincipal(request.headers.get('x-ms-client-principal'));
   if (!principal) throw new UnauthenticatedError();
   const user = await resolveUser(getPool(), principal);
-  if (!user) throw new UnauthenticatedError();
+  if (!user) throw new UnauthenticatedError('this account is not registered for the platform');
   return user;
 }
 

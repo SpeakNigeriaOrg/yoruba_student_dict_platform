@@ -70,7 +70,7 @@ export async function registerUtteranceFunction(request: HttpRequest, _context: 
   try {
     const user = await requireUser(request);
     const input = parseRegisterInput(await request.json());
-    const result = await registerUtterance(getPool(), input, user.userId, user.username);
+    const result = await registerUtterance(getPool(), input, user.userId, user.displayName ?? user.email);
     return { status: 201, jsonBody: result };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };

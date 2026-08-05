@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { AudioRecording } from './AudioRecording.js';
-import spellingFixture from '../fixtures/spellingReview.json';
+import entryFixture from '../fixtures/entryReview.json';
 
 const SAMPLE_RATE = 16000;
 
@@ -32,7 +32,7 @@ function concat(...chunks: Float32Array[]): Float32Array {
   return out;
 }
 
-// spellingFixture has 2 syllables (["ka", "su"]) - matching two-tone-burst
+// entryFixture has 2 syllables (["ka", "su"]) - matching two-tone-burst
 // synthetic audio makes the "counts match" path exercisable with real
 // segmentation logic, not a stubbed segment count.
 const TWO_SYLLABLE_SAMPLES = concat(silence(0.2), tone(0.3), silence(0.3), tone(0.3), silence(0.2));
@@ -93,7 +93,7 @@ function installDefaultFetchMock() {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
       if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
       return Promise.resolve({ ok: true, json: async () => ({}) });
     }),
@@ -172,7 +172,7 @@ describe('AudioRecording', () => {
   it('submits both takes (and every segment clip) inline as base64 audio, with the recorded pronunciation, to the register endpoint', async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
       if (url.includes('/utterances') && url.includes('/register')) {
         return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'fake-utterance-id' }) });
       }
@@ -234,7 +234,7 @@ describe('AudioRecording', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+        if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
         if (url.includes('/utterances'))
           return Promise.resolve({ ok: true, json: async () => ({ utterances: [otherSpeakerUtterance] }) });
         return Promise.resolve({ ok: true, json: async () => ({}) });
@@ -260,7 +260,7 @@ describe('AudioRecording', () => {
     const ownUtterance = {
       utteranceId: 'utt-2',
       speakerId: 'spk-2',
-      speakerDisplayName: 'the-current-users-github-handle',
+      speakerDisplayName: 'the-current-users-display-name',
       isOwnRecording: true,
       takeNumber: 1,
       status: 'pending_processing',
@@ -276,7 +276,7 @@ describe('AudioRecording', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (url.includes('/spelling')) return Promise.resolve({ ok: true, json: async () => spellingFixture });
+        if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
         if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [ownUtterance] }) });
         return Promise.resolve({ ok: true, json: async () => ({}) });
       }),
@@ -287,7 +287,7 @@ describe('AudioRecording', () => {
 
     const yours = await screen.findByLabelText('Your recordings');
     expect(yours).toHaveTextContent('take 1');
-    expect(yours).not.toHaveTextContent('the-current-users-github-handle');
+    expect(yours).not.toHaveTextContent('the-current-users-display-name');
 
     const others = screen.getByLabelText("Other speakers' recordings");
     expect(others).toHaveTextContent('No other speakers have recorded this word yet.');

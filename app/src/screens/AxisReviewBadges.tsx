@@ -13,13 +13,13 @@ export interface AxisReviewBadgesProps {
   reviewStatus: ReviewStatus;
 }
 
-const LABELS: Record<ReviewStatus['spelling'], string> = {
+const LABELS: Record<ReviewStatus['entry'], string> = {
   not_started: 'not started',
   in_review: 'in review',
   passed: 'passed',
 };
 
-function badgeClass(status: ReviewStatus['spelling']): string {
+function badgeClass(status: ReviewStatus['entry']): string {
   if (status === 'passed') return 'badge decided';
   if (status === 'in_review') return 'badge';
   return 'badge not-started';
@@ -28,8 +28,7 @@ function badgeClass(status: ReviewStatus['spelling']): string {
 export function AxisReviewBadges({ reviewStatus }: AxisReviewBadgesProps) {
   return (
     <>
-      <span className={badgeClass(reviewStatus.spelling)}>spelling: {LABELS[reviewStatus.spelling]}</span>{' '}
-      <span className={badgeClass(reviewStatus.definition)}>definition: {LABELS[reviewStatus.definition]}</span>{' '}
+      <span className={badgeClass(reviewStatus.entry)}>entry: {LABELS[reviewStatus.entry]}</span>{' '}
       <span className={badgeClass(reviewStatus.etymology)}>etymology: {LABELS[reviewStatus.etymology]}</span>
     </>
   );

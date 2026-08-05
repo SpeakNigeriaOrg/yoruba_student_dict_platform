@@ -10,7 +10,7 @@ let volunteerUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const volunteer = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = volunteer.rows[0].user_id;
@@ -29,7 +29,7 @@ describe('listContributions', () => {
     ]);
     await submitContribution(
       pool,
-      { axis: 'definition', wordId, proposedValue: { definitionAction: 'custom', definitionText: 'proposed text' }, note: 'a note' },
+      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'custom', definitionText: 'proposed text' }, note: 'a note' },
       volunteerUserId,
     );
 
@@ -38,7 +38,7 @@ describe('listContributions', () => {
 
     expect(found).toBeDefined();
     expect(found?.wordDisplayText).toBe(`${NS}pendingspelling`);
-    expect(found?.axis).toBe('definition');
+    expect(found?.axis).toBe('entry');
     expect(found?.submittedBy).toBe(`${NS}volunteer`);
     expect(found?.note).toBe('a note');
     expect(found?.status).toBe('pending');

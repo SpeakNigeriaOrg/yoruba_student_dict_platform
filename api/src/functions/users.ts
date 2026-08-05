@@ -10,7 +10,8 @@ import { getPool } from '../db.js';
 import { ForbiddenError, requireCurator, UnauthenticatedError } from '../httpAuth.js';
 import { listUsers } from '../handlers/listUsers.js';
 import { createUser, type CreateUserInput } from '../handlers/createUser.js';
-import { UsernameAlreadyExistsError } from '../handlers/errors.js';
+import { CannotDemoteLastCuratorError, updateUserRole } from '../handlers/updateUserRole.js';
+import { EmailAlreadyExistsError, UserNotFoundError } from '../handlers/errors.js';
 
 export async function listUsersFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
@@ -35,13 +36,20 @@ app.http('ListUsers', {
 function parseCreateUserInput(body: unknown): CreateUserInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
   const b = body as Record<string, unknown>;
-  if (typeof b.username !== 'string' || !b.username) throw new Error('username is required');
+  if (typeof b.email !== 'string' || !b.email) throw new Error('email is required');
+  // Shape-checked, not verified: this is the address a curator is inviting,
+  // and Google is what actually proves ownership of it at login. The check
+  // exists to catch a GitHub handle or a typo pasted into the field, since
+  // such a row would silently never match any login.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email.trim())) {
+    throw new Error('email must be a valid email address');
+  }
   if (b.displayName !== undefined && b.displayName !== null && typeof b.displayName !== 'string') {
     throw new Error('displayName must be a string if provided');
   }
   if (b.role !== 'curator' && b.role !== 'volunteer') throw new Error("role must be 'curator' or 'volunteer'");
   return {
-    username: b.username,
+    email: b.email,
     displayName: (b.displayName as string | null | undefined) ?? null,
     role: b.role,
   };
@@ -56,7 +64,7 @@ export async function createUserFunction(request: HttpRequest, _context: Invocat
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
     if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
-    if (err instanceof UsernameAlreadyExistsError) return { status: 409, jsonBody: { error: err.message } };
+    if (err instanceof EmailAlreadyExistsError) return { status: 409, jsonBody: { error: err.message } };
     if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
     throw err;
   }
@@ -67,4 +75,33 @@ app.http('CreateUser', {
   authLevel: 'anonymous',
   route: 'users',
   handler: createUserFunction,
+});
+
+export async function updateUserRoleFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    await requireCurator(request);
+    const userId = request.params.userId;
+    if (!userId) throw new Error('userId is required in the route');
+    const body = await request.json();
+    if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
+    const role = (body as Record<string, unknown>).role;
+    if (role !== 'curator' && role !== 'volunteer') throw new Error("role must be 'curator' or 'volunteer'");
+
+    const user = await updateUserRole(getPool(), userId, { role });
+    return { status: 200, jsonBody: user };
+  } catch (err) {
+    if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
+    if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
+    if (err instanceof UserNotFoundError) return { status: 404, jsonBody: { error: err.message } };
+    if (err instanceof CannotDemoteLastCuratorError) return { status: 409, jsonBody: { error: err.message } };
+    if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
+    throw err;
+  }
+}
+
+app.http('UpdateUserRole', {
+  methods: ['PATCH'],
+  authLevel: 'anonymous',
+  route: 'users/{userId}',
+  handler: updateUserRoleFunction,
 });

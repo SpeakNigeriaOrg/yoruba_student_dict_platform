@@ -34,12 +34,15 @@ describe('EtymologyReview', () => {
     // No confirmed usedAsComponentOf relationships yet in this fixture.
     expect(screen.getByText('No confirmed relationships yet.')).toBeInTheDocument();
 
-    // Read-only spelling/definition context, and the three-axis status banner.
+    // Read-only entry context, and the axis status chip row.
     expect(screen.getByText(/a made-up compound word for fixture generation/)).toBeInTheDocument();
     const axisStatus = screen.getByLabelText('Review axis status');
-    expect(axisStatus).toHaveTextContent('Spelling (not yet decided)');
-    expect(axisStatus).toHaveTextContent('Definition (decided)');
-    expect(axisStatus).toHaveTextContent('Etymology (not yet decided)');
+    // Chips read "<axis>" when pending and "<axis> ✓" when done; this
+    // fixture has nothing decided yet.
+    expect(axisStatus).toHaveTextContent('entry');
+    expect(axisStatus).toHaveTextContent('etymology');
+    expect(axisStatus).toHaveTextContent('audio');
+    expect(axisStatus).not.toHaveTextContent('✓');
   });
 
   it('submits accept_proposed with the resolved word_ids when both components resolve', async () => {

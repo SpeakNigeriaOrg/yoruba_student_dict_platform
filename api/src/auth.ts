@@ -2,17 +2,32 @@
 //
 // Parses the x-ms-client-principal header Azure Static Web Apps injects
 // into every authenticated request, and resolves it against the users
-// table. SSO alone only proves WHO logged in, not that they're the
-// intended curator - that's what the users table lookup is for.
+// table. SSO alone only proves WHO logged in, not that they're an invited
+// participant - that's what the users table lookup is for.
 //
-// Identity is resolved by GitHub username (userDetails), not email.
-// Confirmed against current Microsoft Learn docs while prepping for
-// deployment: SWA's GitHub provider - default or custom-registered via
-// `identityProviders.gitHub` - only ever exposes a username claim, never
-// email, and that provider's registration schema has no scope/login
-// customization to request one either (unlike the generic OpenID Connect
-// provider type). userDetails is always present for an authenticated
-// GitHub request, so it's what's used here instead.
+// Identity is resolved by EMAIL. That reverses 0004_users_identify_by_
+// username.sql, which switched to GitHub usernames because SWA's GitHub
+// provider never emits an email claim and its registration schema has no way
+// to request one. The provider is now Google, registered as a custom OpenID
+// Connect provider with `scopes: [openid, profile, email]` and a
+// nameClaimType of the emailaddress claim - so an email is always present,
+// and it is a far better durable identifier than a GitHub handle (which its
+// owner can rename out from under us).
+//
+// resolveUser is a LOOKUP, not an upsert. Two reasons:
+//
+//   1. Pre-registration is the access gate. Any Google account can complete
+//      a login, so "authenticated" cannot mean "allowed". A user row must
+//      already exist - created by a curator via POST /api/users - or the
+//      request is rejected. handlers/getRoles.ts applies the same rule at the
+//      edge by withholding the 'member' role; this is the server-side
+//      re-check behind it.
+//   2. users.role is now AUTHORITATIVE. It used to be overwritten from
+//      principal.userRoles on every single request, which made SWA's
+//      portal-managed invite state the real source of truth and the database
+//      a cache of it. Now the roles-source function reads the database, so
+//      the arrow points the other way: a curator promoting someone in the
+//      Users screen is the whole mechanism, no Azure Portal step.
 
 import type { Queryable } from './db.js';
 
@@ -54,34 +69,53 @@ export function parseClientPrincipal(headerValue: string | null | undefined): Cl
 
 export interface AppUser {
   userId: string;
-  username: string;
+  email: string;
   displayName: string | null;
   role: 'curator' | 'volunteer';
 }
 
-/** Upserts and syncs the users row for this principal's GitHub username -
- * null only when there's no username on the principal at all (an
- * unauthenticated request).
+const EMAIL_CLAIM_TYPES = [
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+  'email',
+  'emails',
+  'preferred_username',
+];
+
+/** This principal's email address. Prefers an explicit email-shaped claim
+ * over userDetails: nameClaimType should make userDetails the email already,
+ * but a claim is the more specific signal, and falling back only when
+ * userDetails looks like an email avoids resolving a display name as an
+ * identity. Mirrors handlers/getRoles.ts's own resolveEmail - both sides read
+ * the same identity out of two different SWA payload shapes. */
+export function resolvePrincipalEmail(principal: ClientPrincipal): string | null {
+  for (const typ of EMAIL_CLAIM_TYPES) {
+    const claim = principal.claims?.find((c) => c.typ === typ && c.val && c.val.includes('@'));
+    if (claim?.val) return claim.val.trim().toLowerCase();
+  }
+  if (principal.userDetails && principal.userDetails.includes('@')) return principal.userDetails.trim().toLowerCase();
+  return null;
+}
+
+/** The users row for this principal, or null when there isn't one - which
+ * httpAuth.ts turns into a 401. Null covers both "no email on the principal"
+ * and "this email was never registered"; neither is a user we can act for,
+ * and both are the same answer to the caller.
  *
- * Curator role assignment is via Azure Static Web Apps' built-in manual
- * invite flow, not a custom rolesSource function - that feature is
- * Standard-plan-only, and this project is on Free. So `principal.userRoles`
- * (SWA's own server-injected reflection of who an admin has invited to the
- * 'curator' role) is the authoritative source here, synced into the users
- * table on every authenticated request rather than read once at
- * first-sight: an admin revoking curator access in Azure should actually
- * take effect on this user's next request, not just block new grants. */
+ * Matched on lower(email) against the unique index 0012 creates, so casing
+ * differences between the invite and the login can't create a second account
+ * or lock someone out. */
 export async function resolveUser(db: Queryable, principal: ClientPrincipal): Promise<AppUser | null> {
-  if (!principal.userDetails) return null;
-  const username = principal.userDetails;
-  const role: 'curator' | 'volunteer' = principal.userRoles.includes('curator') ? 'curator' : 'volunteer';
-  const result = await db.query<{ user_id: string; username: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
-    `insert into users (username, display_name, role)
-     values ($1, $2, $3)
-     on conflict (username) do update set role = excluded.role
-     returning user_id, username, display_name, role`,
-    [username, username, role],
-  );
+  const email = resolvePrincipalEmail(principal);
+  if (!email) return null;
+
+  const result = await db.query<{
+    user_id: string;
+    email: string;
+    display_name: string | null;
+    role: 'curator' | 'volunteer';
+  }>('select user_id, email, display_name, role from users where lower(email) = $1', [email]);
+
   const row = result.rows[0];
-  return { userId: row.user_id, username: row.username, displayName: row.display_name, role: row.role };
+  if (!row) return null;
+  return { userId: row.user_id, email: row.email, displayName: row.display_name, role: row.role };
 }

@@ -9,10 +9,15 @@ import {
   approveContribution,
   ContributionAlreadyReviewedError,
   ContributionNotFoundError,
+  LegacyAxisNotApprovableError,
 } from '../handlers/approveContribution.js';
 import { ComponentsNotFoundError, ComponentsRequiredError } from '../handlers/applyEtymologyDecision.js';
-import { MissingDefinitionTextError } from '../handlers/applyDefinitionDecision.js';
-import { NewDisplayTextRequiredError, NoDecisionProvidedError } from '../handlers/applySpellingDecision.js';
+import {
+  IncompleteEntryDecisionError,
+  KaikkiVerificationMismatchError,
+  MissingDefinitionTextError,
+  NewDisplayTextRequiredError,
+} from '../handlers/applyEntryDecision.js';
 import { WordIdAlreadyExistsError } from '../handlers/errors.js';
 
 export async function approveContributionFunction(
@@ -37,7 +42,9 @@ export async function approveContributionFunction(
       err instanceof ComponentsRequiredError ||
       err instanceof ComponentsNotFoundError ||
       err instanceof NewDisplayTextRequiredError ||
-      err instanceof NoDecisionProvidedError
+      err instanceof IncompleteEntryDecisionError ||
+      err instanceof KaikkiVerificationMismatchError ||
+      err instanceof LegacyAxisNotApprovableError
     ) {
       return { status: 400, jsonBody: { error: err.message } };
     }

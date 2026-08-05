@@ -8,8 +8,7 @@
     "definition": "a definition",
     "entryType": null,
     "axisDecided": {
-      "spelling": false,
-      "definition": true,
+      "entry": true,
       "etymology": false,
       "audio": false
     }
@@ -23,8 +22,7 @@
     "definition": null,
     "entryType": null,
     "axisDecided": {
-      "spelling": false,
-      "definition": false,
+      "entry": false,
       "etymology": false,
       "audio": false
     }

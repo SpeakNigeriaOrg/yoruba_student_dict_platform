@@ -22,14 +22,17 @@ import { WordAssignPicker } from './WordAssignPicker.js';
 
 export interface AdminUserDetailProps {
   userId: string;
-  onBack: () => void;
   onSelectWord: (wordId: string) => void;
-  /** Notifies the parent user list to re-fetch its own summary counts
-   * after an assign/unassign here changes them. */
-  onUsersChanged: () => void;
+  /** Both optional since this is now its own route (#/users/{id}) rather
+   * than a child of AdminUsers: the shell renders the back affordance from
+   * real history, and the user list re-fetches its counts when it re-mounts,
+   * so neither needs threading through. Kept as hooks for callers that do
+   * want to react in place. */
+  onBack?: () => void;
+  onUsersChanged?: () => void;
 }
 
-export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }: AdminUserDetailProps) {
+export function AdminUserDetail({ userId, onSelectWord, onBack, onUsersChanged }: AdminUserDetailProps) {
   const [assignments, setAssignments] = useState<UserAssignmentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -50,7 +53,7 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
           (result.alreadyAssigned.length > 0 ? ` (${result.alreadyAssigned.length} were already assigned.)` : ''),
       );
       reload();
-      onUsersChanged();
+      onUsersChanged?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -69,7 +72,7 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
       await unassignWord(userId, wordId);
       setStatus(`Unassigned ${wordId}.`);
       reload();
-      onUsersChanged();
+      onUsersChanged?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -77,9 +80,14 @@ export function AdminUserDetail({ userId, onBack, onSelectWord, onUsersChanged }
 
   return (
     <section aria-label="User assignment detail">
-      <button type="button" className="back-btn" onClick={onBack}>
-        ← Back
-      </button>
+      {/* Only rendered when a caller supplies its own back handling. As a
+          route (#/users/{id}) the shell renders one from real history, and a
+          second button here would just duplicate it. */}
+      {onBack ? (
+        <button type="button" className="back-btn" onClick={onBack}>
+          ← Back
+        </button>
+      ) : null}
 
       <WordAssignPicker onAssign={handleAssign} onAssignScope={handleAssignScope} />
 

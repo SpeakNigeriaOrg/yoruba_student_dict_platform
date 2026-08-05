@@ -23,8 +23,8 @@ describe('AllWordsList', () => {
     expect(screen.getByText('fixturegenallwords_wordbspelling')).toBeInTheDocument();
 
     const list = screen.getByLabelText('All words');
-    expect(list).toHaveTextContent('definition: decided');
-    expect(list).toHaveTextContent('definition: not yet decided');
+    expect(list).toHaveTextContent('entry: decided');
+    expect(list).toHaveTextContent('entry: not yet decided');
     expect(list).toHaveTextContent('audio: not yet recorded');
   });
 
@@ -54,14 +54,14 @@ describe('AllWordsList', () => {
     expect(screen.queryByText('fixturegenallwords_wordbspelling')).not.toBeInTheDocument();
   });
 
-  it('hides definition-decided words when that filter is checked', async () => {
+  it('hides entry-decided words when that filter is checked', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ words: allWordsFixture }) }));
     const user = userEvent.setup();
 
     render(<AllWordsList onSelect={vi.fn()} />);
     await waitFor(() => screen.getByText('fixturegenallwords_wordaspelling'));
 
-    await user.click(screen.getByRole('checkbox', { name: 'Hide definition-decided' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Hide entry-decided' }));
 
     expect(screen.queryByText('fixturegenallwords_wordaspelling')).not.toBeInTheDocument();
     expect(screen.getByText('fixturegenallwords_wordbspelling')).toBeInTheDocument();

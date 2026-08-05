@@ -4,7 +4,9 @@ import {
   approveContribution,
   ContributionAlreadyReviewedError,
   ContributionNotFoundError,
+  LegacyAxisNotApprovableError,
 } from './approveContribution.js';
+import { IncompleteEntryDecisionError } from './applyEntryDecision.js';
 import { submitContribution } from './submitContribution.js';
 import { WordIdAlreadyExistsError } from './errors.js';
 
@@ -16,12 +18,12 @@ let curatorUserId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const volunteer = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}volunteer@example.com`, 'Test Volunteer', 'volunteer'],
   );
   volunteerUserId = volunteer.rows[0].user_id;
   const curator = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}curator@example.com`, 'Test Curator', 'curator'],
   );
   curatorUserId = curator.rows[0].user_id;
@@ -46,18 +48,18 @@ async function insertWord(wordId: string, definition: string | null = null): Pro
 }
 
 describe('approveContribution', () => {
-  it('approves a spelling contribution: applies the decision and records word_decisions', async () => {
-    const wordId = `${NS}spelling_word`;
+  it('approves an entry contribution: applies the decision and records word_decisions', async () => {
+    const wordId = `${NS}entry_word`;
     await insertWord(wordId);
     const { contributionId } = await submitContribution(
       pool,
-      { axis: 'spelling', wordId, proposedValue: { action: 'keep_ours' } },
+      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
       volunteerUserId,
     );
 
     await approveContribution(pool, contributionId, curatorUserId);
 
-    const decision = await pool.query("select decided_by from word_decisions where word_id = $1 and axis = 'spelling'", [
+    const decision = await pool.query("select decided_by from word_decisions where word_id = $1 and axis = 'entry'", [
       wordId,
     ]);
     expect(decision.rows[0].decided_by).toBe(curatorUserId);
@@ -69,12 +71,16 @@ describe('approveContribution', () => {
     expect(status.rows[0]).toEqual({ status: 'approved', reviewed_by: curatorUserId });
   });
 
-  it('approves a definition contribution: overwrites the definition text', async () => {
+  it('approves an entry contribution with custom text: overwrites the definition', async () => {
     const wordId = `${NS}definition_word`;
     await insertWord(wordId, 'old text');
     const { contributionId } = await submitContribution(
       pool,
-      { axis: 'definition', wordId, proposedValue: { definitionAction: 'custom', definitionText: 'volunteer text' } },
+      {
+        axis: 'entry',
+        wordId,
+        proposedValue: { action: 'keep_ours', definitionAction: 'custom', definitionText: 'volunteer text' },
+      },
       volunteerUserId,
     );
 
@@ -82,6 +88,51 @@ describe('approveContribution', () => {
 
     const word = await pool.query<{ definition: string }>('select definition from golden_record where word_id = $1', [wordId]);
     expect(word.rows[0].definition).toBe('volunteer text');
+  });
+
+  it('refuses to approve an entry contribution missing the definition half', async () => {
+    // A proposed_value stored before the merge, or hand-edited, must not be
+    // able to apply as half a decision - the invariant lives in the write
+    // path, not only in whichever endpoint accepted it. Inserted directly
+    // because submitContribution now rejects this shape up front.
+    const wordId = `${NS}halfentry_word`;
+    await insertWord(wordId);
+    const inserted = await pool.query<{ contribution_id: string }>(
+      `insert into contributions (word_id, axis, proposed_value, submitted_by)
+       values ($1, 'entry', '{"action":"keep_ours"}'::jsonb, $2) returning contribution_id`,
+      [wordId, volunteerUserId],
+    );
+
+    await expect(approveContribution(pool, inserted.rows[0].contribution_id, curatorUserId)).rejects.toThrow(
+      IncompleteEntryDecisionError,
+    );
+
+    // And it stays pending rather than being marked approved-but-unapplied.
+    const status = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
+      inserted.rows[0].contribution_id,
+    ]);
+    expect(status.rows[0].status).toBe('pending');
+  });
+
+  it('refuses to approve a pre-merge spelling/definition contribution', async () => {
+    // contributions retains those axis values as history; 0011 rejected the
+    // pending ones. If one somehow arrives pending, it must fail loudly -
+    // the switch previously had no default, so an unhandled axis would mark
+    // the row approved while applying nothing at all.
+    const wordId = `${NS}legacy_word`;
+    await insertWord(wordId);
+    const inserted = await pool.query<{ contribution_id: string }>(
+      `insert into contributions (word_id, axis, proposed_value, submitted_by)
+       values ($1, 'spelling', '{"action":"keep_ours"}'::jsonb, $2) returning contribution_id`,
+      [wordId, volunteerUserId],
+    );
+
+    await expect(approveContribution(pool, inserted.rows[0].contribution_id, curatorUserId)).rejects.toThrow(
+      LegacyAxisNotApprovableError,
+    );
+
+    const decisions = await pool.query('select 1 from word_decisions where word_id = $1', [wordId]);
+    expect(decisions.rowCount).toBe(0);
   });
 
   it('approves an etymology contribution: writes the proposed components in order', async () => {
@@ -193,7 +244,7 @@ describe('approveContribution', () => {
     await insertWord(wordId);
     const { contributionId } = await submitContribution(
       pool,
-      { axis: 'spelling', wordId, proposedValue: { action: 'keep_ours' } },
+      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
       volunteerUserId,
     );
 

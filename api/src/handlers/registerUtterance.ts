@@ -80,21 +80,21 @@ export async function registerUtterance(
   pool: pg.Pool,
   input: RegisterUtteranceInput,
   userId: string,
-  username: string,
+  speakerDisplayName: string,
 ): Promise<RegisterUtteranceResult> {
-  return withTransaction(pool, (client) => registerUtteranceInTransaction(client, input, userId, username));
+  return withTransaction(pool, (client) => registerUtteranceInTransaction(client, input, userId, speakerDisplayName));
 }
 
 async function registerUtteranceInTransaction(
   client: Queryable,
   input: RegisterUtteranceInput,
   userId: string,
-  username: string,
+  speakerDisplayName: string,
 ): Promise<RegisterUtteranceResult> {
   const wordResult = await client.query('select 1 from golden_record where word_id = $1', [input.wordId]);
   if (wordResult.rowCount === 0) throw new WordNotFoundError(input.wordId);
 
-  const speakerId = await getOrCreateSpeakerForUser(client, userId, username);
+  const speakerId = await getOrCreateSpeakerForUser(client, userId, speakerDisplayName);
   const status = input.segments && input.segments.length > 0 ? 'segmented' : 'pending_processing';
 
   // Deterministic, path-shaped logical identifier (see file header) -

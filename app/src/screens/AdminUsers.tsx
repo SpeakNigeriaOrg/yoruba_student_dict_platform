@@ -1,26 +1,29 @@
 // screens/AdminUsers.tsx
 //
 // Curator-only "Users" tab: every user account plus a per-user summary of
-// assigned/in-review/passed word counts, an add-user form, and a
-// drill-down into one user's assigned words (AdminUserDetail). Mirrors
-// ContributionQueue.tsx's own list+reload shape, except selecting a row
-// here navigates to a detail view rather than triggering an action
-// directly - that's local state, same as App.tsx's own
-// selectedWordId-vs-list pattern one level up.
+// assigned/in-review/passed word counts, and an add-user form. Mirrors
+// ContributionQueue.tsx's own list+reload shape.
+//
+// This used to own a private `selectedUserId` and render AdminUserDetail
+// itself. That created a second navigation stack the shell knew nothing
+// about, so Users -> a user -> a word -> Back re-mounted this component
+// fresh and landed on the user LIST rather than the user you had been
+// inside. The detail view is now its own route (#/users/{id}), and selecting
+// a row just reports the selection upward.
 
 import { useEffect, useState } from 'react';
-import { getUsers, type UserSummary } from '../api.js';
+import { getUsers, updateUserRole, type UserSummary } from '../api.js';
 import { AddUserForm } from './AddUserForm.js';
-import { AdminUserDetail } from './AdminUserDetail.js';
 
 export interface AdminUsersProps {
-  onSelectWord: (wordId: string) => void;
+  onSelectUser: (userId: string) => void;
 }
 
-export function AdminUsers({ onSelectWord }: AdminUsersProps) {
+export function AdminUsers({ onSelectUser }: AdminUsersProps) {
   const [users, setUsers] = useState<UserSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [roleStatus, setRoleStatus] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   function reload() {
     getUsers()
@@ -30,15 +33,16 @@ export function AdminUsers({ onSelectWord }: AdminUsersProps) {
 
   useEffect(reload, []);
 
-  if (selectedUserId) {
-    return (
-      <AdminUserDetail
-        userId={selectedUserId}
-        onBack={() => setSelectedUserId(null)}
-        onSelectWord={onSelectWord}
-        onUsersChanged={reload}
-      />
-    );
+  async function changeRole(userId: string, role: 'curator' | 'volunteer') {
+    setRoleError(null);
+    setRoleStatus(null);
+    try {
+      const updated = await updateUserRole(userId, role);
+      setRoleStatus(`${updated.displayName ?? updated.email} is now a ${updated.role}. Takes effect on their next sign-in.`);
+      reload();
+    } catch (err) {
+      setRoleError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -53,16 +57,41 @@ export function AdminUsers({ onSelectWord }: AdminUsersProps) {
         <ul aria-label="User accounts" className="card-list">
           {users.map((u) => (
             <li key={u.userId} className="card-row">
-              <button type="button" className="row-title" onClick={() => setSelectedUserId(u.userId)}>
-                {u.displayName ?? u.username}
+              <button type="button" className="row-title" onClick={() => onSelectUser(u.userId)}>
+                {u.displayName ?? u.email}
               </button>
               <span className={`badge${u.role === 'curator' ? ' decided' : ''}`}> {u.role}</span>
               <br />
               {u.assignedWordCount} assigned · {u.inReviewCount} in review · {u.passedCount} passed
+              {/* Role management lives here rather than in the Azure Portal
+                  now that the roles-source function reads users.role. */}
+              <div className="btn-row">
+                {u.role === 'curator' ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    aria-label={`Demote ${u.displayName ?? u.email} to volunteer`}
+                    onClick={() => void changeRole(u.userId, 'volunteer')}
+                  >
+                    Make volunteer
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    aria-label={`Promote ${u.displayName ?? u.email} to curator`}
+                    onClick={() => void changeRole(u.userId, 'curator')}
+                  >
+                    Make curator
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
       )}
+      {roleStatus ? <p role="status" className="status-banner">{roleStatus}</p> : null}
+      {roleError ? <p role="alert" className="error-banner">{roleError}</p> : null}
     </section>
   );
 }

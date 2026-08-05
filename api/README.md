@@ -15,36 +15,89 @@ end-to-end; the business logic they call (`src/handlers/*.ts`) is the part
 that's actually exercised against real data, kept deliberately thin-wrapper
 so there's as little untested glue as possible.
 
-Curator role assignment: Azure Static Web Apps' built-in **manual invite**
-flow, not a custom `rolesSource` function - that feature (a function SWA
-calls to compute additional roles dynamically) is **Standard-plan-only**,
-confirmed by a real deployment rejection on the Free plan ("The 'auth'
-configuration in staticwebapp.config.json is only supported on the
-Standard SKU"). There used to be a `GetRoles` function backing
-`auth.rolesSource`; it's been removed along with that config block. An
-admin now invites a specific GitHub username to the `curator` role
-directly in the Azure Portal (Static Web App resource -> Role management),
-and that invited role shows up in `x-ms-client-principal.userRoles` on
-every one of that user's authenticated requests from then on - no custom
-function call needed for SWA's own route-level `allowedRoles` gating to
-keep working.
+## Authentication and roles
 
-`auth.ts`'s `resolveUser` upserts and **syncs** (not just first-sight
-provisions) the `users` row from `principal.userRoles` on every
-authenticated request: a brand-new username gets a row created with
-`role` set from whether SWA currently reports `'curator'` in
-`userRoles`, and an *existing* user's `role` is kept in sync both ways -
-an admin revoking curator access in Azure actually takes effect on that
-user's next request, not just blocking new grants. This replaces what the
-old `GetRoles` function did (which only provisioned once, defaulting to
-`volunteer`, and never re-synced or supported downgrade).
+**Provider: Google only**, registered as a custom OpenID Connect provider in
+`app/public/staticwebapp.config.json`. This requires the **Standard** plan -
+the `auth` block is Standard-SKU-only, confirmed earlier by a real deployment
+rejection on Free ("The 'auth' configuration in staticwebapp.config.json is
+only supported on the Standard SKU"). The same upgrade is what re-enabled the
+`auth.rolesSource` function that commit `d4d9599` had to delete.
 
-Identity is resolved by GitHub username (`users.username`), not email -
-confirmed against current Microsoft Learn docs that SWA's GitHub provider
-(default *or* custom-registered) only ever exposes a `userDetails`
-username claim, never email, and its registration schema has no
-scope/login customization to request one either (unlike the generic
-OpenID Connect provider type).
+The default providers are explicitly 404'd (`/.auth/login/github`, `aad`,
+`twitter`) so `/login` is the only way in.
+
+**Identity is resolved by email** (`users.email`), reversing
+`0004_users_identify_by_username.sql`. That migration switched to GitHub
+usernames because SWA's GitHub provider only ever exposes a `userDetails`
+username claim and its registration schema cannot request an email scope.
+A *custom OIDC* registration can - `scopes: [openid, profile, email]` plus a
+`nameClaimType` of the emailaddress claim - so `userDetails` is now the email.
+Email is also the better durable key: a GitHub handle can be renamed by its
+owner, silently orphaning that person's decisions and assignments.
+
+**Roles are database-driven, and the database is authoritative.** This is the
+reverse of the previous arrangement:
+
+| | Before (Free plan) | Now (Standard) |
+|---|---|---|
+| Role source of truth | Azure Portal invite, mirrored into `users.role` | `users.role` |
+| Sync direction | `principal.userRoles` overwrote the DB every request | `handlers/getRoles.ts` reads the DB |
+| Changing a role | Azure Portal -> Role management | `PATCH /api/users/{userId}`, from the Users screen |
+
+`auth.ts`'s `resolveUser` is now a **lookup, not an upsert**. It returns null
+for an email with no `users` row, which `httpAuth.ts` turns into a 401, and it
+never writes. `principal.userRoles` is not consulted for role at all - a stale
+or forged token claiming `curator` does not confer it.
+
+**Access is gated on pre-registration.** Any Google account can complete a
+login, so `authenticated` cannot mean "allowed". `handlers/getRoles.ts` grants
+a custom **`member`** role only to emails that already have a `users` row
+(plus `curator` when `users.role = 'curator'`), and every `/api/*` route rule
+requires `member` or `curator` rather than `authenticated`. An unregistered
+user can sign in to Google and reach nothing. Curators register people by
+email via `POST /api/users`.
+
+Two things about the roles function that are easy to get wrong:
+
+- **Do not add an `allowedRoles` route rule for `/api/GetRoles`.** Verified
+  against current Microsoft docs: a `rolesSource` endpoint protected by
+  `allowedRoles` is silently **skipped** by SWA - no browser error, no
+  function log - leaving every user with no custom roles and therefore no
+  access at all. The official sample app has no route rule for it either.
+- It cannot use `requireUser`/`requireCurator`: there is no
+  `x-ms-client-principal` header yet, since the principal is what the call is
+  helping to build. The identity arrives in the request **body**.
+
+Function-based role management is a **preview** feature.
+
+Role changes take effect on the user's **next sign-in**, because SWA caches
+the roles it got from the roles function into the session token. Server-side
+`requireCurator` re-reads the database on every request, so a demoted curator
+loses API access as soon as their token refreshes and cannot act as a curator
+server-side even while a stale token claims it.
+
+### First-curator bootstrap
+
+Pre-registration is curator-only, so with no curators there is no way to
+create the first one through the app. Insert it once by hand (see also
+`db/README.md`):
+
+```sql
+insert into users (email, display_name, role)
+values ('admin@speaknigeria.org', 'Admin', 'curator');
+```
+
+### Deployment checklist (out-of-repo, not in version control)
+
+1. Upgrade the SWA to Standard:
+   `az staticwebapp update --name mango-river-070b8550f --sku Standard`
+2. Create a Google Cloud OAuth 2.0 **Web application** client. Authorized
+   redirect URI: `https://<swa-hostname>/.auth/login/google/callback`.
+3. Add SWA application settings `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`. The config references them by *setting name*, never
+   by value.
+4. Bootstrap the first curator (above).
 
 Implemented:
 - `POST /words`, `POST /phrases` (`src/functions/words.ts` /
@@ -116,11 +169,15 @@ Implemented:
   assigning word(s) to a user (`ON CONFLICT DO NOTHING`, since
   re-submitting an overlapping list is expected, not exceptional), and
   unassigning one word.
-- `GET /users`, `POST /users` (`src/functions/users.ts`) - curator-only.
-  Every user account plus assigned/in-review/passed summary counts, and
-  pre-registering a user by username ahead of their first login (see
-  `createUser.ts`'s header for why a pre-set `role: 'curator'` isn't
-  durable on its own without an Azure Portal role invite too).
+- `GET /users`, `POST /users`, `PATCH /users/{userId}`
+  (`src/functions/users.ts`) - curator-only. Every user account plus
+  assigned/in-review/passed summary counts; registering a user by Google
+  email (the access gate - see the Authentication section); and
+  promote/demote, which refuses to demote the last curator so the platform
+  can't be locked out of its own administration.
+- `POST /GetRoles` (`src/functions/getRoles.ts`) - **called by the SWA
+  platform, not the browser.** See the Authentication section for the two
+  constraints that are easy to break.
 
 Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`
 - these need a real Azure Storage account to test the SAS-token flow
@@ -142,7 +199,11 @@ against, which doesn't exist yet.
   re-checks the caller's role against the database - never trusts SWA's
   own injected `userRoles` blindly, matching this repo's general
   "check again server-side" principle (e.g. Add Phrase's strict
-  component check is enforced server-side too, not just in the UI).
+  component check is enforced server-side too, not just in the UI). This
+  paragraph used to be aspirational rather than true: `resolveUser` was
+  overwriting `users.role` *from* `userRoles` on every request, so SWA's
+  injected roles were in fact authoritative. Since the move to DB-driven
+  roles it describes the actual behaviour.
 - `src/handlers/*.ts` - the actual business logic, framework-agnostic
   (no `@azure/functions` imports), tested against real local Postgres.
   `handlers/errors.ts` holds error classes genuinely shared across

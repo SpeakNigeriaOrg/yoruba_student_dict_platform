@@ -34,6 +34,8 @@ import { SearchBox } from './SearchBox.js';
 export interface EtymologyReviewProps {
   wordId: string;
   isCurator: boolean;
+  /** Called after a successful submit, so the task queue can advance. */
+  onDecided?: () => void;
 }
 
 // A Kaikki-proposed component that resolves to no existing word_id at
@@ -157,7 +159,7 @@ function ProposalItemRow({ item, onAdded }: { item: ComponentsProposalItem; onAd
   );
 }
 
-export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
+export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyReviewProps) {
   const [review, setReview] = useState<EtymologyReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -209,6 +211,7 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
         await submitEtymologyContribution(wordId, input);
         setStatus(`Proposed: ${successMessage}`);
       }
+      onDecided?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -320,7 +323,7 @@ export function EtymologyReview({ wordId, isCurator }: EtymologyReviewProps) {
       {draftComponents.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
-        <ul aria-label="Draft components" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        <ul aria-label="Draft components" className="plain-list">
           {draftComponents.map((componentWordId) => (
             <li key={componentWordId} className="search-result-row">
               <span className="result-text">{componentWordId}</span>

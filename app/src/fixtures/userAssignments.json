@@ -12,14 +12,12 @@
       "assignedAt": "2026-07-21T14:46:47.836Z",
       "assignedByUsername": "fixturegenadmin_curator",
       "axisDecided": {
-        "spelling": false,
-        "definition": false,
+        "entry": false,
         "etymology": false,
         "audio": false
       },
       "reviewStatus": {
-        "spelling": "in_review",
-        "definition": "not_started",
+        "entry": "in_review",
         "etymology": "not_started"
       }
     }

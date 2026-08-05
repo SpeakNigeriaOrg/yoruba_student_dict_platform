@@ -6,8 +6,7 @@
   ],
   "definition": "a made-up compound word for fixture generation",
   "axisDecided": {
-    "spelling": false,
-    "definition": true,
+    "entry": false,
     "etymology": false,
     "audio": false
   },

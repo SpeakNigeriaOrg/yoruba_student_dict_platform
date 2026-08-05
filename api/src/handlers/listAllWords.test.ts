@@ -9,7 +9,7 @@ let userId: string;
 beforeAll(async () => {
   await cleanUpTestData(pool, NS);
   const result = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}requester`, 'Test Requester'],
   );
   userId = result.rows[0].user_id;
@@ -31,10 +31,10 @@ describe('listAllWords', () => {
       undecidedWordId, `${NS}undecidedspelling`, [`${NS}undecidedspelling`],
     ]);
     const curatorResult = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
       [`${NS}curator`, 'Test Curator'],
     );
-    await pool.query(`insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'definition', $2, $3)`, [
+    await pool.query(`insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'entry', $2, $3)`, [
       decidedWordId,
       JSON.stringify({ definitionAction: 'confirm' }),
       curatorResult.rows[0].user_id,
@@ -44,8 +44,8 @@ describe('listAllWords', () => {
     const decided = words.find((w) => w.wordId === decidedWordId);
     const undecided = words.find((w) => w.wordId === undecidedWordId);
 
-    expect(decided?.axisDecided).toEqual({ spelling: false, definition: true, etymology: false, audio: false });
-    expect(undecided?.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
+    expect(decided?.axisDecided).toEqual({ entry: true, etymology: false, audio: false });
+    expect(undecided?.axisDecided).toEqual({ entry: false, etymology: false, audio: false });
   });
 
   it('sorts results by word_id', async () => {

@@ -1,9 +1,9 @@
 // reviewShared.ts
 //
-// Loading logic shared by all three GET .../review-axis endpoints
-// (getEtymologyReview.ts, getSpellingReview.ts, getDefinitionReview.ts) -
-// factored out once a second and third consumer needed the exact same
-// full-vocab load and per-word axis-decided lookup.
+// Loading logic shared by the GET .../review-axis endpoints
+// (getEntryReview.ts, getEtymologyReview.ts) - factored out once a second
+// consumer needed the exact same full-vocab load and per-word axis-decided
+// lookup.
 
 import type { DiagnoseOverride, DiagnosticsOverrides, Vocab } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from './db.js';
@@ -39,11 +39,16 @@ export async function loadVocab(client: Queryable): Promise<Vocab> {
   return vocab;
 }
 
+/** The axis a word_decisions row can be on. 'spelling' and 'definition'
+ * were separate axes until 0011_merge_entry_axis.sql merged them into
+ * 'entry' - a word's written form is not separable from its meaning, so
+ * they are decided together or not at all. */
+export type DecisionAxis = 'entry' | 'etymology';
+
 export interface AxisDecided {
-  spelling: boolean;
-  definition: boolean;
+  entry: boolean;
   etymology: boolean;
-  // Unlike the other three (a curator's formal word_decisions row, a
+  // Unlike the other two (a curator's formal word_decisions row, a
   // global fact true for everyone), audio has no decision step and is
   // deliberately scoped to the REQUESTING user's own recordings only -
   // every participant is expected to record every word themselves, so
@@ -53,17 +58,15 @@ export interface AxisDecided {
   audio: boolean;
 }
 
-/** Whether each of the platform's three decision-driven review axes
+/** Whether each of the platform's two decision-driven review axes
  * already has a word_decisions row for this word (true for everyone,
  * once a curator decides), plus whether the REQUESTING user themselves
  * has at least one registered recording for it (see AxisDecided.audio) -
  * shown as read-only context on every review screen so a curator on one
- * axis isn't left guessing about the other three. */
+ * axis isn't left guessing about the others. */
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
   const [decisionRows, utteranceRows] = await Promise.all([
-    client.query<{ axis: 'spelling' | 'definition' | 'etymology' }>('select axis from word_decisions where word_id = $1', [
-      wordId,
-    ]),
+    client.query<{ axis: DecisionAxis }>('select axis from word_decisions where word_id = $1', [wordId]),
     client.query(
       `select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
        where u.word_id = $1 and s.user_id = $2 limit 1`,
@@ -72,8 +75,7 @@ export async function loadAxisDecided(client: Queryable, wordId: string, userId:
   ]);
   const decided = new Set(decisionRows.rows.map((r) => r.axis));
   return {
-    spelling: decided.has('spelling'),
-    definition: decided.has('definition'),
+    entry: decided.has('entry'),
     etymology: decided.has('etymology'),
     audio: (utteranceRows.rowCount ?? 0) > 0,
   };
@@ -91,10 +93,9 @@ export async function loadAxisDecidedBatch(
   userId: string,
 ): Promise<Map<string, AxisDecided>> {
   const [decisionRows, utteranceRows] = await Promise.all([
-    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
-      'select word_id, axis from word_decisions where word_id = any($1)',
-      [wordIds],
-    ),
+    client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
+      wordIds,
+    ]),
     client.query<{ word_id: string }>(
       `select distinct u.word_id from utterances u join speakers s on s.speaker_id = u.speaker_id
        where s.user_id = $1 and u.word_id = any($2)`,
@@ -113,8 +114,7 @@ export async function loadAxisDecidedBatch(
   for (const wordId of wordIds) {
     const decided = decidedByWord.get(wordId) ?? new Set<string>();
     result.set(wordId, {
-      spelling: decided.has('spelling'),
-      definition: decided.has('definition'),
+      entry: decided.has('entry'),
       etymology: decided.has('etymology'),
       audio: wordsWithAudio.has(wordId),
     });
@@ -125,8 +125,7 @@ export async function loadAxisDecidedBatch(
 export type AxisReviewStatus = 'not_started' | 'in_review' | 'passed';
 
 export interface ReviewStatus {
-  spelling: AxisReviewStatus;
-  definition: AxisReviewStatus;
+  entry: AxisReviewStatus;
   etymology: AxisReviewStatus;
 }
 
@@ -143,14 +142,17 @@ export async function loadReviewStatusBatch(
   userId: string,
 ): Promise<Map<string, ReviewStatus>> {
   const [decisionRows, pendingRows] = await Promise.all([
-    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
-      'select word_id, axis from word_decisions where word_id = any($1)',
-      [wordIds],
-    ),
-    client.query<{ word_id: string; axis: 'spelling' | 'definition' | 'etymology' }>(
+    client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
+      wordIds,
+    ]),
+    // contributions still carries pre-merge 'spelling'/'definition' rows as
+    // history (0011 rejected the pending ones but left the reviewed ones
+    // readable), so this filter names the live axes explicitly rather than
+    // taking whatever the table happens to hold.
+    client.query<{ word_id: string; axis: DecisionAxis }>(
       `select word_id, axis from contributions
        where status = 'pending' and submitted_by = $1 and word_id = any($2)
-         and axis in ('spelling', 'definition', 'etymology')`,
+         and axis in ('entry', 'etymology')`,
       [userId, wordIds],
     ),
   ]);
@@ -167,7 +169,7 @@ export async function loadReviewStatusBatch(
     else pendingByWord.set(row.word_id, new Set([row.axis]));
   }
 
-  const axes = ['spelling', 'definition', 'etymology'] as const;
+  const axes = ['entry', 'etymology'] as const;
   const result = new Map<string, ReviewStatus>();
   for (const wordId of wordIds) {
     const passed = passedByWord.get(wordId) ?? new Set<string>();
@@ -195,11 +197,7 @@ export async function loadDefinition(client: Queryable, wordId: string): Promise
  * (see db/migrations/0001_initial_schema.sql's comment on that column), so
  * an already-decided word's review screen reflects its own decision
  * rather than re-proposing as if nothing had been decided yet. */
-export async function loadAxisOverride(
-  client: Queryable,
-  wordId: string,
-  axis: 'spelling' | 'definition' | 'etymology',
-): Promise<DiagnoseOverride | null> {
+export async function loadAxisOverride(client: Queryable, wordId: string, axis: DecisionAxis): Promise<DiagnoseOverride | null> {
   const result = await client.query<{ decision: DiagnoseOverride; note: string | null }>(
     'select decision, note from word_decisions where word_id = $1 and axis = $2',
     [wordId, axis],
@@ -209,14 +207,14 @@ export async function loadAxisOverride(
   return { ...row.decision, ...(row.note ? { note: row.note } : {}) };
 }
 
-/** Every word's spelling-axis decision at once, keyed by word_id - unlike
+/** Every word's entry-axis decision at once, keyed by word_id - unlike
  * loadAxisOverride (one word at a time), this is for callers that need to
  * run diagnoseEntry across the WHOLE vocab (e.g. checkDuplicates.ts's
  * duplicate scan, which needs each existing word's own resolved
  * canonicalForm/matchedAltOfTargets to compare a new candidate against). */
-export async function loadAllSpellingOverrides(client: Queryable): Promise<DiagnosticsOverrides> {
+export async function loadAllEntryOverrides(client: Queryable): Promise<DiagnosticsOverrides> {
   const rows = await client.query<{ word_id: string; decision: DiagnoseOverride; note: string | null }>(
-    "select word_id, decision, note from word_decisions where axis = 'spelling'",
+    "select word_id, decision, note from word_decisions where axis = 'entry'",
   );
   const overrides: DiagnosticsOverrides = {};
   for (const row of rows.rows) {

@@ -19,13 +19,13 @@ beforeAll(async () => {
   await cleanUpTestData(pool, NS);
 
   const curator = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
     [`${NS}curator`, 'Assigning Curator'],
   );
   curatorId = curator.rows[0].user_id;
 
   const volunteer = await pool.query<{ user_id: string }>(
-    "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+    "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
     [`${NS}volunteer`, 'Test Volunteer'],
   );
   volunteerId = volunteer.rows[0].user_id;
@@ -80,7 +80,7 @@ describe('createAssignments', () => {
 
   it("scope 'all' assigns every golden_record word without naming any of them", async () => {
     const other = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
       [`${NS}scopeall`, 'Scope All Volunteer'],
     );
     const result = await createAssignments(pool, { userId: other.rows[0].user_id, scope: 'all' }, curatorId);
@@ -93,14 +93,14 @@ describe('createAssignments', () => {
 
   it("scope 'incomplete' skips words with all four layers done and includes the rest", async () => {
     const other = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
       [`${NS}scopeinc`, 'Scope Incomplete Volunteer'],
     );
     const otherId = other.rows[0].user_id;
 
     // word1 gets all three curator decisions plus a recording BY THIS USER -
     // the only fully-complete-for-them word.
-    for (const axis of ['spelling', 'definition', 'etymology']) {
+    for (const axis of ['entry', 'etymology']) {
       await pool.query(
         "insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, '{}'::jsonb, $3) on conflict do nothing",
         [`${NS}word1`, axis, curatorId],
@@ -110,13 +110,16 @@ describe('createAssignments', () => {
       'insert into speakers (user_id, display_name) values ($1, $2) returning speaker_id',
       [otherId, `${NS}speaker`],
     );
-    await pool.query('insert into utterances (word_id, speaker_id, blob_path) values ($1, $2, $3)', [
-      `${NS}word1`,
-      speaker.rows[0].speaker_id,
-      `utterances/${NS}word1.wav`,
-    ]);
+    // recorded_display_text/recorded_syllables are NOT NULL as of
+    // 0006_utterance_pronunciation.sql - supplied here the same way
+    // getAxisStatus.test.ts/listMyAssignments.test.ts already do.
+    await pool.query(
+      `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+       values ($1, $2, 1, $3, $4, $5)`,
+      [`${NS}word1`, speaker.rows[0].speaker_id, `utterances/${NS}word1.wav`, `${NS}word1`, [`${NS}word1`]],
+    );
     // word2 has the decisions but no recording by this user - still incomplete.
-    for (const axis of ['spelling', 'definition', 'etymology']) {
+    for (const axis of ['entry', 'etymology']) {
       await pool.query(
         "insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, '{}'::jsonb, $3) on conflict do nothing",
         [`${NS}word2`, axis, curatorId],

@@ -1,11 +1,14 @@
 // screens/AxisBanner.tsx
 //
-// Shared header for all three review screens: the word's read-only
-// spelling/definition context, plus an explicit banner naming all three
-// review axes and which one this screen covers. Extracted after a
-// confusing first pass (only Etymology existed, with no indication a
-// curator was even looking at just one of three separate axes) - every
-// axis screen needs the same orientation, not just Etymology's.
+// Shared header for the review screens: the word's read-only context, plus a
+// compact chip row showing which axes are done. Used by EntryReview and
+// EtymologyReview, so every axis screen gives the same orientation.
+//
+// The chips replaced a full explanatory paragraph ("This platform splits
+// word review into four separate axes, tracked independently: ...") plus a
+// "You are viewing X" line. On a phone that prose consumed most of the
+// viewport before the actual task, and the axis tab bar already says which
+// axis is open. The aria-label is unchanged so it stays queryable.
 
 import type { AxisDecided } from '../api.js';
 
@@ -14,14 +17,16 @@ export interface AxisBannerProps {
   syllables: string[];
   definition: string | null;
   axisDecided: AxisDecided;
-  currentAxis: 'Spelling' | 'Definition' | 'Etymology';
-}
-
-function AxisStatusBadge({ done, doneLabel = 'decided', pendingLabel = 'not yet decided' }: { done: boolean; doneLabel?: string; pendingLabel?: string }) {
-  return <span className={`badge${done ? ' decided' : ''}`}>{done ? doneLabel : pendingLabel}</span>;
+  currentAxis: 'Entry' | 'Etymology';
 }
 
 export function AxisBanner({ displayText, syllables, definition, axisDecided, currentAxis }: AxisBannerProps) {
+  const chips: Array<{ label: string; done: boolean }> = [
+    { label: 'entry', done: axisDecided.entry },
+    { label: 'etymology', done: axisDecided.etymology },
+    { label: 'audio', done: axisDecided.audio },
+  ];
+
   return (
     <>
       <h2>{displayText}</h2>
@@ -31,15 +36,16 @@ export function AxisBanner({ displayText, syllables, definition, axisDecided, cu
         <strong>Definition:</strong> {definition ?? '(not yet decided)'}
       </p>
 
-      <p aria-label="Review axis status">
-        This platform splits word review into four separate axes, tracked independently:{' '}
-        <strong>Spelling</strong> (<AxisStatusBadge done={axisDecided.spelling} />),{' '}
-        <strong>Definition</strong> (<AxisStatusBadge done={axisDecided.definition} />),{' '}
-        <strong>Etymology</strong> (<AxisStatusBadge done={axisDecided.etymology} />), and{' '}
-        <strong>Audio</strong> (<AxisStatusBadge done={axisDecided.audio} doneLabel="recorded" pendingLabel="not yet recorded" />).
-        <br />
-        You are viewing <strong>{currentAxis}</strong>.
+      <p aria-label="Review axis status" className="badge-row">
+        {chips.map((chip) => (
+          <span key={chip.label} className={`badge${chip.done ? ' decided' : ''}`}>
+            {chip.done ? `${chip.label} ✓` : chip.label}
+          </span>
+        ))}
       </p>
+      {/* The tab bar shows this visually; kept for screen readers, which
+          don't get the tab bar's aria-current as page context here. */}
+      <span className="visually-hidden">You are viewing {currentAxis}.</span>
     </>
   );
 }

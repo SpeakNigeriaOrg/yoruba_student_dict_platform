@@ -14,12 +14,12 @@ beforeAll(async () => {
   await pool.query('delete from speakers where display_name like $1', [`${NS}%`]);
   await cleanUpTestData(pool, NS);
   const userA = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}a@example.com`, 'User A', 'volunteer'],
   );
   userAId = userA.rows[0].user_id;
   const userB = await pool.query<{ user_id: string }>(
-    'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
     [`${NS}b@example.com`, 'User B', 'volunteer'],
   );
   userBId = userB.rows[0].user_id;
@@ -57,7 +57,7 @@ describe('listMyAssignments', () => {
     const word1 = assignments.find((a) => a.wordId === `${NS}word1`);
     expect(word1).toMatchObject({ displayText: 'epo', syllables: ['e', 'po'], definition: 'oil', entryType: null });
     expect(word1?.assignedAt).toBeInstanceOf(Date);
-    expect(word1?.axisDecided).toEqual({ spelling: false, definition: false, etymology: false, audio: false });
+    expect(word1?.axisDecided).toEqual({ entry: false, etymology: false, audio: false });
   });
 
   it("does not leak another user's assignments", async () => {
@@ -68,7 +68,7 @@ describe('listMyAssignments', () => {
 
   it('returns an empty list for a user with no assignments', async () => {
     const noAssignmentsUser = await pool.query<{ user_id: string }>(
-      'insert into users (username, display_name, role) values ($1, $2, $3) returning user_id',
+      'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
       [`${NS}nobody@example.com`, 'Nobody', 'volunteer'],
     );
     const assignments = await listMyAssignments(pool, noAssignmentsUser.rows[0].user_id);
@@ -77,10 +77,10 @@ describe('listMyAssignments', () => {
 
   it("reports axisDecided.audio true only for the SAME user's own recording, and a word_decisions row as decided for everyone", async () => {
     const decidedResult = await pool.query<{ user_id: string }>(
-      "insert into users (username, display_name, role) values ($1, $2, 'curator') returning user_id",
+      "insert into users (email, display_name, role) values ($1, $2, 'curator') returning user_id",
       [`${NS}curator`, 'Test Curator'],
     );
-    await pool.query("insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'spelling', '{}', $2)", [
+    await pool.query("insert into word_decisions (word_id, axis, decision, decided_by) values ($1, 'entry', '{}', $2)", [
       `${NS}word1`,
       decidedResult.rows[0].user_id,
     ]);
@@ -96,13 +96,13 @@ describe('listMyAssignments', () => {
 
     const assignmentsA = await listMyAssignments(pool, userAId);
     const word1ForA = assignmentsA.find((a) => a.wordId === `${NS}word1`);
-    expect(word1ForA?.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: true });
+    expect(word1ForA?.axisDecided).toEqual({ entry: true, etymology: false, audio: true });
 
     const assignmentsB = await listMyAssignments(pool, userBId);
     const word1ForB = assignmentsB.find((a) => a.wordId === `${NS}word1`);
-    // spelling: decided is a global fact (a curator decided it) - true
+    // entry: decided is a global fact (a curator decided it) - true
     // for both users. audio: userB hasn't recorded it themselves, so
     // false, even though userA has.
-    expect(word1ForB?.axisDecided).toEqual({ spelling: true, definition: false, etymology: false, audio: false });
+    expect(word1ForB?.axisDecided).toEqual({ entry: true, etymology: false, audio: false });
   });
 });

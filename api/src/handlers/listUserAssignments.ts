@@ -17,7 +17,7 @@ export interface UserAssignmentSummary {
   definition: string | null;
   entryType: 'phrase' | null;
   assignedAt: Date;
-  assignedByUsername: string | null;
+  assignedByEmail: string | null;
   axisDecided: AxisDecided;
   reviewStatus: ReviewStatus;
 }
@@ -33,10 +33,10 @@ export async function listUserAssignments(db: Queryable, targetUserId: string): 
     definition: string | null;
     entry_type: 'phrase' | null;
     assigned_at: Date;
-    assigned_by_username: string | null;
+    assigned_by_email: string | null;
   }>(
     `select a.word_id, gr.display_text, gr.syllables, gr.definition, gr.entry_type, a.assigned_at,
-            ub.username as assigned_by_username
+            ub.email as assigned_by_email
      from assignments a
      join golden_record gr on gr.word_id = a.word_id
      left join users ub on ub.user_id = a.assigned_by
@@ -56,7 +56,7 @@ export async function listUserAssignments(db: Queryable, targetUserId: string): 
     definition: row.definition,
     entryType: row.entry_type,
     assignedAt: row.assigned_at,
-    assignedByUsername: row.assigned_by_username,
+    assignedByEmail: row.assigned_by_email,
     axisDecided: axisDecidedByWord.get(row.word_id)!,
     reviewStatus: reviewStatusByWord.get(row.word_id)!,
   }));

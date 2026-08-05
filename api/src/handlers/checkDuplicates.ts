@@ -8,7 +8,7 @@
 import { findPossibleDuplicates, type DuplicateMatch } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
 import { loadFullKaikkiLexicon } from '../kaikkiData.js';
-import { loadAllSpellingOverrides, loadVocab } from '../reviewShared.js';
+import { loadAllEntryOverrides, loadVocab } from '../reviewShared.js';
 
 export async function checkDuplicatesHandler(
   client: Queryable,
@@ -17,6 +17,6 @@ export async function checkDuplicatesHandler(
 ): Promise<DuplicateMatch[]> {
   const vocab = await loadVocab(client);
   const lexicon = await loadFullKaikkiLexicon(client);
-  const overrides = await loadAllSpellingOverrides(client);
+  const overrides = await loadAllEntryOverrides(client);
   return findPossibleDuplicates(candidateSpelling, candidateAltOfTargets, vocab, lexicon, overrides);
 }

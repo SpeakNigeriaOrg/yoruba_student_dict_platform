@@ -7,11 +7,14 @@
 // contribution's proposed_value is exactly "the decision, not yet
 // applied."
 
-import type { ApplyDefinitionDecisionInput } from './handlers/applyDefinitionDecision.js';
+import type { ApplyEntryDecisionInput } from './handlers/applyEntryDecision.js';
 import type { ApplyEtymologyDecisionInput } from './handlers/applyEtymologyDecision.js';
-import type { ApplySpellingDecisionInput } from './handlers/applySpellingDecision.js';
 
-export function parseSpellingInput(b: Record<string, unknown>): ApplySpellingDecisionInput {
+/** Shape validation only - whether BOTH halves of the entry decision are
+ * present is a business rule, enforced by applyEntryDecision's own
+ * validateEntryDecisionInput so it holds for the contribution-approval path
+ * too, not just direct POSTs. */
+export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionInput {
   const action = b.action;
   if (action !== undefined && action !== 'keep_ours' && action !== 'select_candidate' && action !== 'adopt_kaikki') {
     throw new Error("action must be one of 'keep_ours', 'select_candidate', 'adopt_kaikki' if provided");
@@ -20,22 +23,17 @@ export function parseSpellingInput(b: Record<string, unknown>): ApplySpellingDec
   if (syllableAction !== undefined && syllableAction !== 'keep_manual' && syllableAction !== 'accept_programmatic') {
     throw new Error("syllableAction must be one of 'keep_manual', 'accept_programmatic' if provided");
   }
+  const definitionAction = b.definitionAction;
+  if (definitionAction !== undefined && definitionAction !== 'confirm' && definitionAction !== 'custom') {
+    throw new Error("definitionAction must be 'confirm' or 'custom' if provided");
+  }
   return {
     action,
     candidateForm: typeof b.candidateForm === 'string' ? b.candidateForm : undefined,
     newDisplayText: typeof b.newDisplayText === 'string' ? b.newDisplayText : undefined,
     syllableAction,
     syllableNote: typeof b.syllableNote === 'string' ? b.syllableNote : undefined,
-    note: typeof b.note === 'string' ? b.note : undefined,
-  };
-}
-
-export function parseDefinitionInput(b: Record<string, unknown>): ApplyDefinitionDecisionInput {
-  if (b.definitionAction !== 'confirm' && b.definitionAction !== 'custom') {
-    throw new Error("definitionAction must be 'confirm' or 'custom'");
-  }
-  return {
-    definitionAction: b.definitionAction,
+    definitionAction,
     definitionText: typeof b.definitionText === 'string' ? b.definitionText : undefined,
     definitionSourceForm: typeof b.definitionSourceForm === 'string' ? b.definitionSourceForm : undefined,
     note: typeof b.note === 'string' ? b.note : undefined,

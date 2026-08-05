@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { parseClientPrincipal, resolveUser, type ClientPrincipal } from './auth.js';
+import { parseClientPrincipal, resolvePrincipalEmail, resolveUser, type ClientPrincipal } from './auth.js';
 import { cleanUpTestData, getTestPool } from './testSupport.js';
 
 function encodePrincipal(obj: unknown): string {
@@ -18,8 +18,16 @@ afterAll(async () => {
   await pool.end();
 });
 
-function principalWithRoles(username: string, userRoles: string[]): ClientPrincipal {
-  return { identityProvider: 'github', userId: 'abc123', userDetails: username, userRoles };
+function principal(userDetails: string, userRoles: string[] = ['authenticated'], claims?: ClientPrincipal['claims']): ClientPrincipal {
+  return { identityProvider: 'google', userId: 'sub-abc123', userDetails, userRoles, ...(claims ? { claims } : {}) };
+}
+
+async function register(email: string, role: 'curator' | 'volunteer'): Promise<string> {
+  const result = await pool.query<{ user_id: string }>(
+    'insert into users (email, display_name, role) values ($1, $2, $3) returning user_id',
+    [email, 'Test User', role],
+  );
+  return result.rows[0].user_id;
 }
 
 describe('parseClientPrincipal', () => {
@@ -34,22 +42,22 @@ describe('parseClientPrincipal', () => {
   });
 
   it('returns null when the decoded JSON has no userId', () => {
-    expect(parseClientPrincipal(encodePrincipal({ userDetails: 'someone' }))).toBeNull();
+    expect(parseClientPrincipal(encodePrincipal({ userDetails: 'someone@example.com' }))).toBeNull();
   });
 
   it('parses a well-formed SWA client principal header', () => {
     const encoded = encodePrincipal({
-      identityProvider: 'github',
-      userId: 'abc123',
-      userDetails: 'octocat',
-      userRoles: ['anonymous', 'authenticated'],
+      identityProvider: 'google',
+      userId: 'sub-abc123',
+      userDetails: 'octocat@example.com',
+      userRoles: ['anonymous', 'authenticated', 'member'],
       claims: [{ typ: 'name', val: 'Octo Cat' }],
     });
     expect(parseClientPrincipal(encoded)).toEqual({
-      identityProvider: 'github',
-      userId: 'abc123',
-      userDetails: 'octocat',
-      userRoles: ['anonymous', 'authenticated'],
+      identityProvider: 'google',
+      userId: 'sub-abc123',
+      userDetails: 'octocat@example.com',
+      userRoles: ['anonymous', 'authenticated', 'member'],
       claims: [{ typ: 'name', val: 'Octo Cat' }],
     });
   });
@@ -60,43 +68,94 @@ describe('parseClientPrincipal', () => {
   });
 });
 
+describe('resolvePrincipalEmail', () => {
+  it('uses userDetails when it looks like an email', () => {
+    expect(resolvePrincipalEmail(principal('someone@example.com'))).toBe('someone@example.com');
+  });
+
+  it('lowercases and trims', () => {
+    expect(resolvePrincipalEmail(principal('  Someone@Example.COM '))).toBe('someone@example.com');
+  });
+
+  it('prefers an explicit email claim over userDetails', () => {
+    const p = principal('Display Name', ['authenticated'], [
+      { typ: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress', val: 'claimed@example.com' },
+    ]);
+    expect(resolvePrincipalEmail(p)).toBe('claimed@example.com');
+  });
+
+  it('returns null when nothing email-shaped is present', () => {
+    // A display name is not an identity. Resolving one as an email would let a
+    // login match, or create, the wrong row.
+    expect(resolvePrincipalEmail(principal('Display Name'))).toBeNull();
+    expect(resolvePrincipalEmail(principal(''))).toBeNull();
+  });
+});
+
 describe('resolveUser', () => {
-  it('returns null when the principal has no userDetails', async () => {
-    const principal: ClientPrincipal = { identityProvider: 'github', userId: 'x', userDetails: '', userRoles: [] };
-    expect(await resolveUser(pool, principal)).toBeNull();
+  it('returns null when the principal carries no email', async () => {
+    expect(await resolveUser(pool, principal(''))).toBeNull();
   });
 
-  it('provisions a new user as volunteer when Azure has not invited them to curator', async () => {
-    const username = `${NS}newvolunteer`;
-    const user = await resolveUser(pool, principalWithRoles(username, ['anonymous', 'authenticated']));
-    expect(user?.role).toBe('volunteer');
+  it('returns null for an authenticated email that was never registered', async () => {
+    // The access gate: a successful Google login is identity, not permission.
+    // Previously this call would have CREATED a volunteer row here.
+    const user = await resolveUser(pool, principal(`${NS}stranger@example.com`));
+    expect(user).toBeNull();
   });
 
-  it('provisions a new user as curator when SWA reports the Azure-invited curator role', async () => {
-    const username = `${NS}newcurator`;
-    const user = await resolveUser(pool, principalWithRoles(username, ['anonymous', 'authenticated', 'curator']));
+  it('does not create a users row for an unregistered email', async () => {
+    const email = `${NS}nevercreated@example.com`;
+    await resolveUser(pool, principal(email));
+    const row = await pool.query('select 1 from users where lower(email) = $1', [email]);
+    expect(row.rowCount).toBe(0);
+  });
+
+  it('resolves a pre-registered volunteer', async () => {
+    const email = `${NS}volunteer@example.com`;
+    const userId = await register(email, 'volunteer');
+    const user = await resolveUser(pool, principal(email));
+    expect(user).toEqual({ userId, email, displayName: 'Test User', role: 'volunteer' });
+  });
+
+  it('resolves a pre-registered curator', async () => {
+    const email = `${NS}curator@example.com`;
+    await register(email, 'curator');
+    const user = await resolveUser(pool, principal(email));
     expect(user?.role).toBe('curator');
   });
 
-  it('syncs an existing volunteer up to curator once Azure grants the invite', async () => {
-    const username = `${NS}getspromoted`;
-    await resolveUser(pool, principalWithRoles(username, ['authenticated']));
-    const promoted = await resolveUser(pool, principalWithRoles(username, ['authenticated', 'curator']));
-    expect(promoted?.role).toBe('curator');
+  describe('the database is authoritative for role, not the SWA principal', () => {
+    it('ignores a curator claim in userRoles for a volunteer row', async () => {
+      // The inverse of the old behaviour, which overwrote users.role from
+      // principal.userRoles on every request. A forged or stale token claiming
+      // curator must not confer it.
+      const email = `${NS}claimscurator@example.com`;
+      await register(email, 'volunteer');
+      const user = await resolveUser(pool, principal(email, ['authenticated', 'member', 'curator']));
+      expect(user?.role).toBe('volunteer');
+    });
+
+    it('keeps a curator row curator even when userRoles omits it', async () => {
+      const email = `${NS}staysucurator@example.com`;
+      await register(email, 'curator');
+      const user = await resolveUser(pool, principal(email, ['authenticated']));
+      expect(user?.role).toBe('curator');
+    });
+
+    it('does not write to the users row at all', async () => {
+      const email = `${NS}unchanged@example.com`;
+      await register(email, 'volunteer');
+      await resolveUser(pool, principal(email, ['authenticated', 'curator']));
+      const row = await pool.query<{ role: string }>('select role from users where lower(email) = $1', [email]);
+      expect(row.rows[0].role).toBe('volunteer');
+    });
   });
 
-  it('syncs an existing curator back down to volunteer once Azure revokes the invite', async () => {
-    const username = `${NS}getsdemoted`;
-    await resolveUser(pool, principalWithRoles(username, ['authenticated', 'curator']));
-    const demoted = await resolveUser(pool, principalWithRoles(username, ['authenticated']));
-    expect(demoted?.role).toBe('volunteer');
-  });
-
-  it('is idempotent - repeat calls for the same user do not duplicate the row', async () => {
-    const username = `${NS}repeat`;
-    await resolveUser(pool, principalWithRoles(username, ['authenticated']));
-    await resolveUser(pool, principalWithRoles(username, ['authenticated']));
-    const row = await pool.query<{ count: string }>('select count(*) as count from users where username = $1', [username]);
-    expect(Number(row.rows[0].count)).toBe(1);
+  it('matches case-insensitively, so an invite and a login can differ in case', async () => {
+    const email = `${NS}mixedcase@example.com`;
+    await register(email, 'volunteer');
+    const user = await resolveUser(pool, principal(`${NS}MixedCase@Example.com`));
+    expect(user?.email).toBe(email);
   });
 });
