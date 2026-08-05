@@ -310,6 +310,12 @@ audio {
   background: var(--bg);
   color: var(--ink-soft);
 }
+/* A recording whose pronunciation no longer matches the word - amber, not red:
+   nothing is broken or wrong, the take simply won't be published as-is. */
+.badge.diverged {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
 
 /* Chip row - wraps rather than overflowing on a narrow screen, and gaps the
    badges without relying on {' '} text nodes between them. */
@@ -550,6 +556,69 @@ audio {
 .proposed-value .proposed-key {
   color: var(--ink-soft);
   font-weight: 600;
+}
+
+/* ---- Review queue ---- */
+
+.review-section {
+  margin-bottom: 26px;
+}
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.review-head .field-inline {
+  min-height: 0;
+}
+
+/* One claim = one assertion about the word. Laid out as a row on wide screens
+   and stacked on a phone, so a curator comparing two claims never scrolls
+   sideways to see the difference. */
+.claim-list {
+  margin: 10px 0 0;
+}
+.claim {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+.claim-winner {
+  border-left-color: var(--green);
+  background: var(--green-bg);
+}
+.claim-votes {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  min-width: 4.5em;
+}
+.claim-outcome {
+  flex: 1;
+  min-width: 12em;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.claim-outcome .outcome-syllables {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.claim-voters {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
 }
 
 /* ---- Task queue ---- */

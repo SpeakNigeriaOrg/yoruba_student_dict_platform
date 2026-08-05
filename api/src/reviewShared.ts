@@ -45,60 +45,75 @@ export async function loadVocab(client: Queryable): Promise<Vocab> {
  * they are decided together or not at all. */
 export type DecisionAxis = 'entry' | 'etymology';
 
+/** "Does the REQUESTING user still owe work on this axis?" - which since 0013
+ * is not the same question as "is this settled".
+ *
+ * All three axes are now scoped to the requesting user, the rule audio has
+ * always followed. entry/etymology are done for someone when a curator has
+ * decided (golden, true for everyone) OR when that person has already
+ * contributed their own active opinion.
+ *
+ * That distinction is what produces overlapping contributors: a word with one
+ * volunteer's answer is NOT finished, so it keeps being offered to others,
+ * while never being handed back to the person who already answered it.
+ *
+ * Curator surfaces that want global progress must use
+ * loadGlobalAxisStatusBatch instead - a per-user flag would tell a curator a
+ * word is done merely because they personally contributed to it. */
 export interface AxisDecided {
   entry: boolean;
   etymology: boolean;
-  // Unlike the other two (a curator's formal word_decisions row, a
-  // global fact true for everyone), audio has no decision step and is
-  // deliberately scoped to the REQUESTING user's own recordings only -
-  // every participant is expected to record every word themselves, so
-  // "someone already recorded this" would be actively misleading here:
-  // it would show green/done for a word this user personally hasn't
-  // touched yet, just because a different speaker got to it first.
+  // Every participant is expected to record every word themselves, so
+  // "someone already recorded this" would be actively misleading here: it
+  // would show green/done for a word this user personally hasn't touched yet,
+  // just because a different speaker got to it first.
   audio: boolean;
 }
 
-/** Whether each of the platform's two decision-driven review axes
- * already has a word_decisions row for this word (true for everyone,
- * once a curator decides), plus whether the REQUESTING user themselves
- * has at least one registered recording for it (see AxisDecided.audio) -
- * shown as read-only context on every review screen so a curator on one
- * axis isn't left guessing about the others. */
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
-  const [decisionRows, utteranceRows] = await Promise.all([
+  const [decisionRows, utteranceRows, contributionRows] = await Promise.all([
     client.query<{ axis: DecisionAxis }>('select axis from word_decisions where word_id = $1', [wordId]),
     client.query(
       `select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
        where u.word_id = $1 and s.user_id = $2 limit 1`,
       [wordId, userId],
     ),
+    client.query<{ axis: DecisionAxis }>(
+      `select axis from contributions
+       where word_id = $1 and submitted_by = $2 and status = 'active' and axis in ('entry', 'etymology')`,
+      [wordId, userId],
+    ),
   ]);
   const decided = new Set(decisionRows.rows.map((r) => r.axis));
+  const mine = new Set(contributionRows.rows.map((r) => r.axis));
   return {
-    entry: decided.has('entry'),
-    etymology: decided.has('etymology'),
+    entry: decided.has('entry') || mine.has('entry'),
+    etymology: decided.has('etymology') || mine.has('etymology'),
     audio: (utteranceRows.rowCount ?? 0) > 0,
   };
 }
 
 /** Batched version of loadAxisDecided - for callers listing many words at
- * once (listAllWords.ts, listMyAssignments.ts), which each need every
- * word's own status but shouldn't run one query pair per word. Same
- * semantics as loadAxisDecided (audio scoped to the requesting user's
- * own recordings), just computed for a whole word_id set in two queries
- * total instead of 2*N. */
+ * once (listMyAssignments.ts), which each need every word's own status but
+ * shouldn't run one query set per word. Same semantics as loadAxisDecided,
+ * computed for a whole word_id set in three queries total instead of 3*N. */
 export async function loadAxisDecidedBatch(
   client: Queryable,
   wordIds: string[],
   userId: string,
 ): Promise<Map<string, AxisDecided>> {
-  const [decisionRows, utteranceRows] = await Promise.all([
+  const [decisionRows, utteranceRows, contributionRows] = await Promise.all([
     client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
       wordIds,
     ]),
     client.query<{ word_id: string }>(
       `select distinct u.word_id from utterances u join speakers s on s.speaker_id = u.speaker_id
        where s.user_id = $1 and u.word_id = any($2)`,
+      [userId, wordIds],
+    ),
+    client.query<{ word_id: string; axis: DecisionAxis }>(
+      `select distinct word_id, axis from contributions
+       where submitted_by = $1 and word_id = any($2) and status = 'active' and axis in ('entry', 'etymology')`,
       [userId, wordIds],
     ),
   ]);
@@ -108,15 +123,89 @@ export async function loadAxisDecidedBatch(
     if (existing) existing.add(row.axis);
     else decidedByWord.set(row.word_id, new Set([row.axis]));
   }
+  const mineByWord = new Map<string, Set<string>>();
+  for (const row of contributionRows.rows) {
+    const existing = mineByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else mineByWord.set(row.word_id, new Set([row.axis]));
+  }
   const wordsWithAudio = new Set(utteranceRows.rows.map((r) => r.word_id));
 
   const result = new Map<string, AxisDecided>();
   for (const wordId of wordIds) {
     const decided = decidedByWord.get(wordId) ?? new Set<string>();
+    const mine = mineByWord.get(wordId) ?? new Set<string>();
     result.set(wordId, {
-      entry: decided.has('entry'),
-      etymology: decided.has('etymology'),
+      entry: decided.has('entry') || mine.has('entry'),
+      etymology: decided.has('etymology') || mine.has('etymology'),
       audio: wordsWithAudio.has(wordId),
+    });
+  }
+  return result;
+}
+
+/** How settled an axis is, globally - independent of who is asking.
+ *
+ * This is what a curator browsing the vocabulary wants. AxisDecided cannot
+ * answer it: that flag goes true as soon as the ASKER has contributed, so a
+ * curator who happened to weigh in on a word would see it as done while it
+ * still has one unratified opinion. */
+export type GlobalAxisState = 'golden' | 'provisional' | 'none';
+
+export interface GlobalAxisStatus {
+  entry: GlobalAxisState;
+  etymology: GlobalAxisState;
+  /** How many distinct speakers have recorded this word - audio has no
+   * decision step, so "settled" doesn't apply; coverage does. */
+  speakerCount: number;
+}
+
+export async function loadGlobalAxisStatusBatch(
+  client: Queryable,
+  wordIds: string[],
+): Promise<Map<string, GlobalAxisStatus>> {
+  const [decisionRows, contributionRows, speakerRows] = await Promise.all([
+    client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
+      wordIds,
+    ]),
+    client.query<{ word_id: string; axis: DecisionAxis }>(
+      `select distinct word_id, axis from contributions
+       where word_id = any($1) and status = 'active' and axis in ('entry', 'etymology')`,
+      [wordIds],
+    ),
+    client.query<{ word_id: string; speakers: string }>(
+      `select u.word_id, count(distinct u.speaker_id) as speakers
+       from utterances u where u.word_id = any($1) group by u.word_id`,
+      [wordIds],
+    ),
+  ]);
+
+  const goldenByWord = new Map<string, Set<string>>();
+  for (const row of decisionRows.rows) {
+    const existing = goldenByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else goldenByWord.set(row.word_id, new Set([row.axis]));
+  }
+  const provisionalByWord = new Map<string, Set<string>>();
+  for (const row of contributionRows.rows) {
+    const existing = provisionalByWord.get(row.word_id);
+    if (existing) existing.add(row.axis);
+    else provisionalByWord.set(row.word_id, new Set([row.axis]));
+  }
+  const speakersByWord = new Map(speakerRows.rows.map((r) => [r.word_id, Number(r.speakers)]));
+
+  const state = (wordId: string, axis: DecisionAxis): GlobalAxisState => {
+    if (goldenByWord.get(wordId)?.has(axis)) return 'golden';
+    if (provisionalByWord.get(wordId)?.has(axis)) return 'provisional';
+    return 'none';
+  };
+
+  const result = new Map<string, GlobalAxisStatus>();
+  for (const wordId of wordIds) {
+    result.set(wordId, {
+      entry: state(wordId, 'entry'),
+      etymology: state(wordId, 'etymology'),
+      speakerCount: speakersByWord.get(wordId) ?? 0,
     });
   }
   return result;
@@ -146,12 +235,12 @@ export async function loadReviewStatusBatch(
       wordIds,
     ]),
     // contributions still carries pre-merge 'spelling'/'definition' rows as
-    // history (0011 rejected the pending ones but left the reviewed ones
+    // history (0011 excluded the pending ones but left the reviewed ones
     // readable), so this filter names the live axes explicitly rather than
     // taking whatever the table happens to hold.
     client.query<{ word_id: string; axis: DecisionAxis }>(
       `select word_id, axis from contributions
-       where status = 'pending' and submitted_by = $1 and word_id = any($2)
+       where status = 'active' and submitted_by = $1 and word_id = any($2)
          and axis in ('entry', 'etymology')`,
       [userId, wordIds],
     ),

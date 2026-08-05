@@ -45,7 +45,7 @@ describe('submitContribution', () => {
     expect(row.rows[0]).toEqual({
       word_id: `${NS}existing_word`,
       axis: 'entry',
-      status: 'pending',
+      status: 'active',
       submitted_by: volunteerUserId,
     });
   });

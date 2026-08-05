@@ -30,6 +30,8 @@
     { "route": "/api/phrases", "allowedRoles": ["curator"] },
     { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
     { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
+    { "route": "/api/consensus", "allowedRoles": ["curator"] },
+    { "route": "/api/consensus/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/assignments/me", "allowedRoles": ["member"] },
     { "route": "/api/assignments", "methods": ["POST"], "allowedRoles": ["curator"] },

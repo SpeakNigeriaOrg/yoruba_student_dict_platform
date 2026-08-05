@@ -1,14 +1,37 @@
 // handlers/submitContribution.ts
 //
-// Backs POST /contributions - any authenticated user proposes a decision
-// on an axis of an existing word, or (axis: 'new_entry') a brand-new
-// word/phrase (curator-gated authoring means a volunteer can only ever
-// propose one of these, never insert directly - see createWord.ts/
-// createPhrase.ts for the curator-direct path). Never applies anything -
-// purely records a pending row for a curator to review via
-// approveContribution.ts.
+// Backs POST /contributions - any authenticated user contributes EVIDENCE
+// about an existing word, or (axis: 'new_entry') proposes a brand-new
+// word/phrase. Never applies anything to golden_record; a curator's
+// confirmation does that (confirmConsensus.ts), or for 'new_entry' their
+// per-contribution approval (approveContribution.ts).
+//
+// Two things happen here beyond the insert, and both are load-bearing:
+//
+//   1. THE OUTCOME IS RESOLVED AND FROZEN. The action-shaped submission is
+//      reduced to the content state it asserts, against golden_record as it
+//      stands right now - the state the contributor was looking at - and
+//      stored alongside the raw proposal. It is never recomputed.
+//
+//      `keep_ours` means "whatever it says now". Resolving it later, against a
+//      record that has since changed, would retroactively put words in a
+//      volunteer's mouth. Same discipline as 0006's recorded_display_text on
+//      recordings; see shared/src/consensus.ts for the full argument.
+//
+//   2. THE SUBMITTER'S OWN PRIOR VOTE IS SUPERSEDED, not overwritten. One
+//      active vote per person per axis is enforced by a partial unique index
+//      (0013), so changing your mind marks the old row 'superseded' and inserts
+//      a new one. The old row survives, because what someone believed and when
+//      is part of the record.
 
-import type { Queryable } from '../db.js';
+import type pg from 'pg';
+import { withTransaction, type Queryable } from '../db.js';
+import {
+  fingerprintOutcome,
+  resolveEntryOutcome,
+  resolveEtymologyOutcome,
+  type ContributionOutcome,
+} from '@yoruba-student-dict-platform/shared';
 import { WordNotFoundError } from './errors.js';
 import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import type { ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
@@ -33,26 +56,107 @@ export type SubmitContributionInput =
 
 export interface SubmittedContribution {
   contributionId: string;
+  /** Whether this replaced the submitter's own earlier vote on the same axis.
+   * Surfaced so the UI can say "your earlier answer was replaced" rather than
+   * silently appearing to do nothing. */
+  supersededPrior: boolean;
 }
 
+/** The content state the contributor is looking at. Read inside the same
+ * transaction as the insert, so the frozen outcome can't be resolved against a
+ * record that changed underneath it. */
+async function loadObservedState(
+  client: Queryable,
+  wordId: string,
+): Promise<{ displayText: string; syllables: string[]; definition: string | null; components: string[] }> {
+  const word = await client.query<{ display_text: string; syllables: string[]; definition: string | null }>(
+    'select display_text, syllables, definition from golden_record where word_id = $1',
+    [wordId],
+  );
+  const row = word.rows[0];
+  if (!row) throw new WordNotFoundError(wordId);
+
+  const components = await client.query<{ component_word_id: string }>(
+    'select component_word_id from golden_record_components where word_id = $1 order by component_position',
+    [wordId],
+  );
+
+  return {
+    displayText: row.display_text,
+    syllables: row.syllables,
+    definition: row.definition,
+    components: components.rows.map((r) => r.component_word_id),
+  };
+}
+
+/** Narrowed to the two consensus axes: 'new_entry' has no existing content to
+ * resolve against and takes no part in consensus, so it never reaches here. */
+function resolveOutcome(
+  input: Extract<SubmitContributionInput, { axis: 'entry' | 'etymology' }>,
+  observed: Awaited<ReturnType<typeof loadObservedState>>,
+): ContributionOutcome {
+  if (input.axis === 'entry') {
+    return resolveEntryOutcome(
+      { displayText: observed.displayText, syllables: observed.syllables, definition: observed.definition },
+      input.proposedValue,
+    );
+  }
+  return resolveEtymologyOutcome({ components: observed.components }, input.proposedValue);
+}
+
+/** Transactional because the supersede and the insert must land together: on a
+ * bare pool they are two round trips, and a concurrent submission from the same
+ * person could interleave between them and trip the one-active-vote index.
+ * Reading the observed state inside the same transaction also guarantees the
+ * frozen outcome describes a record that could not change underneath it. */
 export async function submitContribution(
+  pool: pg.Pool,
+  input: SubmitContributionInput,
+  submittedBy: string,
+): Promise<SubmittedContribution> {
+  return withTransaction(pool, (client) => submitContributionInTransaction(client, input, submittedBy));
+}
+
+export async function submitContributionInTransaction(
   db: Queryable,
   input: SubmitContributionInput,
   submittedBy: string,
 ): Promise<SubmittedContribution> {
-  if (input.axis !== 'new_entry') {
-    const existing = await db.query('select 1 from golden_record where word_id = $1', [input.wordId]);
-    if ((existing.rowCount ?? 0) === 0) {
-      throw new WordNotFoundError(input.wordId);
-    }
+  // A proposed new word has no existing content to resolve an outcome against -
+  // it IS the content - so it carries no fingerprint and takes no part in
+  // consensus. A curator approves it individually.
+  if (input.axis === 'new_entry') {
+    const result = await db.query<{ contribution_id: string }>(
+      `insert into contributions (word_id, axis, proposed_value, note, submitted_by)
+       values (null, $1, $2, $3, $4)
+       returning contribution_id`,
+      [input.axis, input.proposedValue, input.note ?? null, submittedBy],
+    );
+    return { contributionId: result.rows[0].contribution_id, supersededPrior: false };
   }
 
-  const wordId = input.axis === 'new_entry' ? null : input.wordId;
-  const result = await db.query<{ contribution_id: string }>(
-    `insert into contributions (word_id, axis, proposed_value, note, submitted_by)
-     values ($1, $2, $3, $4, $5)
-     returning contribution_id`,
-    [wordId, input.axis, input.proposedValue, input.note ?? null, submittedBy],
+  const observed = await loadObservedState(db, input.wordId);
+  const outcome = resolveOutcome(input, observed);
+  const fingerprint = fingerprintOutcome(outcome);
+
+  // Two statements, deliberately - a data-modifying CTE would share one
+  // snapshot with the insert, leaving the old row visible as 'active' to the
+  // partial unique index and failing. See 0013's implementation note.
+  const superseded = await db.query(
+    `update contributions set status = 'superseded'
+     where word_id = $1 and axis = $2 and submitted_by = $3 and status = 'active'`,
+    [input.wordId, input.axis, submittedBy],
   );
-  return { contributionId: result.rows[0].contribution_id };
+
+  const result = await db.query<{ contribution_id: string }>(
+    `insert into contributions (word_id, axis, proposed_value, resolved_value, value_fingerprint, note, submitted_by)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     returning contribution_id`,
+    [input.wordId, input.axis, input.proposedValue, outcome, fingerprint, input.note ?? null, submittedBy],
+  );
+
+  return {
+    contributionId: result.rows[0].contribution_id,
+    supersededPrior: (superseded.rowCount ?? 0) > 0,
+  };
 }

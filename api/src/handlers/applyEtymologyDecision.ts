@@ -9,10 +9,20 @@
 // exist, exactly like createPhrase.ts's strict check.
 
 import type pg from 'pg';
+import {
+  fingerprintOutcome,
+  resolveEtymologyOutcome,
+  type ComponentsAction,
+  type EtymologyOutcome,
+} from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
 import { WordNotFoundError } from './errors.js';
 
-export type ComponentsAction = 'confirm_atomic' | 'confirm_existing' | 'reject_proposed' | 'accept_proposed' | 'custom';
+// Re-exported rather than redeclared: shared/src/consensus.ts owns this union
+// now, since resolveEtymologyOutcome has to switch on it. Two independent
+// declarations would be free to drift apart, and a file importing both would
+// not compile.
+export type { ComponentsAction };
 
 export interface ApplyEtymologyDecisionInput {
   componentsAction: ComponentsAction;
@@ -66,6 +76,15 @@ export async function applyEtymologyDecisionInTransaction(
     throw new WordNotFoundError(wordId);
   }
 
+  // Read before any write below, so the fingerprint at the end describes the
+  // state this decision was made against - the same freeze-at-observation rule
+  // contributions follow.
+  const observed = await client.query<{ component_word_id: string }>(
+    'select component_word_id from golden_record_components where word_id = $1 order by component_position',
+    [wordId],
+  );
+  const observedComponents = observed.rows.map((r) => r.component_word_id);
+
   if (CONTENT_CHANGING_ACTIONS.has(input.componentsAction)) {
     const components = input.components ?? [];
     const foundRows = await client.query<{ word_id: string }>('select word_id from golden_record where word_id = any($1)', [
@@ -91,11 +110,66 @@ export async function applyEtymologyDecisionInTransaction(
   }
 
   const decision = { componentsAction: input.componentsAction, components: input.components };
+  const outcome = resolveEtymologyOutcome({ components: observedComponents }, input);
   await client.query(
-    `insert into word_decisions (word_id, axis, decision, note, decided_by)
-     values ($1, 'etymology', $2, $3, $4)
+    `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
+     values ($1, 'etymology', $2, $3, $4, $5)
      on conflict (word_id, axis) do update set
-       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by, decided_at = now()`,
-    [wordId, decision, input.note ?? null, decidedBy],
+       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by,
+       decided_at = now(), value_fingerprint = excluded.value_fingerprint`,
+    [wordId, decision, input.note ?? null, decidedBy, fingerprintOutcome(outcome)],
+  );
+}
+
+/** Writes a consensus OUTCOME as the golden etymology decision - the etymology
+ * counterpart of applyEntryOutcomeInTransaction. Replaces the component list
+ * with the agreed one and records the settled decision. */
+export async function applyEtymologyOutcomeInTransaction(
+  client: Queryable,
+  wordId: string,
+  outcome: EtymologyOutcome,
+  note: string | null,
+  decidedBy: string,
+): Promise<void> {
+  const existing = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
+  if ((existing.rowCount ?? 0) === 0) {
+    throw new WordNotFoundError(wordId);
+  }
+
+  // Same existence check the action path applies - a consensus can still name a
+  // component word that has since been removed.
+  if (outcome.components.length > 0) {
+    const found = await client.query<{ word_id: string }>('select word_id from golden_record where word_id = any($1)', [
+      outcome.components,
+    ]);
+    const foundIds = new Set(found.rows.map((r) => r.word_id));
+    const missing = outcome.components.filter((c) => !foundIds.has(c));
+    if (missing.length > 0) throw new ComponentsNotFoundError(missing);
+  }
+
+  await client.query('delete from golden_record_components where word_id = $1', [wordId]);
+  for (const [position, componentWordId] of outcome.components.entries()) {
+    await client.query(
+      'insert into golden_record_components (word_id, component_position, component_word_id) values ($1, $2, $3)',
+      [wordId, position, componentWordId],
+    );
+  }
+  await client.query('update golden_record set updated_at = now(), updated_by = $1 where word_id = $2', [decidedBy, wordId]);
+
+  await client.query(
+    `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
+     values ($1, 'etymology', $2, $3, $4, $5)
+     on conflict (word_id, axis) do update set
+       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by,
+       decided_at = now(), value_fingerprint = excluded.value_fingerprint`,
+    [
+      wordId,
+      outcome.atomic
+        ? { componentsAction: 'confirm_atomic' }
+        : { componentsAction: 'confirm_existing', components: outcome.components },
+      note,
+      decidedBy,
+      fingerprintOutcome(outcome),
+    ],
   );
 }

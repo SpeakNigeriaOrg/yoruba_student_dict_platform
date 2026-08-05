@@ -39,13 +39,24 @@ stays valid and no history is destroyed - `word_decisions.decided_by`,
 `word_images.uploaded_by` and the rest all still resolve. The people behind
 them simply get new `user_id`s on first Google login.
 
-One consequence worth knowing before it surprises someone: `AxisDecided.audio`
-is scoped per-user by design (`api/src/reviewShared.ts`) and `speakers.user_id`
-still points at the old rows, so a returning volunteer is shown "not yet
-recorded" for words they already recorded and asked to record them again.
-Existing recordings still publish fine (the R2 pipeline joins `speakers`, not
-logins). To hand someone their recording history back, remap their speaker rows
-once, after they have logged in with Google:
+**A related worry that turned out not to apply here.** `AxisDecided.audio` is
+scoped per-user by design (`api/src/reviewShared.ts`), so the concern was that
+orphaning accounts would cost returning volunteers their recording history. It
+didn't: checked against production after the cutover, all three `speakers` rows
+have `user_id = NULL`. They were created by the legacy import scripts
+(`migrateLegacyAudio.mjs`, `migrateSpeaker1And2.mjs`), which never linked a
+speaker to a platform account, so the 189 existing recordings were never
+attributed to a login and nothing was lost.
+
+Consequences of that, both correct: those recordings still publish normally
+(the R2 pipeline joins `speakers`, not logins), and every word shows audio as
+still-to-do for every account, because no account has in fact recorded anything
+through the app yet.
+
+Recordings made through the app *do* get a user link, via
+`getOrCreateSpeakerForUser` in `api/src/speakers.ts`. So if a real user ever
+needs to be re-pointed at their own speaker row after an identity change, this
+is the statement — it just isn't needed for the legacy data:
 
 ```sql
 update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';

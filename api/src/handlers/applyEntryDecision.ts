@@ -20,7 +20,15 @@
 // diagnoseEntry's own adoptionTarget computation.
 
 import type pg from 'pg';
-import { diagnoseEntry, orthographyInsensitiveForm, syllabifyWord, type KaikkiLexicon } from '@yoruba-student-dict-platform/shared';
+import {
+  diagnoseEntry,
+  fingerprintOutcome,
+  orthographyInsensitiveForm,
+  resolveEntryOutcome,
+  syllabifyWord,
+  type EntryOutcome,
+  type KaikkiLexicon,
+} from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { WordNotFoundError } from './errors.js';
@@ -114,10 +122,14 @@ export async function applyEntryDecisionInTransaction(
   input: ApplyEntryDecisionInput,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query<{ display_text: string; syllables: string[]; entry_type: string | null }>(
-    'select display_text, syllables, entry_type from golden_record where word_id = $1',
-    [wordId],
-  );
+  // definition is read alongside the rest so the outcome can be fingerprinted
+  // below against the state observed before any of this handler's writes.
+  const existing = await client.query<{
+    display_text: string;
+    syllables: string[];
+    entry_type: string | null;
+    definition: string | null;
+  }>('select display_text, syllables, entry_type, definition from golden_record where word_id = $1', [wordId]);
   const currentRow = existing.rows[0];
   if (!currentRow) {
     throw new WordNotFoundError(wordId);
@@ -183,11 +195,75 @@ export async function applyEntryDecisionInTransaction(
     definitionText: input.definitionText,
     definitionSourceForm: input.definitionSourceForm,
   };
+  // Fingerprinted with the same function contributions use, so a later
+  // contribution that disagrees with this decision can be detected by equality
+  // rather than re-derivation. Resolved from the state observed BEFORE the
+  // writes above, which by construction equals the state after them.
+  const outcome = resolveEntryOutcome(
+    { displayText: currentRow.display_text, syllables: currentRow.syllables, definition: currentRow.definition },
+    input,
+  );
+
   await client.query(
-    `insert into word_decisions (word_id, axis, decision, note, decided_by)
-     values ($1, 'entry', $2, $3, $4)
+    `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
+     values ($1, 'entry', $2, $3, $4, $5)
      on conflict (word_id, axis) do update set
-       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by, decided_at = now()`,
-    [wordId, decision, input.note ?? null, decidedBy],
+       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by,
+       decided_at = now(), value_fingerprint = excluded.value_fingerprint`,
+    [wordId, decision, input.note ?? null, decidedBy, fingerprintOutcome(outcome)],
+  );
+}
+
+/** Writes a consensus OUTCOME as the golden decision.
+ *
+ * Distinct from applyEntryDecisionInTransaction, which takes an action-shaped
+ * input, for two reasons:
+ *
+ *   1. No Kaikki verification. adopt_kaikki re-checks newDisplayText against
+ *      ingest/'s data because a client must not be trusted to invent a
+ *      spelling. A consensus spelling came from agreeing humans, not from a
+ *      Kaikki suggestion, so that check would wrongly reject it.
+ *   2. It writes content directly. keep_ours and select_candidate deliberately
+ *      never touch display_text, so there is no action that expresses "make the
+ *      record say exactly this".
+ *
+ * The recorded `decision` is deliberately the settled form - keep_ours plus
+ * confirm - because after these writes the record DOES hold the agreed content,
+ * and that is what getEntryReview's loadAxisOverride should replay. What
+ * changed, and who claimed it, lives in the contributions, which are never
+ * mutated. */
+export async function applyEntryOutcomeInTransaction(
+  client: Queryable,
+  wordId: string,
+  outcome: EntryOutcome,
+  note: string | null,
+  decidedBy: string,
+): Promise<void> {
+  const existing = await client.query<{ display_text: string; syllables: string[]; definition: string | null }>(
+    'select display_text, syllables, definition from golden_record where word_id = $1',
+    [wordId],
+  );
+  const row = existing.rows[0];
+  if (!row) throw new WordNotFoundError(wordId);
+
+  const syllablesDiffer =
+    row.syllables.length !== outcome.syllables.length || row.syllables.some((s, i) => s !== outcome.syllables[i]);
+
+  if (row.display_text !== outcome.displayText || syllablesDiffer || row.definition !== outcome.definitionText) {
+    await client.query(
+      `update golden_record
+       set display_text = $1, syllables = $2, definition = $3, updated_at = now(), updated_by = $4
+       where word_id = $5`,
+      [outcome.displayText, outcome.syllables, outcome.definitionText, decidedBy, wordId],
+    );
+  }
+
+  await client.query(
+    `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
+     values ($1, 'entry', $2, $3, $4, $5)
+     on conflict (word_id, axis) do update set
+       decision = excluded.decision, note = excluded.note, decided_by = excluded.decided_by,
+       decided_at = now(), value_fingerprint = excluded.value_fingerprint`,
+    [wordId, { action: 'keep_ours', definitionAction: 'confirm' }, note, decidedBy, fingerprintOutcome(outcome)],
   );
 }

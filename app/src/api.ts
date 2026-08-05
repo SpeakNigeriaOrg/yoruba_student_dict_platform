@@ -12,6 +12,8 @@ import type {
   CheckDefinitionResult,
   CheckSyllableSplitResult,
   ComponentsAxisFieldsResult,
+  ConsensusBucket,
+  ConsensusSummary,
   DiagnoseEntryResult,
   KaikkiSearchResult,
   VocabSearchResult,
@@ -369,18 +371,78 @@ export interface ContributionListItem {
   status: string;
 }
 
-export function getContributions(status = 'pending'): Promise<ContributionListItem[]> {
+/** Defaults to 'active' - 0013 replaced the pending/approved/rejected verdict
+ * vocabulary. This is no longer the curator's main surface; see getConsensus. */
+export function getContributions(status = 'active'): Promise<ContributionListItem[]> {
   return fetchJson<{ contributions: ContributionListItem[] }>(`/api/contributions?status=${encodeURIComponent(status)}`).then(
     (r) => r.contributions,
   );
 }
 
+/** Only valid for 'new_entry' contributions. Proposing a word that does not
+ * exist yet is authorship, so it is still approved individually; entry and
+ * etymology are settled by confirming the consensus instead, and the server
+ * rejects an attempt to approve one of those. */
 export function approveContribution(contributionId: string): Promise<void> {
   return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/approve`, { method: 'POST' });
 }
 
-export function rejectContribution(contributionId: string): Promise<void> {
-  return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/reject`, { method: 'POST' });
+/** Replaces rejectContribution. Removes a contribution from the consensus
+ * tally - spam, abuse, test data - while leaving what it says intact. */
+export function excludeContribution(contributionId: string, reason?: string): Promise<void> {
+  return fetchJson(`/api/contributions/${encodeURIComponent(contributionId)}/exclude`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+// Mirrors api/src/handlers/listConsensus.ts's ConsensusGroup - the curator
+// review queue, one row per (word, axis) rather than per contribution.
+// ConsensusSummary/ConsensusBucket come from shared, so the bucketing rules
+// have exactly one definition.
+export interface ConsensusGroup {
+  wordId: string;
+  displayText: string;
+  currentDefinition: string | null;
+  axis: 'entry' | 'etymology';
+  decidedAt: string | null;
+  decidedByEmail: string | null;
+  summary: ConsensusSummary;
+}
+
+export function getConsensus(options: { buckets?: ConsensusBucket[]; axis?: 'entry' | 'etymology' } = {}): Promise<
+  ConsensusGroup[]
+> {
+  const params = new URLSearchParams();
+  if (options.buckets?.length) params.set('buckets', options.buckets.join(','));
+  if (options.axis) params.set('axis', options.axis);
+  const query = params.toString();
+  return fetchJson<{ groups: ConsensusGroup[] }>(`/api/consensus${query ? `?${query}` : ''}`).then((r) => r.groups);
+}
+
+// Mirrors api/src/handlers/confirmConsensus.ts.
+export interface ConfirmConsensusItem {
+  wordId: string;
+  axis: 'entry' | 'etymology';
+  /** The fingerprint the curator was looking at. The server refuses the item if
+   * the winning claim has changed since - which is exactly the hazard in a bulk
+   * confirm, where the queue may be minutes old. */
+  expectedFingerprint?: string;
+  note?: string;
+}
+
+export interface ConfirmConsensusResult {
+  confirmed: Array<{ wordId: string; axis: string; fingerprint: string; agreementCount: number }>;
+  skipped: Array<{ wordId: string; axis: string; reason: string; detail?: string }>;
+}
+
+export function confirmConsensus(items: ConfirmConsensusItem[]): Promise<ConfirmConsensusResult> {
+  return fetchJson('/api/consensus/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
 }
 
 // Audio is sent inline (base64) and stored directly in Postgres, not
@@ -478,6 +540,10 @@ export interface UtteranceSummary {
   status: string;
   recordedDisplayText: string;
   recordedSyllables: string[];
+  /** The pronunciation this was recorded under no longer matches the word's
+   * current spelling or syllables, so the publish step will silently drop it.
+   * Computed server-side with the publish step's own comparison. */
+  divergesFromGolden: boolean;
   durationS: number | null;
   sampleRate: number | null;
   recordedAt: string;

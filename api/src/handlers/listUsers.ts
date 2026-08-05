@@ -34,7 +34,7 @@ export async function listUsers(client: Queryable): Promise<UserSummary[]> {
     // history and must not count toward a word's live review state.
     client.query<{ word_id: string; submitted_by: string; axis: DecisionAxis }>(
       `select word_id, submitted_by, axis from contributions
-       where status = 'pending' and axis in ('entry', 'etymology')`,
+       where status = 'active' and axis in ('entry', 'etymology')`,
     ),
   ]);
 

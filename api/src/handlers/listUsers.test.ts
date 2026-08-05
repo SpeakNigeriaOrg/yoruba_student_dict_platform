@@ -44,7 +44,7 @@ beforeAll(async () => {
   // word1: one pending contribution on 'entry' -> in review, not passed.
   await pool.query(
     `insert into contributions (word_id, axis, proposed_value, submitted_by, status)
-     values ($1, 'entry', '{}', $2, 'pending')`,
+     values ($1, 'entry', '{}', $2, 'active')`,
     [`${NS}word1`, volunteerId],
   );
 

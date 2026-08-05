@@ -3,9 +3,8 @@
 // Curator-only detail view for one user's assigned words: per-word
 // AxisStatusBadges (decided or not, same as every other word list) plus
 // AxisReviewBadges (this admin feature's own not_started/in_review/passed
-// per axis), an Unassign action per row (ContributionQueue.tsx's own
-// approve/reject/reload shape), and the assign-more-words form
-// (WordAssignPicker).
+// per axis), an Unassign action per row, and the assign-more-words form
+// (WordAssignPicker). Same list-then-reload shape as the other admin screens.
 
 import { useEffect, useState } from 'react';
 import {

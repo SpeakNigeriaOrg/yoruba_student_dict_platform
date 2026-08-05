@@ -43,6 +43,21 @@ export interface UtteranceSummary {
   status: string;
   recordedDisplayText: string;
   recordedSyllables: string[];
+  /** Whether the pronunciation this was recorded under no longer matches the
+   * word's current spelling or syllable split.
+   *
+   * Computed with the SAME comparison the publish step uses
+   * (scripts/publishToR2.mjs and exportGameContent.mjs both require
+   * recorded_display_text = display_text AND recorded_syllables = syllables),
+   * so a recording flagged here is exactly one that will be silently dropped
+   * from the game. Surfaced in the app rather than only in publish output,
+   * because the person who can fix it - by re-recording - is the speaker, not
+   * whoever happens to run the publish script.
+   *
+   * This is the visible consequence of 0006's belief preservation: the
+   * recording still says what the speaker actually said, and the divergence is
+   * information rather than corruption. */
+  divergesFromGolden: boolean;
   durationS: number | null;
   sampleRate: number | null;
   recordedAt: string;
@@ -52,8 +67,17 @@ export interface UtteranceSummary {
 }
 
 export async function listUtterances(client: Queryable, wordId: string, userId: string): Promise<UtteranceSummary[]> {
-  const wordResult = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
+  const wordResult = await client.query<{ display_text: string; syllables: string[] }>(
+    'select display_text, syllables from golden_record where word_id = $1',
+    [wordId],
+  );
   if (wordResult.rowCount === 0) throw new WordNotFoundError(wordId);
+  const current = wordResult.rows[0];
+
+  const diverges = (recordedDisplayText: string, recordedSyllables: string[]): boolean =>
+    recordedDisplayText !== current.display_text ||
+    recordedSyllables.length !== current.syllables.length ||
+    recordedSyllables.some((s, i) => s !== current.syllables[i]);
 
   const utteranceRows = await client.query<{
     utterance_id: string;
@@ -121,6 +145,7 @@ export async function listUtterances(client: Queryable, wordId: string, userId: 
     status: row.status,
     recordedDisplayText: row.recorded_display_text,
     recordedSyllables: row.recorded_syllables,
+    divergesFromGolden: diverges(row.recorded_display_text, row.recorded_syllables),
     durationS: row.duration_s === null ? null : Number(row.duration_s),
     sampleRate: row.sample_rate,
     recordedAt: row.recorded_at,

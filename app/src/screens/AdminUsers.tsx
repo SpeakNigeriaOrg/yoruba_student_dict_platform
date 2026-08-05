@@ -2,7 +2,7 @@
 //
 // Curator-only "Users" tab: every user account plus a per-user summary of
 // assigned/in-review/passed word counts, and an add-user form. Mirrors
-// ContributionQueue.tsx's own list+reload shape.
+// ReviewQueue.tsx's own list+reload shape.
 //
 // This used to own a private `selectedUserId` and render AdminUserDetail
 // itself. That created a second navigation stack the shell knew nothing

@@ -143,4 +143,60 @@ describe('listUtterances', () => {
   it('rejects a word_id that does not exist', async () => {
     await expect(listUtterances(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
+
+  describe('divergesFromGolden', () => {
+    // Mirrors the publish step's own gate: publishToR2.mjs and
+    // exportGameContent.mjs both require recorded_display_text = display_text
+    // AND recorded_syllables = syllables, and silently drop anything else.
+    // Flagging it here is what turns that silent drop into something the
+    // speaker can act on.
+    async function recordUnder(wordId: string, displayText: string, syllables: string[]) {
+      await registerUtterance(
+        pool,
+        { wordId, takeNumber: 1, audio: 'AAAA', recordedDisplayText: displayText, recordedSyllables: syllables },
+        userId,
+        username,
+      );
+    }
+
+    it('is false when the recording still matches the record', async () => {
+      const wordId = `${NS}match_word`;
+      await insertWord(wordId, ['kà', 'sù']);
+      await recordUnder(wordId, 'kàsù', ['kà', 'sù']);
+
+      const [utterance] = await listUtterances(pool, wordId, userId);
+      expect(utterance.divergesFromGolden).toBe(false);
+    });
+
+    it('is true once the spelling changes under it', async () => {
+      const wordId = `${NS}respelled_word`;
+      await insertWord(wordId, ['ka', 'su']);
+      await recordUnder(wordId, 'kasu', ['ka', 'su']);
+
+      // A curator later decides the word is really 'kásù'.
+      await pool.query('update golden_record set display_text = $1, syllables = $2 where word_id = $3', [
+        'kásù',
+        ['ká', 'sù'],
+        wordId,
+      ]);
+
+      const [utterance] = await listUtterances(pool, wordId, userId);
+      expect(utterance.divergesFromGolden).toBe(true);
+      // The recording still says what the speaker actually said - the point of
+      // preserving the pronunciation separately.
+      expect(utterance.recordedDisplayText).toBe('kasu');
+      expect(utterance.recordedSyllables).toEqual(['ka', 'su']);
+    });
+
+    it('is true when only the syllable split changed', async () => {
+      const wordId = `${NS}resplit_word`;
+      await insertWord(wordId, ['ka', 'su']);
+      await recordUnder(wordId, 'kasu', ['ka', 'su']);
+
+      await pool.query('update golden_record set syllables = $1 where word_id = $2', [['k', 'a', 'su'], wordId]);
+
+      const [utterance] = await listUtterances(pool, wordId, userId);
+      expect(utterance.divergesFromGolden).toBe(true);
+    });
+  });
 });

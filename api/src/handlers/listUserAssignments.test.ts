@@ -38,7 +38,7 @@ beforeAll(async () => {
   // definition not_started, etymology passed.
   await pool.query(
     `insert into contributions (word_id, axis, proposed_value, submitted_by, status)
-     values ($1, 'entry', '{}', $2, 'pending')`,
+     values ($1, 'entry', '{}', $2, 'active')`,
     [`${NS}word1`, targetUserId],
   );
   await pool.query('insert into word_decisions (word_id, axis, decision, decided_by) values ($1, $2, $3, $4)', [

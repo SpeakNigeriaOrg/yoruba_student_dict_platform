@@ -69,6 +69,16 @@ function UtteranceRow({ u, showSpeakerName }: { u: UtteranceSummary; showSpeaker
       <em>
         {u.recordedDisplayText} ({u.recordedSyllables.join(' · ')})
       </em>
+      {/* The recording is not wrong - it says what the speaker actually said.
+          What changed is the word underneath it, and the consequence is that the
+          publish step drops this take silently. Saying so here is the whole
+          point of preserving the recorded pronunciation separately. */}
+      {u.divergesFromGolden ? (
+        <>
+          {' '}
+          <span className="badge diverged">no longer matches</span>
+        </>
+      ) : null}
       {u.segments.length > 0 ? (
         <span>
           {' '}
@@ -103,6 +113,11 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
   const [loaded, setLoaded] = useState(false);
 
   const [pronunciationText, setPronunciationText] = useState('');
+  // The word's spelling as golden_record currently holds it. Kept separate from
+  // pronunciationText, which the speaker may edit before recording - the
+  // divergence warning is about the RECORD, so quoting the editable field would
+  // make the message change as they type.
+  const [goldenDisplayText, setGoldenDisplayText] = useState('');
   const [pronunciationSyllablesText, setPronunciationSyllablesText] = useState('');
   const recordedSyllables = pronunciationSyllablesText
     .split(',')
@@ -141,6 +156,7 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
       .then((result) => {
         if (cancelled) return;
         setPronunciationText(result.displayText);
+        setGoldenDisplayText(result.displayText);
         setPronunciationSyllablesText(result.syllables.join(','));
         setLoaded(true);
       })
@@ -208,6 +224,7 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
 
   const ownRecordings = previousRecordings?.filter((u) => u.isOwnRecording) ?? null;
   const otherRecordings = previousRecordings?.filter((u) => !u.isOwnRecording) ?? null;
+  const divergedCount = previousRecordings?.filter((u) => u.divergesFromGolden).length ?? 0;
 
   async function submit() {
     if (!take1Blob || !take2Blob || !segmentReviews || !countsMatch) return;
@@ -357,6 +374,20 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
         {submitting ? 'Submitting...' : 'Submit recording'}
       </button>
       {status ? <p role="status">{status}</p> : null}
+
+      {/* Surfaced here rather than only in the publish script's warnings,
+          because the speaker is the person who can act on it. The recordings
+          are intact and still say what was said; they simply no longer describe
+          this word's current spelling, so the game would omit them. */}
+      {divergedCount > 0 ? (
+        <p className="warning-banner" aria-label="Recording divergence warning">
+          {divergedCount === 1
+            ? '1 existing recording was made under a different pronunciation'
+            : `${divergedCount} existing recordings were made under a different pronunciation`}{' '}
+          than this word&apos;s current spelling ({goldenDisplayText}). They are preserved exactly as recorded, but will
+          not be published until re-recorded.
+        </p>
+      ) : null}
 
       <div className="take-step" aria-label="Your recordings">
         <h3>Your recordings</h3>

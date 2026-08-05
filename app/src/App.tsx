@@ -15,7 +15,7 @@ import { AddWord } from './screens/AddWord.js';
 import { AdminUserDetail } from './screens/AdminUserDetail.js';
 import { AdminUsers } from './screens/AdminUsers.js';
 import { AllWordsList } from './screens/AllWordsList.js';
-import { ContributionQueue } from './screens/ContributionQueue.js';
+import { ReviewQueue } from './screens/ReviewQueue.js';
 import { TaskQueue } from './screens/TaskQueue.js';
 import { WordReview } from './screens/WordReview.js';
 import { getClientPrincipal, type ClientPrincipal } from './identity.js';
@@ -93,7 +93,7 @@ export default function App() {
           ) : route.view === 'add' && isCurator ? (
             <AddWord />
           ) : route.view === 'contributions' && isCurator ? (
-            <ContributionQueue />
+            <ReviewQueue onOpenWord={openWord} />
           ) : route.view === 'users' && isCurator ? (
             <AdminUsers onSelectUser={(userId) => navigate({ view: 'user', userId })} />
           ) : (

@@ -33,7 +33,7 @@ describe('listContributions', () => {
       volunteerUserId,
     );
 
-    const contributions = await listContributions(pool, 'pending');
+    const contributions = await listContributions(pool, 'active');
     const found = contributions.find((c) => c.wordId === wordId);
 
     expect(found).toBeDefined();
@@ -41,21 +41,23 @@ describe('listContributions', () => {
     expect(found?.axis).toBe('entry');
     expect(found?.submittedBy).toBe(`${NS}volunteer`);
     expect(found?.note).toBe('a note');
-    expect(found?.status).toBe('pending');
+    expect(found?.status).toBe('active');
   });
 
-  it('does not list a new_entry contribution under the default pending filter after it is rejected', async () => {
+  it('drops an excluded contribution from the default filter but keeps it findable', async () => {
+    // Exclusion sets a row aside from the tally without deleting the belief, so
+    // it must still be retrievable under its own status.
     const result = await submitContribution(
       pool,
       { axis: 'new_entry', proposedValue: { proposedWordId: `${NS}newentryword`, displayText: 'x', syllables: ['x'], type: 'word' } },
       volunteerUserId,
     );
-    await pool.query("update contributions set status = 'rejected' where contribution_id = $1", [result.contributionId]);
+    await pool.query("update contributions set status = 'excluded' where contribution_id = $1", [result.contributionId]);
 
-    const pending = await listContributions(pool, 'pending');
-    expect(pending.find((c) => c.contributionId === result.contributionId)).toBeUndefined();
+    const active = await listContributions(pool, 'active');
+    expect(active.find((c) => c.contributionId === result.contributionId)).toBeUndefined();
 
-    const rejected = await listContributions(pool, 'rejected');
-    expect(rejected.find((c) => c.contributionId === result.contributionId)).toBeDefined();
+    const excluded = await listContributions(pool, 'excluded');
+    expect(excluded.find((c) => c.contributionId === result.contributionId)).toBeDefined();
   });
 });

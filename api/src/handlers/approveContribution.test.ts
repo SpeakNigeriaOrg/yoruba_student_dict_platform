@@ -1,12 +1,22 @@
+// Since 0013 this handler does ONE thing: approve a 'new_entry' proposal.
+//
+// The entry and etymology cases that used to live here are gone, not moved -
+// approving one volunteer's answer as the truth is no longer a coherent act
+// when several people may have weighed in on the same word. Those axes are
+// settled by confirmConsensus (see confirmConsensus.test.ts). What remains here
+// is authorship: proposing a word that does not exist yet, which nobody else
+// can have an opinion about because there is nothing there to have an opinion
+// about.
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import {
   approveContribution,
+  ConsensusAxisNotIndividuallyApprovableError,
   ContributionAlreadyReviewedError,
   ContributionNotFoundError,
   LegacyAxisNotApprovableError,
 } from './approveContribution.js';
-import { IncompleteEntryDecisionError } from './applyEntryDecision.js';
 import { submitContribution } from './submitContribution.js';
 import { WordIdAlreadyExistsError } from './errors.js';
 
@@ -48,213 +58,177 @@ async function insertWord(wordId: string, definition: string | null = null): Pro
 }
 
 describe('approveContribution', () => {
-  it('approves an entry contribution: applies the decision and records word_decisions', async () => {
-    const wordId = `${NS}entry_word`;
-    await insertWord(wordId);
-    const { contributionId } = await submitContribution(
-      pool,
-      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
-      volunteerUserId,
-    );
+  describe('new_entry: authorship, still approved individually', () => {
+    it('creates the golden_record row and marks the contribution applied', async () => {
+      const wordId = `${NS}new_word`;
+      const { contributionId } = await submitContribution(
+        pool,
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'epo', syllables: ['e', 'po'], type: 'word' } },
+        volunteerUserId,
+      );
 
-    await approveContribution(pool, contributionId, curatorUserId);
+      await approveContribution(pool, contributionId, curatorUserId);
 
-    const decision = await pool.query("select decided_by from word_decisions where word_id = $1 and axis = 'entry'", [
-      wordId,
-    ]);
-    expect(decision.rows[0].decided_by).toBe(curatorUserId);
+      const word = await pool.query<{ entry_type: string | null; updated_by: string }>(
+        'select entry_type, updated_by from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(word.rows[0]).toEqual({ entry_type: null, updated_by: curatorUserId });
 
-    const status = await pool.query<{ status: string; reviewed_by: string }>(
-      'select status, reviewed_by from contributions where contribution_id = $1',
-      [contributionId],
-    );
-    expect(status.rows[0]).toEqual({ status: 'approved', reviewed_by: curatorUserId });
-  });
+      // 'applied', not 'approved' - 0013 replaced the verdict vocabulary, and
+      // the check constraint no longer permits the old value at all.
+      const row = await pool.query<{ status: string; reviewed_by: string }>(
+        'select status, reviewed_by from contributions where contribution_id = $1',
+        [contributionId],
+      );
+      expect(row.rows[0]).toEqual({ status: 'applied', reviewed_by: curatorUserId });
+    });
 
-  it('approves an entry contribution with custom text: overwrites the definition', async () => {
-    const wordId = `${NS}definition_word`;
-    await insertWord(wordId, 'old text');
-    const { contributionId } = await submitContribution(
-      pool,
-      {
-        axis: 'entry',
-        wordId,
-        proposedValue: { action: 'keep_ours', definitionAction: 'custom', definitionText: 'volunteer text' },
-      },
-      volunteerUserId,
-    );
-
-    await approveContribution(pool, contributionId, curatorUserId);
-
-    const word = await pool.query<{ definition: string }>('select definition from golden_record where word_id = $1', [wordId]);
-    expect(word.rows[0].definition).toBe('volunteer text');
-  });
-
-  it('refuses to approve an entry contribution missing the definition half', async () => {
-    // A proposed_value stored before the merge, or hand-edited, must not be
-    // able to apply as half a decision - the invariant lives in the write
-    // path, not only in whichever endpoint accepted it. Inserted directly
-    // because submitContribution now rejects this shape up front.
-    const wordId = `${NS}halfentry_word`;
-    await insertWord(wordId);
-    const inserted = await pool.query<{ contribution_id: string }>(
-      `insert into contributions (word_id, axis, proposed_value, submitted_by)
-       values ($1, 'entry', '{"action":"keep_ours"}'::jsonb, $2) returning contribution_id`,
-      [wordId, volunteerUserId],
-    );
-
-    await expect(approveContribution(pool, inserted.rows[0].contribution_id, curatorUserId)).rejects.toThrow(
-      IncompleteEntryDecisionError,
-    );
-
-    // And it stays pending rather than being marked approved-but-unapplied.
-    const status = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
-      inserted.rows[0].contribution_id,
-    ]);
-    expect(status.rows[0].status).toBe('pending');
-  });
-
-  it('refuses to approve a pre-merge spelling/definition contribution', async () => {
-    // contributions retains those axis values as history; 0011 rejected the
-    // pending ones. If one somehow arrives pending, it must fail loudly -
-    // the switch previously had no default, so an unhandled axis would mark
-    // the row approved while applying nothing at all.
-    const wordId = `${NS}legacy_word`;
-    await insertWord(wordId);
-    const inserted = await pool.query<{ contribution_id: string }>(
-      `insert into contributions (word_id, axis, proposed_value, submitted_by)
-       values ($1, 'spelling', '{"action":"keep_ours"}'::jsonb, $2) returning contribution_id`,
-      [wordId, volunteerUserId],
-    );
-
-    await expect(approveContribution(pool, inserted.rows[0].contribution_id, curatorUserId)).rejects.toThrow(
-      LegacyAxisNotApprovableError,
-    );
-
-    const decisions = await pool.query('select 1 from word_decisions where word_id = $1', [wordId]);
-    expect(decisions.rowCount).toBe(0);
-  });
-
-  it('approves an etymology contribution: writes the proposed components in order', async () => {
-    const wordId = `${NS}etymology_word`;
-    await insertWord(wordId);
-    const { contributionId } = await submitContribution(
-      pool,
-      {
-        axis: 'etymology',
-        wordId,
-        proposedValue: { componentsAction: 'accept_proposed', components: [`${NS}comp_a`, `${NS}comp_b`] },
-      },
-      volunteerUserId,
-    );
-
-    await approveContribution(pool, contributionId, curatorUserId);
-
-    const rows = await pool.query<{ component_word_id: string }>(
-      'select component_word_id from golden_record_components where word_id = $1 order by component_position',
-      [wordId],
-    );
-    expect(rows.rows.map((r) => r.component_word_id)).toEqual([`${NS}comp_a`, `${NS}comp_b`]);
-  });
-
-  it('approves a new_entry word contribution: creates the golden_record row', async () => {
-    const wordId = `${NS}new_word`;
-    const { contributionId } = await submitContribution(
-      pool,
-      { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'epo', syllables: ['e', 'po'], type: 'word' } },
-      volunteerUserId,
-    );
-
-    await approveContribution(pool, contributionId, curatorUserId);
-
-    const word = await pool.query<{ entry_type: string | null; updated_by: string }>(
-      'select entry_type, updated_by from golden_record where word_id = $1',
-      [wordId],
-    );
-    expect(word.rows[0]).toEqual({ entry_type: null, updated_by: curatorUserId });
-  });
-
-  it('approves a new_entry phrase contribution: creates the golden_record row and its components', async () => {
-    const wordId = `${NS}new_phrase`;
-    const { contributionId } = await submitContribution(
-      pool,
-      {
-        axis: 'new_entry',
-        proposedValue: {
-          proposedWordId: wordId,
-          displayText: 'a b',
-          syllables: ['a', 'b'],
-          type: 'phrase',
-          components: [`${NS}comp_a`, `${NS}comp_b`],
+    it('creates a phrase and its components in order', async () => {
+      const wordId = `${NS}new_phrase`;
+      const { contributionId } = await submitContribution(
+        pool,
+        {
+          axis: 'new_entry',
+          proposedValue: {
+            proposedWordId: wordId,
+            displayText: 'a b',
+            syllables: ['a', 'b'],
+            type: 'phrase',
+            components: [`${NS}comp_a`, `${NS}comp_b`],
+          },
         },
-      },
-      volunteerUserId,
-    );
+        volunteerUserId,
+      );
 
-    await approveContribution(pool, contributionId, curatorUserId);
+      await approveContribution(pool, contributionId, curatorUserId);
 
-    const word = await pool.query<{ entry_type: string }>('select entry_type from golden_record where word_id = $1', [wordId]);
-    expect(word.rows[0].entry_type).toBe('phrase');
-    const rows = await pool.query('select component_word_id from golden_record_components where word_id = $1', [wordId]);
-    expect(rows.rowCount).toBe(2);
-  });
+      const rows = await pool.query<{ component_word_id: string }>(
+        'select component_word_id from golden_record_components where word_id = $1 order by component_position',
+        [wordId],
+      );
+      expect(rows.rows.map((r) => r.component_word_id)).toEqual([`${NS}comp_a`, `${NS}comp_b`]);
+    });
 
-  it('rejects a new_entry phrase contribution referencing a nonexistent component, leaving the contribution pending and creating nothing', async () => {
-    const wordId = `${NS}bad_new_phrase`;
-    const { contributionId } = await submitContribution(
-      pool,
-      {
-        axis: 'new_entry',
-        proposedValue: {
-          proposedWordId: wordId,
-          displayText: 'a b',
-          syllables: ['a', 'b'],
-          type: 'phrase',
-          components: [`${NS}comp_a`, `${NS}nonexistent`],
+    it('leaves the contribution untouched when a component does not exist', async () => {
+      const wordId = `${NS}bad_phrase`;
+      const { contributionId } = await submitContribution(
+        pool,
+        {
+          axis: 'new_entry',
+          proposedValue: {
+            proposedWordId: wordId,
+            displayText: 'a b',
+            syllables: ['a', 'b'],
+            type: 'phrase',
+            components: [`${NS}nonexistent`],
+          },
         },
-      },
-      volunteerUserId,
-    );
+        volunteerUserId,
+      );
 
-    await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow();
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow();
 
-    const word = await pool.query('select 1 from golden_record where word_id = $1', [wordId]);
-    expect(word.rowCount).toBe(0);
+      const created = await pool.query('select 1 from golden_record where word_id = $1', [wordId]);
+      expect(created.rowCount).toBe(0);
+      const row = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
+        contributionId,
+      ]);
+      expect(row.rows[0].status).toBe('active');
+    });
 
-    const status = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
-      contributionId,
-    ]);
-    expect(status.rows[0].status).toBe('pending');
+    it('refuses when the proposed word_id already exists', async () => {
+      const wordId = `${NS}dupe_word`;
+      await insertWord(wordId);
+      const { contributionId } = await submitContribution(
+        pool,
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word' } },
+        volunteerUserId,
+      );
+
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(WordIdAlreadyExistsError);
+    });
+
+    it('refuses to approve the same proposal twice', async () => {
+      const wordId = `${NS}reapprove_word`;
+      const { contributionId } = await submitContribution(
+        pool,
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word' } },
+        volunteerUserId,
+      );
+
+      await approveContribution(pool, contributionId, curatorUserId);
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(ContributionAlreadyReviewedError);
+    });
   });
 
-  it('rejects approving a new_entry word whose proposedWordId already exists', async () => {
-    const wordId = `${NS}already_exists_word`;
-    await insertWord(wordId);
-    const { contributionId } = await submitContribution(
-      pool,
-      { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'y', syllables: ['y'], type: 'word' } },
-      volunteerUserId,
-    );
+  describe('consensus axes are no longer individually approvable', () => {
+    it('refuses an entry contribution, pointing at the consensus path', async () => {
+      // The behaviour change at the heart of the phase: applying one
+      // volunteer's answer would ignore everyone else who weighed in.
+      const wordId = `${NS}entry_word`;
+      await insertWord(wordId);
+      const { contributionId } = await submitContribution(
+        pool,
+        { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
+        volunteerUserId,
+      );
 
-    await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(WordIdAlreadyExistsError);
-  });
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toBeInstanceOf(
+        ConsensusAxisNotIndividuallyApprovableError,
+      );
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(/consensus/);
 
-  it('rejects re-approving an already-approved contribution', async () => {
-    const wordId = `${NS}reapprove_word`;
-    await insertWord(wordId);
-    const { contributionId } = await submitContribution(
-      pool,
-      { axis: 'entry', wordId, proposedValue: { action: 'keep_ours', definitionAction: 'confirm' } },
-      volunteerUserId,
-    );
+      // Nothing applied, and the contribution is still live evidence.
+      const decisions = await pool.query('select 1 from word_decisions where word_id = $1', [wordId]);
+      expect(decisions.rowCount).toBe(0);
+      const row = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
+        contributionId,
+      ]);
+      expect(row.rows[0].status).toBe('active');
+    });
 
-    await approveContribution(pool, contributionId, curatorUserId);
-    await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(ContributionAlreadyReviewedError);
+    it('refuses an etymology contribution', async () => {
+      const wordId = `${NS}etym_word`;
+      await insertWord(wordId);
+      const { contributionId } = await submitContribution(
+        pool,
+        {
+          axis: 'etymology',
+          wordId,
+          proposedValue: { componentsAction: 'accept_proposed', components: [`${NS}comp_a`, `${NS}comp_b`] },
+        },
+        volunteerUserId,
+      );
+
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toBeInstanceOf(
+        ConsensusAxisNotIndividuallyApprovableError,
+      );
+      const components = await pool.query('select 1 from golden_record_components where word_id = $1', [wordId]);
+      expect(components.rowCount).toBe(0);
+    });
+
+    it('refuses a pre-merge spelling/definition contribution', async () => {
+      // Those axis values survive on historical rows (0011 kept them readable);
+      // they are unapprovable, and must fail loudly rather than being marked
+      // applied while applying nothing.
+      const wordId = `${NS}legacy_word`;
+      await insertWord(wordId);
+      const inserted = await pool.query<{ contribution_id: string }>(
+        `insert into contributions (word_id, axis, proposed_value, submitted_by)
+         values ($1, 'spelling', '{"action":"keep_ours"}'::jsonb, $2) returning contribution_id`,
+        [wordId, volunteerUserId],
+      );
+
+      await expect(approveContribution(pool, inserted.rows[0].contribution_id, curatorUserId)).rejects.toBeInstanceOf(
+        LegacyAxisNotApprovableError,
+      );
+    });
   });
 
   it('rejects approving a contribution id that does not exist', async () => {
-    await expect(
-      approveContribution(pool, '00000000-0000-0000-0000-000000000000', curatorUserId),
-    ).rejects.toThrow(ContributionNotFoundError);
+    await expect(approveContribution(pool, '00000000-0000-0000-0000-000000000000', curatorUserId)).rejects.toThrow(
+      ContributionNotFoundError,
+    );
   });
 });

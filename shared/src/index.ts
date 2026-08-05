@@ -10,3 +10,4 @@ export * from './searchShared.js';
 export * from './kaikkiSearch.js';
 export * from './vocabSearch.js';
 export * from './duplicateCheck.js';
+export * from './consensus.js';

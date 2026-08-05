@@ -25,7 +25,15 @@ export interface ContributionListItem {
   status: string;
 }
 
-export async function listContributions(client: Queryable, status = 'pending'): Promise<ContributionListItem[]> {
+/** Defaults to 'active' - 0013 replaced the pending/approved/rejected verdict
+ * vocabulary with one describing a row's standing as evidence, and 'pending'
+ * no longer exists.
+ *
+ * This remains a per-contribution view, but it is no longer the curator's main
+ * surface: settling entry/etymology happens through the consensus queue
+ * (listConsensus.ts). What this is still for is the 'new_entry' approval queue,
+ * inspecting one word's individual contributors, and finding a row to exclude. */
+export async function listContributions(client: Queryable, status = 'active'): Promise<ContributionListItem[]> {
   const { rows } = await client.query<{
     contribution_id: string;
     word_id: string | null;
