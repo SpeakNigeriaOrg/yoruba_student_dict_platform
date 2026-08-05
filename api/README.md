@@ -58,6 +58,31 @@ requires `member` or `curator` rather than `authenticated`. An unregistered
 user can sign in to Google and reach nothing. Curators register people by
 email via `POST /api/users`.
 
+### Route rule ordering is load-bearing
+
+**A specific route must precede its own wildcard** in
+`staticwebapp.config.json`. SWA evaluates `routes` in order, first match wins,
+and its `*` matches the bare path as well as paths beneath it.
+
+This was a live 403: `/api/contributions/*` (curator-only) sat above
+`/api/contributions` POST (member), so a volunteer submitting a contribution
+matched the curator wildcard and was refused. It was invisible for two reasons
+worth remembering — `member` worked on every other route, so it read as an auth
+bug rather than an ordering one; and unauthenticated probing cannot detect it at
+all, because every rule returns the same `401 -> /login` override to an
+anonymous caller. Only a real non-curator signing in exposes it.
+
+JSON has no comments, so the invariant lives here. To check it after editing
+routes:
+
+```
+python3 -c "
+import json; rules=[r for r in json.load(open('app/public/staticwebapp.config.json'))['routes'] if r.get('route','').startswith('/api')]
+print([(w['route'],s['route']) for i,w in enumerate(rules) if w['route'].endswith('/*')
+       for j,s in enumerate(rules) if j>i and (s['route']==w['route'][:-2] or s['route'].startswith(w['route'][:-2]+'/'))] or 'OK')
+"
+```
+
 Two things about the roles function that are easy to get wrong:
 
 - **Do not add an `allowedRoles` route rule for `/api/GetRoles`.** Verified

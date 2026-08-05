@@ -29,7 +29,11 @@
     { "route": "/api/words/*", "allowedRoles": ["member"] },
     { "route": "/api/phrases", "allowedRoles": ["curator"] },
     { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
+
+    { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
+    { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["member"] },
     { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
+
     { "route": "/api/consensus", "allowedRoles": ["curator"] },
     { "route": "/api/consensus/*", "allowedRoles": ["curator"] },
 
@@ -39,8 +43,6 @@
     { "route": "/api/users", "allowedRoles": ["curator"] },
     { "route": "/api/users/*", "allowedRoles": ["curator"] },
 
-    { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
-    { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["member"] },
     { "route": "/api/utterances/*", "allowedRoles": ["member"] },
     { "route": "/api/syllables/*", "allowedRoles": ["member"] },
 
