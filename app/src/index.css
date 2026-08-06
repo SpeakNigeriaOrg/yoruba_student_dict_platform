@@ -622,28 +622,48 @@ audio {
 }
 
 /* ---- Tone editor ----
-   One ROW per syllable, read top to bottom, with that syllable's three tone options
-   side by side.
+   A grid: one COLUMN per syllable, one ROW per tone, high at the top.
    
-   Columns-per-syllable was tried first and does not survive contact with a phone: each
-   button holds a whole syllable (they render `dì di dí`, not a generic `à a á`), so
-   three or four syllable-wide columns overflow the viewport and the word has to be
-   scrolled sideways to be reviewed. Stacking keeps every option for every syllable on
-   screen at once, which matters because the reviewer is comparing them.
+   The arrangement is the feature. Because vertical position means pitch, the selected
+   cells trace the word's tone contour left to right - `èékánná` reads as a shape (low,
+   then three highs) instead of four separate answers the reviewer has to hold in their
+   head, and an implausible contour is visible rather than deduced.
    
-   Buttons stay at least 44px tall - tapping one is the single most frequent action in
-   the app. */
-.syllable-row {
+   Reading the whole word also stays cheap: each column is one syllable wide, so a
+   four-syllable word is ~4 x 60px and fits a phone without scrolling - which the
+   earlier three-buttons-in-a-row-per-syllable layout did not.
+   
+   Buttons keep the 44px min-height from .btn: tapping one is the most frequent action
+   in the app. */
+.tone-grid {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+.tone-axis {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 4px;
+  flex: 0 0 auto;
 }
-.syllable-cell {
+.tone-axis-label {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding-right: 4px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.syllable-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 54px;
 }
 .syllable-face {
   font-size: 1.45rem;
@@ -653,33 +673,34 @@ audio {
   white-space: nowrap;
 }
 .syllable-letters {
-  width: 68px;
+  width: 100%;
+  box-sizing: border-box;
   text-align: center;
   font-size: 1.05rem;
-  padding: 6px 4px;
+  padding: 6px 2px;
 }
-.tone-choices,
-.letter-palette {
+/* Vertical inside a column: this is the pitch axis. */
+.tone-choices {
   display: flex;
+  flex-direction: column;
   gap: 4px;
 }
+.letter-palette {
+  display: flex;
+  gap: 2px;
+}
 .tone-btn {
-  flex: 1 1 0;
-  min-width: 56px;
-  padding: 8px 6px;
+  padding: 6px 4px;
   font-size: 1.15rem;
   line-height: 1.2;
-}
-/* The three options share the row evenly, so they are the same size regardless of how
-   wide the syllable is - a reviewer aiming for "high" should not have to hit a smaller
-   target on `gbẹ̀` than on `a`. */
-.tone-choices {
-  flex: 1 1 auto;
+  white-space: nowrap;
 }
 .palette-btn {
-  min-width: 30px;
-  padding: 6px 4px;
-  font-size: 0.95rem;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 2px;
+  font-size: 0.9rem;
   line-height: 1;
 }
 

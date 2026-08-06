@@ -76,9 +76,23 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     // being edited, which is simply unreadable as a choice about `dì`.
     await loaded(entryFixture);
 
-    // Syllable 2 of dùjẹ̀kù is `jẹ̀`.
+    // Syllable 2 of dùjẹ̀kù is `jẹ̀`. Order is HIGH first, top to bottom, so vertical
+    // position means pitch and the selected cells trace the word's tone contour.
     const buttons = [...screen.getByLabelText('Tone of syllable 2').querySelectorAll('button')];
-    expect(buttons.map((b) => b.textContent)).toEqual(['jẹ̀', 'jẹ', 'jẹ́']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['jẹ́', 'jẹ', 'jẹ̀']);
+  });
+
+  it('orders every syllable high-to-low, so the selected cells form a readable contour', async () => {
+    await loaded(entryFixture);
+    for (const n of [1, 2, 3]) {
+      const group = screen.getByLabelText(`Tone of syllable ${n}`);
+      const labels = [...group.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+      expect(labels).toEqual([
+        `Syllable ${n} high tone`,
+        `Syllable ${n} mid tone`,
+        `Syllable ${n} low tone`,
+      ]);
+    }
   });
 
   it('previews the mid-tone form correctly per bearer, since mid is not a mark on a vowel', async () => {

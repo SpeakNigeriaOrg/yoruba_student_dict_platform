@@ -37,17 +37,21 @@
 
 import { applyTone, lettersOf, toneBearerKind, toneOf, type Tone } from '@yoruba-student-dict-platform/shared';
 
-/** The three tones, in the order they are spoken about. No fixed labels: each button
- * is rendered as THIS syllable carrying that tone, so the reviewer reads the actual
- * result rather than a generic exemplar.
+/** Top to bottom: HIGH first, so vertical position means pitch.
  *
- * The first version used static `à a á`, which showed the letter "a" on every button
- * of every syllable - so the choices for `dì` read "à a á", three letters that are not
- * in the syllable being edited. */
+ * That ordering is the whole point of the grid. One column per syllable and one row per
+ * tone means the selected cells trace the word's tone contour left to right - `èékánná`
+ * reads as a shape (low, then three highs) rather than as four separate answers a
+ * reviewer has to hold in their head. An implausible contour becomes visible instead of
+ * needing to be reasoned about.
+ *
+ * No fixed labels on the cells: each is rendered as THIS syllable carrying that tone.
+ * The first version used static `à a á` on every button of every syllable, so the
+ * choices under `dì` read "à a á" - three letters not in the syllable being edited. */
 const TONES: Array<{ tone: Tone; hint: string }> = [
-  { tone: 'low', hint: 'low' },
-  { tone: 'mid', hint: 'mid' },
   { tone: 'high', hint: 'high' },
+  { tone: 'mid', hint: 'mid' },
+  { tone: 'low', hint: 'low' },
 ];
 
 /** The three characters a Yoruba keyboard would be needed for. Tone is handled by
@@ -92,11 +96,26 @@ export function ToneEditor({
   return (
     <div aria-label="Tone editor">
       <p className="field-note">
-        Tap a syllable's tone to change it. Tone is what sources most often get wrong, so this is the main thing to
-        check.
+        Each column is one syllable, top to bottom is high / mid / low. The highlighted
+        cells are the word's tone as it stands - tap another to change it. Tone is what
+        sources most often get wrong, so this is the main thing to check.
       </p>
 
-      <div className="syllable-row">
+      <div className={`tone-grid${editingLetters ? ' editing-letters' : ''}`}>
+        {/* The pitch axis. Hidden while the letters boxes are open: those make each
+            column taller by a different amount than a bare label column, and a
+            misaligned axis is worse than none. The diacritics still carry it - every
+            cell in the top row has an acute, every cell in the bottom row a grave. */}
+        {editingLetters ? null : (
+          <div className="tone-axis" aria-hidden="true">
+            {TONES.map(({ tone, hint }) => (
+              <div key={tone} className="tone-axis-label">
+                {hint}
+              </div>
+            ))}
+          </div>
+        )}
+
         {syllables.map((syllable, index) => {
           const bearerTone = toneOf(syllable);
           // No vowel and no syllabic nasal: nothing can carry tone. Wiktionary has
@@ -104,7 +123,7 @@ export function ToneEditor({
           const toneable = toneBearerKind(syllable) !== null;
 
           return (
-            <div key={index} className="syllable-cell">
+            <div key={index} className="syllable-col">
               {/* Shown only when no button is highlighted, which is when the row would
                   otherwise have nothing identifying it. Two cases: a syllable that
                   cannot carry tone at all (Wiktionary's bare letter entries), and an
