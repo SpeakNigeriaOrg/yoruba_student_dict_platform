@@ -37,6 +37,9 @@
     { "route": "/api/consensus", "allowedRoles": ["curator"] },
     { "route": "/api/consensus/*", "allowedRoles": ["curator"] },
 
+    { "route": "/api/upstream-drift", "allowedRoles": ["curator"] },
+    { "route": "/api/upstream-drift/*", "allowedRoles": ["curator"] },
+
     { "route": "/api/assignments/me", "allowedRoles": ["member"] },
     { "route": "/api/assignments", "methods": ["POST"], "allowedRoles": ["curator"] },
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },

@@ -1,34 +1,71 @@
 {
-  "wordId": "fixturegenspldef_spellingword",
-  "displayText": "fixturegenspldef_kasu",
-  "englishHint": "spellingword",
-  "status": "tone_mismatch",
-  "matchedForm": "fixturegenspldef_kásù",
-  "canonicalForm": "fixturegenspldef_kásù",
-  "adoptionTarget": "fixturegenspldef_kásù",
-  "matchedPos": "verb",
+  "wordId": "fixturegenentry_adiye_chicken",
+  "displayText": "fixturegenentry_adìyẹ",
+  "englishHint": "chicken",
+  "status": "match",
+  "matchedForm": "fixturegenentry_adìyẹ",
+  "canonicalForm": "fixturegenentry_adìyẹ",
+  "adoptionTarget": "fixturegenentry_adìyẹ",
+  "matchedEntryId": "fixturegenentry-etym-adiye",
+  "matchedEtymologyNumber": "1",
+  "matchedPos": "noun",
   "matchedGlosses": [
-    "test gloss for spelling fixture"
+    "chicken",
+    "fowl"
   ],
   "matchedAltOfTargets": [],
   "matchedComponentCandidates": [],
   "matchedUsedInCandidates": [],
-  "syllables": [
-    "ka",
-    "su"
+  "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
+  "syllableSplitStatus": "mismatch",
+  "syllableSplitManual": [
+    "a",
+    "dì",
+    "yẹ"
+  ],
+  "syllableSplitProgrammatic": [
+    "fi",
+    "tu",
+    "re",
+    "ge",
+    "nen",
+    "trya",
+    "dì",
+    "yẹ"
   ],
   "definitionCandidateGlosses": [
-    "to fail"
+    "chicken",
+    "fowl"
   ],
-  "definitionSourceForm": "fixturegenspldef_kásù",
+  "definitionSourceForm": "fixturegenentry_adìyẹ",
   "definitionSourceIsCrossReference": false,
   "definitionLinkedSameAsSpelling": true,
   "definitionStatus": "proposed",
-  "definitionCurrent": null,
-  "definitionProposed": "to fail",
+  "definitionCurrent": "chicken",
+  "definitionProposed": "chicken",
+  "syllables": [
+    "a",
+    "dì",
+    "yẹ"
+  ],
   "axisDecided": {
     "entry": false,
     "etymology": false,
     "audio": false
-  }
+  },
+  "citation": {
+    "entryId": "fixturegenentry-etym-adiye",
+    "exemptReason": null,
+    "pin": {
+      "pos": "noun",
+      "glosses": [
+        "chicken",
+        "fowl"
+      ],
+      "canonicalForm": "fixturegenentry_adìyẹ",
+      "etymologyText": "Inherited from Proto-Yoruboid.",
+      "etymologyNumber": "1"
+    }
+  },
+  "spellingVsUpstream": "matches"
 }

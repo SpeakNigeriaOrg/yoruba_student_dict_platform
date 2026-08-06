@@ -30,21 +30,46 @@
 import {
   checkDefinition,
   checkSyllableSplit,
+  compareSpellingToPin,
   diagnoseEntry,
   resolveDefinitionSource,
   resolveEffectiveDisplayText,
   type CheckDefinitionResult,
   type CheckSyllableSplitResult,
   type DiagnoseEntryResult,
+  type PinSpellingComparison,
+  type UpstreamPin,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
 import { loadFullKaikkiLexicon } from '../kaikkiData.js';
 import { loadAxisDecided, loadAxisOverride, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
+/** What this word cites, read from upstream_citations - the copy taken when a
+ * human validated it, NOT a live Kaikki lookup.
+ *
+ * That distinction is the whole guarantee: Wiktionary can be edited tomorrow
+ * without changing what this screen shows a volunteer today. Drift is surfaced
+ * deliberately, by reconciliation, rather than appearing unannounced in the
+ * middle of someone's task. */
+export interface EntryCitation {
+  /** Null when the word is explicitly exempt (no upstream entry exists). */
+  entryId: string | null;
+  exemptReason: string | null;
+  /** The pinned upstream content. Null for an exempt word, which has none. */
+  pin: UpstreamPin | null;
+}
+
 export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
   syllables: string[];
   axisDecided: AxisDecided;
+  /** Null for a word with no citation row at all - which after the E3 backfill
+   * means only a word created before citations existed. */
+  citation: EntryCitation | null;
+  /** Our spelling against the pinned upstream one. The single question a
+   * volunteer is asked about a cited word's written form; see
+   * compareSpellingToPin. */
+  spellingVsUpstream: PinSpellingComparison;
 }
 
 export async function getEntryReview(client: Queryable, wordId: string, userId: string): Promise<EntryReviewResult> {
@@ -54,6 +79,7 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
     throw new WordNotFoundError(wordId);
   }
   const axisDecided = await loadAxisDecided(client, wordId, userId);
+  const citation = await loadCitation(client, wordId);
   const override = await loadAxisOverride(client, wordId, 'entry');
   const lexicon = await loadFullKaikkiLexicon(client);
 
@@ -88,5 +114,27 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
     ...definitionFields,
     syllables: entry.syllables,
     axisDecided,
+    citation,
+    // Compared against the EFFECTIVE spelling, so a decision to adopt a new form
+    // in this same session is reflected rather than the screen still asking about
+    // the superseded one.
+    spellingVsUpstream: compareSpellingToPin(effective.displayText, citation?.pin),
+  };
+}
+
+async function loadCitation(client: Queryable, wordId: string): Promise<EntryCitation | null> {
+  const { rows } = await client.query<{ entry_id: string | null; exempt_reason: string | null; pin: unknown }>(
+    'select entry_id, exempt_reason, pin from upstream_citations where word_id = $1',
+    [wordId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    entryId: row.entry_id,
+    exemptReason: row.exempt_reason,
+    // An exempt row stores {} - there is no upstream content to pin - so it is
+    // reported as null rather than as an empty-looking pin the UI would have to
+    // second-guess.
+    pin: row.entry_id ? (row.pin as UpstreamPin) : null,
   };
 }

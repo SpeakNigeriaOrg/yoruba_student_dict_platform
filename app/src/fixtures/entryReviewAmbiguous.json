@@ -1,58 +1,64 @@
 {
-  "wordId": "fixturegenambig_ambigword_somehint",
-  "displayText": "fixturegenambig_ambigspelling",
-  "englishHint": "ambigword somehint",
+  "wordId": "fixturegenentry_ko_something",
+  "displayText": "fixturegenentry_kọ́",
+  "englishHint": "something",
   "status": "ambiguous_match",
   "candidatesConsidered": [
     {
-      "form": "fixturegenambig_ambigspelling",
-      "pos": "noun",
-      "glosses": [
-        "unrelated gloss one"
-      ]
-    },
-    {
-      "form": "fixturegenambig_ambigspelling",
+      "form": "fixturegenentry_kọ́",
       "pos": "verb",
       "glosses": [
-        "unrelated gloss two"
-      ]
+        "to build, construct"
+      ],
+      "entryId": "fixturegenentry-etym-ko2",
+      "etymologyNumber": "2"
+    },
+    {
+      "form": "fixturegenentry_kọ́",
+      "pos": "particle",
+      "glosses": [
+        "a negation particle"
+      ],
+      "entryId": "fixturegenentry-etym-ko3",
+      "etymologyNumber": "3"
+    },
+    {
+      "form": "fixturegenentry_kọ́",
+      "pos": "verb",
+      "glosses": [
+        "to hang, suspend"
+      ],
+      "entryId": "fixturegenentry-etym-ko4",
+      "etymologyNumber": "4"
     }
   ],
   "syllableSplitStatus": "mismatch",
   "syllableSplitManual": [
-    "fixturegenambig_ambigspelling"
+    "kọ́"
   ],
   "syllableSplitProgrammatic": [
     "fi",
     "tu",
     "re",
     "ge",
-    "na",
-    "m",
-    "bi",
-    "ga",
-    "m",
-    "bi",
-    "gspe",
-    "llin",
-    "g"
+    "nen",
+    "trykọ́"
   ],
-  "syllables": [
-    "fixturegenambig_ambigspelling"
-  ],
-  "definitionCandidateGlosses": [
-    "unrelated gloss one"
-  ],
-  "definitionSourceForm": "fixturegenambig_ambigspelling",
+  "definitionCandidateGlosses": [],
+  "definitionSourceForm": null,
   "definitionSourceIsCrossReference": false,
   "definitionLinkedSameAsSpelling": true,
-  "definitionStatus": "proposed",
+  "definitionStatus": "missing",
   "definitionCurrent": null,
-  "definitionProposed": "unrelated gloss one",
+  "definitionProposed": null,
+  "syllables": [
+    "kọ́"
+  ],
   "axisDecided": {
     "entry": false,
     "etymology": false,
     "audio": false
-  }
+  },
+  "citation": null,
+  "spellingVsUpstream": "not_cited"
 }

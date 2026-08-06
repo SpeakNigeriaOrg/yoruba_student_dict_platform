@@ -36,6 +36,10 @@ export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionI
     definitionAction,
     definitionText: typeof b.definitionText === 'string' ? b.definitionText : undefined,
     definitionSourceForm: typeof b.definitionSourceForm === 'string' ? b.definitionSourceForm : undefined,
+    // Whether the id names a real, citable etymology is checked where the
+    // citation is written (writeCitationInTransaction), against the corpus - the
+    // only place that can actually know.
+    senseEntryId: typeof b.senseEntryId === 'string' && b.senseEntryId ? b.senseEntryId : undefined,
     note: typeof b.note === 'string' ? b.note : undefined,
   };
 }

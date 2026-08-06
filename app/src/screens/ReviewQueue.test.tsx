@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function outcome(over: Partial<EntryOutcome> = {}): EntryOutcome {
-  return { kind: 'entry', displayText: 'ikun', syllables: ['i', 'kun'], definitionText: 'stomach', ...over };
+  return { kind: 'entry', displayText: 'ikun', syllables: ['i', 'kun'], definitionText: 'stomach', citedEntryId: null, ...over };
 }
 
 function claim(fingerprint: string, count: number, voters: string[], over: Partial<EntryOutcome> = {}): ConsensusTallyEntry {
@@ -51,14 +51,21 @@ function group(wordId: string, bucket: ConsensusBucket, tally: ConsensusTallyEnt
   };
 }
 
-function mockFetch(groups: ConsensusGroup[], confirmResult?: unknown) {
-  const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+const NO_DRIFT = { items: [], counts: { unchanged: 3, content_changed: 0, re_identified: 0, disappeared: 0 }, exempt: 1, uncited: 0 };
+
+function pin(glosses: string[], etymologyNumber = '1') {
+  return { etymologyNumber, pos: 'noun', canonicalForm: 'ikun', glosses, etymologyText: null };
+}
+
+function mockFetch(groups: ConsensusGroup[], confirmResult?: unknown, drift: unknown = NO_DRIFT) {
+  const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
       return Promise.resolve({
         ok: true,
         json: async () => confirmResult ?? { confirmed: [{ wordId: 'w', axis: 'entry', fingerprint: 'fp', agreementCount: 2 }], skipped: [] },
       });
     }
+    if (url.includes('/upstream-drift')) return Promise.resolve({ ok: true, json: async () => drift });
     return Promise.resolve({ ok: true, json: async () => ({ groups }) });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -69,6 +76,144 @@ const READY = group('ready1', 'ready', [claim('fp-a', 2, ['ada', 'ben'])]);
 const CONTESTED = group('con1', 'contested', [claim('fp-a', 2, ['ada', 'ben']), claim('fp-b', 1, ['cy'], { definitionText: 'belly' })]);
 const SINGLE = group('sing1', 'single', [claim('fp-a', 1, ['ada'])]);
 const DISSENT = group('dis1', 'dissent_on_golden', [claim('fp-b', 1, ['cy'], { definitionText: 'belly' })]);
+
+
+describe('ReviewQueue: upstream drift', () => {
+  it('says so plainly when every cited etymology still matches', async () => {
+    mockFetch([READY]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Upstream drift status')).toHaveTextContent('still matches Wiktionary'),
+    );
+  });
+
+  it('counts exempt and unlinked words separately, so "no drift" is not mistaken for full coverage', async () => {
+    mockFetch([READY], undefined, { ...NO_DRIFT, exempt: 9, uncited: 4 });
+    render(<ReviewQueue onOpenWord={() => {}} />);
+    await waitFor(() => {
+      const status = screen.getByLabelText('Upstream drift status');
+      expect(status).toHaveTextContent('9 exempt');
+      expect(status).toHaveTextContent('4 not linked yet');
+    });
+  });
+
+  it('shows an edited etymology with both versions side by side', async () => {
+    mockFetch([READY], undefined, {
+      items: [
+        {
+          wordId: 'w1',
+          displayText: 'ikun',
+          citedEntryId: 'en-yo-noun-OLD',
+          kind: 'content_changed',
+          pin: pin(['stomach']),
+          current: pin(['belly', 'abdomen']),
+        },
+      ],
+      counts: { unchanged: 0, content_changed: 1, re_identified: 0, disappeared: 0 },
+      exempt: 0,
+      uncited: 0,
+    });
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await waitFor(() => expect(screen.getByLabelText('Wiktionary edited an etymology we cite')).toBeInTheDocument());
+    const comparison = screen.getByLabelText('Upstream change for ikun');
+    expect(comparison).toHaveTextContent('stomach');
+    expect(comparison).toHaveTextContent('belly; abdomen');
+  });
+
+  it('re-pins the same etymology when the curator accepts the new upstream content', async () => {
+    const fetchMock = mockFetch([READY], undefined, {
+      items: [
+        {
+          wordId: 'w1',
+          displayText: 'ikun',
+          citedEntryId: 'en-yo-noun-SAME',
+          kind: 'content_changed',
+          pin: pin(['stomach']),
+          current: pin(['belly']),
+        },
+      ],
+      counts: { unchanged: 0, content_changed: 1, re_identified: 0, disappeared: 0 },
+      exempt: 0,
+      uncited: 0,
+    });
+    const user = userEvent.setup();
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await waitFor(() => screen.getByRole('button', { name: 'Accept the new upstream content' }));
+    await user.click(screen.getByRole('button', { name: 'Accept the new upstream content' }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[0] === '/api/upstream-drift/repin');
+      expect(post).toBeDefined();
+      expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({ wordId: 'w1', entryId: 'en-yo-noun-SAME' });
+    });
+  });
+
+  it('offers a re-link to the etymology now carrying the pinned content', async () => {
+    const fetchMock = mockFetch([READY], undefined, {
+      items: [
+        {
+          wordId: 'w1',
+          displayText: 'ikun',
+          citedEntryId: 'en-yo-noun-GONE',
+          kind: 're_identified',
+          pin: pin(['stomach']),
+          current: pin(['stomach']),
+          proposedEntryId: 'en-yo-noun-MOVED',
+        },
+      ],
+      counts: { unchanged: 0, content_changed: 0, re_identified: 1, disappeared: 0 },
+      exempt: 0,
+      uncited: 0,
+    });
+    const user = userEvent.setup();
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await waitFor(() => screen.getByRole('button', { name: /Re-link to en-yo-noun-MOVED/ }));
+    await user.click(screen.getByRole('button', { name: /Re-link to en-yo-noun-MOVED/ }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[0] === '/api/upstream-drift/repin');
+      expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({ wordId: 'w1', entryId: 'en-yo-noun-MOVED' });
+    });
+  });
+
+  it('proposes nothing for a disappeared etymology, and still shows what was pinned', async () => {
+    mockFetch([READY], undefined, {
+      items: [
+        {
+          wordId: 'w1',
+          displayText: 'ikun',
+          citedEntryId: 'en-yo-noun-VANISHED',
+          kind: 'disappeared',
+          pin: pin(['a meaning nothing else carries']),
+        },
+      ],
+      counts: { unchanged: 0, content_changed: 0, re_identified: 0, disappeared: 1 },
+      exempt: 0,
+      uncited: 0,
+    });
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await waitFor(() => expect(screen.getByLabelText('An etymology we cite is gone')).toBeInTheDocument());
+    expect(screen.getByLabelText('Upstream change for ikun')).toHaveTextContent('a meaning nothing else carries');
+    expect(screen.queryByRole('button', { name: /Re-link/ })).not.toBeInTheDocument();
+  });
+
+  it('does not take the work queue down when the drift check fails', async () => {
+    // Drift is a background health check. The consensus queue is the actual work.
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/upstream-drift')) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+      return Promise.resolve({ ok: true, json: async () => ({ groups: [READY] }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await waitFor(() => expect(screen.getByLabelText('Ready to confirm')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
 
 describe('ReviewQueue', () => {
   it('buckets groups into the four sections', async () => {

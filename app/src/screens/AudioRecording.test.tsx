@@ -4,7 +4,9 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { AudioRecording } from './AudioRecording.js';
-import entryFixture from '../fixtures/entryReview.json';
+// The 2-syllable ['ka','su'] word, which is what the two-tone-burst audio below
+// is built to match. entryReview.json is now the 3-syllable adìyẹ case.
+import entryFixture from '../fixtures/entryReviewCitedDiffers.json';
 
 const SAMPLE_RATE = 16000;
 
@@ -110,9 +112,9 @@ describe('AudioRecording', () => {
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
 
     await waitFor(() => {
-      expect(screen.getByText('fixturegenspldef_kasu')).toBeInTheDocument();
+      expect(screen.getByText('fixturegenentry_kasu')).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('Spelling')).toHaveValue('fixturegenspldef_kasu');
+    expect(screen.getByLabelText('Spelling')).toHaveValue('fixturegenentry_kasu');
     expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('ka,su');
   });
 
@@ -121,7 +123,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     await recordBothTakes(user);
 
@@ -136,7 +138,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     await recordBothTakes(user);
 
@@ -155,7 +157,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
     await user.clear(syllablesField);
@@ -183,7 +185,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     await recordBothTakes(user);
     await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
@@ -204,7 +206,7 @@ describe('AudioRecording', () => {
     for (const body of registeredBodies) {
       expect(typeof body.audioDataBase64).toBe('string');
       expect(body.audioDataBase64.length).toBeGreaterThan(0);
-      expect(body.recordedDisplayText).toBe('fixturegenspldef_kasu');
+      expect(body.recordedDisplayText).toBe('fixturegenentry_kasu');
       expect(body.recordedSyllables).toEqual(['ka', 'su']);
     }
     const take2Register = registeredBodies.find((b) => b.takeNumber === 2);
@@ -222,7 +224,7 @@ describe('AudioRecording', () => {
       isOwnRecording: false,
       takeNumber: 1,
       status: 'pending_processing',
-      recordedDisplayText: 'fixturegenspldef_kasu',
+      recordedDisplayText: 'fixturegenentry_kasu',
       recordedSyllables: ['ka', 'su'],
       durationS: 1.1,
       sampleRate: 16000,
@@ -242,7 +244,7 @@ describe('AudioRecording', () => {
     );
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     const yours = await screen.findByLabelText('Your recordings');
     expect(yours).toHaveTextContent("You haven't recorded this word yet.");
@@ -264,7 +266,7 @@ describe('AudioRecording', () => {
       isOwnRecording: true,
       takeNumber: 1,
       status: 'pending_processing',
-      recordedDisplayText: 'fixturegenspldef_kasu',
+      recordedDisplayText: 'fixturegenentry_kasu',
       recordedSyllables: ['ka', 'su'],
       durationS: 1.1,
       sampleRate: 16000,
@@ -283,7 +285,7 @@ describe('AudioRecording', () => {
     );
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     const yours = await screen.findByLabelText('Your recordings');
     expect(yours).toHaveTextContent('take 1');
@@ -298,7 +300,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     await user.click(screen.getByRole('button', { name: /Record/ }));
     await user.click(screen.getByRole('button', { name: /Stop/ }));
@@ -325,7 +327,7 @@ describe('AudioRecording', () => {
     const user = userEvent.setup();
 
     render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
-    await waitFor(() => screen.getByText('fixturegenspldef_kasu'));
+    await waitFor(() => screen.getByText('fixturegenentry_kasu'));
 
     await user.click(screen.getByRole('button', { name: /Record/ }));
 

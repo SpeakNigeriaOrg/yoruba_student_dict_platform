@@ -208,6 +208,56 @@ Not yet implemented: `POST /utterances/sas-token`, `POST /utterances/register`
 - these need a real Azure Storage account to test the SAS-token flow
 against, which doesn't exist yet.
 
+## An entry IS a Wiktionary etymology
+
+A student dictionary entry is one Wiktionary etymology (Etymology 1, 2, …) plus
+two local overrides. A spelling is **not** an identity: `kọ́` is three separate
+etymologies in our own corpus - a negation particle, "to build/learn", and "to
+hang/suspend" - all with `canonical_value = 'kọ́'`.
+
+The two overrides are different in kind, and the UI must not blur them:
+
+| Override | Default | A change means |
+|---|---|---|
+| spelling | the etymology's canonical form | a **correction** - the other spelling is wrong |
+| student definition | seeded from the etymology's glosses | a **pedagogical simplification** - it says nothing against upstream |
+
+Three invariants hold this up:
+
+1. **The citation is captured at creation, never derived later.** Adding a word
+   *is* choosing an etymology - the Add Word screen searches Kaikki and a human
+   picks one. `CreateWordInput.citation` is required at the type level for that
+   reason. Recovering it afterwards from the spelling is impossible, which is why
+   `backfillCitations.ts` reports the ambiguous legacy words instead of guessing.
+2. **The client sends an id; the server builds the pin.** `upstream_citations.pin`
+   is this database's own copy of the cited etymology, taken at validation time.
+   A client-supplied pin could carry content that never existed upstream, and
+   drift detection trusts the pin as "what upstream said" - so it is built in
+   `writeCitationInTransaction`, from the corpus, inside the caller's transaction.
+3. **Gloss ORDER is not drift.** kaikki-yoruba names an entry by its *first*
+   sense's id, and 20.7% of entries have several senses. Reordering senses inside
+   one etymology therefore moves our cited id while changing nothing about what
+   the etymology means, so `pinContentFingerprint` compares glosses as a **set**.
+   Because the id is content-derived, the branch that fires in practice is
+   `re_identified` (the link breaks loudly), not "stable id, changed content".
+
+Every `golden_record` row has an `upstream_citations` row - cited, or explicitly
+exempt with a reason. Phrases are recorded exempt by `createPhrase.ts` rather than
+left blank, so "no citation row" means exactly one thing: not done.
+
+Two scripts, both safe to run read-only first:
+
+```
+node scripts/backfillUpstreamCitations.mjs            # dry run (default)
+node scripts/backfillUpstreamCitations.mjs --apply --by admin@speaknigeria.org
+node scripts/generateEntryReviewFixtures.mjs          # regenerates app fixtures
+```
+
+`exportGameContent.mjs` and `publishToR2.mjs` report citation health before
+writing anything, and **warn rather than drop** - our spelling and definition are
+human-validated and stay publishable when Wiktionary copy-edits a gloss. Pass
+`--strict-upstream` to make drift a hard stop instead.
+
 ## Structure
 
 - `src/db.ts` - a lazily-created `pg.Pool` per Functions host instance, plus

@@ -16,6 +16,8 @@ import type {
   ConsensusSummary,
   DiagnoseEntryResult,
   KaikkiSearchResult,
+  PinSpellingComparison,
+  UpstreamPin,
   VocabSearchResult,
 } from '@yoruba-student-dict-platform/shared';
 
@@ -233,6 +235,18 @@ export function postEtymologyDecision(wordId: string, input: ApplyEtymologyDecis
 export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
   syllables: string[];
   axisDecided: AxisDecided;
+  /** What this word cites, and the COPY of that etymology taken when a human
+   * validated it. The screen renders from this pin rather than from a live Kaikki
+   * lookup, so Wiktionary changing cannot alter a task mid-flight. Null only for
+   * a word created before citations existed. */
+  citation: {
+    entryId: string | null;
+    exemptReason: string | null;
+    pin: UpstreamPin | null;
+  } | null;
+  /** Our spelling against the pinned upstream one - the single question a
+   * volunteer is asked about a cited word's written form. */
+  spellingVsUpstream: PinSpellingComparison;
 }
 
 export function getEntryReview(wordId: string): Promise<EntryReviewResult> {
@@ -253,6 +267,11 @@ export interface ApplyEntryDecisionInput {
   definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
   definitionSourceForm?: string;
+  /** The etymology this decision says the word IS - set when a different one was
+   * picked from the candidates or via search. Unlike candidateForm (a spelling,
+   * which identifies nothing when several etymologies share it), this is what
+   * actually gets cited. */
+  senseEntryId?: string;
   note?: string;
 }
 
@@ -304,12 +323,19 @@ export function getDuplicateCheck(spelling: string, altOfTargets: string[]): Pro
   return fetchJson<{ matches: DuplicateMatch[] }>(`/api/duplicate-check?${params}`).then((r) => r.matches);
 }
 
+/** Mirrors api/src/handlers/upstreamCitations.ts's UpstreamCitationInput: names
+ * the Wiktionary etymology this word IS, or explains why it has none. The client
+ * sends only the id - the server takes the content pin from its own corpus, so a
+ * stale or hand-edited client cannot poison drift detection. */
+export type UpstreamCitationInput = { entryId: string } | { exemptReason: string };
+
 // Mirrors api/src/handlers/createWord.ts's CreateWordInput.
 export interface CreateWordInput {
   wordId: string;
   displayText: string;
   syllables: string[];
   definition?: string | null;
+  citation: UpstreamCitationInput;
 }
 
 export function createWord(input: CreateWordInput): Promise<{ wordId: string }> {
@@ -394,6 +420,43 @@ export function excludeContribution(contributionId: string, reason?: string): Pr
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reason }),
+  });
+}
+
+// Mirrors api/src/handlers/reconcileUpstream.ts. Which cited entries Wiktionary
+// has moved under, classified by what kind of move it was.
+export type DriftKind = 'unchanged' | 'content_changed' | 're_identified' | 'disappeared';
+
+export interface DriftItem {
+  wordId: string;
+  displayText: string;
+  citedEntryId: string;
+  kind: DriftKind;
+  pin: UpstreamPin;
+  current?: UpstreamPin;
+  proposedEntryId?: string;
+}
+
+export interface UpstreamDriftResult {
+  items: DriftItem[];
+  counts: Record<DriftKind, number>;
+  exempt: number;
+  uncited: number;
+}
+
+export function getUpstreamDrift(): Promise<UpstreamDriftResult> {
+  return fetchJson('/api/upstream-drift');
+}
+
+/** Re-pins one word, taking a fresh copy of what upstream says now. Pass a
+ * different entryId to re-link it. Never touches golden_record: a pin records
+ * what UPSTREAM said, not what we say, so our spelling and student definition
+ * survive either way. */
+export function repinUpstream(wordId: string, entryId: string): Promise<void> {
+  return fetchJson('/api/upstream-drift/repin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wordId, entryId }),
   });
 }
 

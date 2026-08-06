@@ -108,6 +108,16 @@ export interface CandidateConsidered {
   form: string;
   pos: string;
   glosses: string[];
+  /** Which etymology this candidate IS, so a human's pick can be stored as the
+   * thing they picked. Storing only `form` is lossy to the point of being wrong:
+   * the three `kọ́` candidates all carry form 'kọ́', and findCandidateByForm
+   * resolves that by taking the FIRST match - so a curator who chose "to hang,
+   * suspend" had their choice silently replaced on the next read.
+   *
+   * Null only for a corpus ingested before 0014. */
+  entryId?: string | null;
+  /** Distinguishes sibling etymologies for a human reading the list. */
+  etymologyNumber?: string | null;
 }
 
 export interface DiagnoseEntryResult {
@@ -118,6 +128,12 @@ export interface DiagnoseEntryResult {
   matchedForm?: string;
   canonicalForm?: string;
   adoptionTarget?: string;
+  /** The etymology this word was matched to, which is what a citation records.
+   * Absent whenever no single etymology was chosen (not_in_kaikki,
+   * ambiguous_match, phrase, skipped_multiword) - those are exactly the cases a
+   * citation cannot be derived automatically for. */
+  matchedEntryId?: string | null;
+  matchedEtymologyNumber?: string | null;
   matchedPos?: string;
   matchedGlosses?: string[];
   matchedAltOfTargets?: string[];
@@ -239,7 +255,13 @@ export function diagnoseEntry(
         displayText,
         englishHint: hint,
         status: 'ambiguous_match',
-        candidatesConsidered: candidates.map((c) => ({ form: c.canonicalForm.value, pos: c.pos, glosses: c.glosses })),
+        candidatesConsidered: candidates.map((c) => ({
+          form: c.canonicalForm.value,
+          pos: c.pos,
+          glosses: c.glosses,
+          entryId: c.entryId ?? null,
+          etymologyNumber: c.etymologyNumber,
+        })),
       };
       if (discoveredViaRelaxedMatch) result.discoveredViaRelaxedMatch = true;
       return applyOverride(result, ov);
@@ -277,6 +299,8 @@ export function diagnoseEntry(
     matchedForm,
     canonicalForm,
     adoptionTarget,
+    matchedEntryId: chosen.entryId ?? null,
+    matchedEtymologyNumber: chosen.etymologyNumber,
     matchedPos: chosen.pos,
     matchedGlosses: chosen.glosses,
     matchedAltOfTargets: chosen.altOfTargets ?? [],

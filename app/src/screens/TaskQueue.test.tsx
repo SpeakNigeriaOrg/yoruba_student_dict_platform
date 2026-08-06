@@ -122,7 +122,7 @@ describe('TaskQueue', () => {
 
     // Simulate the entry decision landing server-side, then submit.
     state = [assignment('w1', { entry: true }), assignment('w2')];
-    await user.click(screen.getByRole('button', { name: /Keep our spelling/ }));
+    await user.click(screen.getByRole('button', { name: /that's right/ }));
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() => expect(screen.getByText('Check the word parts')).toBeInTheDocument());

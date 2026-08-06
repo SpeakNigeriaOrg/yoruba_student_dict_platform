@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import {
   approveContribution,
+  CitationMissingOnNewEntryError,
   ConsensusAxisNotIndividuallyApprovableError,
   ContributionAlreadyReviewedError,
   ContributionNotFoundError,
@@ -63,7 +64,7 @@ describe('approveContribution', () => {
       const wordId = `${NS}new_word`;
       const { contributionId } = await submitContribution(
         pool,
-        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'epo', syllables: ['e', 'po'], type: 'word' } },
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'epo', syllables: ['e', 'po'], type: 'word', citation: { exemptReason: 'test proposal' } } },
         volunteerUserId,
       );
 
@@ -110,6 +111,44 @@ describe('approveContribution', () => {
       expect(rows.rows.map((r) => r.component_word_id)).toEqual([`${NS}comp_a`, `${NS}comp_b`]);
     });
 
+    it('records a phrase as citation-EXEMPT rather than leaving it with no citation row at all', async () => {
+      // So that "no upstream_citations row" means exactly one thing - not done -
+      // rather than also meaning "a phrase, correctly". The publish gate and the
+      // reconciliation queue both depend on that.
+      const { rows } = await pool.query<{ entry_id: string | null; exempt_reason: string | null }>(
+        'select entry_id, exempt_reason from upstream_citations where word_id = $1',
+        [`${NS}new_phrase`],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].entry_id).toBeNull();
+      expect(rows[0].exempt_reason).toContain('components');
+    });
+
+    it('refuses to approve a word proposal that cites no etymology, and creates nothing', async () => {
+      // proposed_value is jsonb, so nothing stops a pre-citation contribution
+      // (or a hand-written row) reaching approval. Failing loudly is the point:
+      // an uncited word cannot be repaired later, because one spelling maps to
+      // several etymologies.
+      const wordId = `${NS}uncited`;
+      const { contributionId } = await submitContribution(
+        pool,
+        {
+          axis: 'new_entry',
+          proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word' },
+        },
+        volunteerUserId,
+      );
+
+      await expect(approveContribution(pool, contributionId, curatorUserId)).rejects.toThrow(CitationMissingOnNewEntryError);
+
+      const created = await pool.query('select 1 from golden_record where word_id = $1', [wordId]);
+      expect(created.rowCount).toBe(0);
+      const row = await pool.query<{ status: string }>('select status from contributions where contribution_id = $1', [
+        contributionId,
+      ]);
+      expect(row.rows[0].status).toBe('active');
+    });
+
     it('leaves the contribution untouched when a component does not exist', async () => {
       const wordId = `${NS}bad_phrase`;
       const { contributionId } = await submitContribution(
@@ -142,7 +181,7 @@ describe('approveContribution', () => {
       await insertWord(wordId);
       const { contributionId } = await submitContribution(
         pool,
-        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word' } },
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word', citation: { exemptReason: 'test proposal' } } },
         volunteerUserId,
       );
 
@@ -153,7 +192,7 @@ describe('approveContribution', () => {
       const wordId = `${NS}reapprove_word`;
       const { contributionId } = await submitContribution(
         pool,
-        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word' } },
+        { axis: 'new_entry', proposedValue: { proposedWordId: wordId, displayText: 'x', syllables: ['x'], type: 'word', citation: { exemptReason: 'test proposal' } } },
         volunteerUserId,
       );
 

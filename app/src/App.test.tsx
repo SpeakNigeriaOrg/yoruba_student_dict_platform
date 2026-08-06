@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import App from './App.js';
 import assignmentsFixture from './fixtures/assignments.json';
 import entryFixture from './fixtures/entryReview.json';
+import etymologyFixture from './fixtures/etymologyReview.json';
 
 beforeEach(() => {
   window.location.hash = '';
@@ -35,6 +36,12 @@ function installFetchMock(roles: string[] = ['authenticated']) {
       if (url.includes('/assignments/me')) return Promise.resolve({ ok: true, json: async () => assignmentsFixture });
       if (url.includes('/axis-status')) return Promise.resolve({ ok: true, json: async () => AXIS_STATUS });
       if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
+      // A real payload, not the {} fallback. Returning {} left EtymologyReview
+      // reading `review.components.length` off an object that had no components
+      // and throwing, which vitest reported as an unhandled error while the
+      // routing assertions here still passed - the tab it checks is rendered by
+      // App, not by the screen that crashed.
+      if (url.includes('/etymology')) return Promise.resolve({ ok: true, json: async () => etymologyFixture });
       if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
       return Promise.resolve({ ok: true, json: async () => ({}) });
     }),
@@ -46,15 +53,27 @@ describe('App', () => {
     installFetchMock();
     render(<App />);
 
-    // The queue hands over the head task itself - the axis tabs and the
-    // review form are on screen with no intervening list click.
+    // The queue hands over the head task itself - the review form is on screen
+    // with no intervening list click, and deliberately WITHOUT axis tabs: the
+    // queue chose the task, so tabs would only invite navigating away from it.
     await waitFor(() => expect(screen.getByLabelText('Queue progress')).toBeInTheDocument());
     expect(screen.getByLabelText('Queue progress')).toHaveTextContent(/Task \d+ of \d+/);
     await waitFor(() => expect(screen.getByLabelText('Entry review')).toBeInTheDocument());
   });
 
-  it('colors each axis tab by its fetched status', async () => {
+  it('shows no axis tabs in the queue - the queue already chose the task', async () => {
     installFetchMock();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByLabelText('Queue progress')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Review axis tabs')).not.toBeInTheDocument();
+  });
+
+  it('colors each axis tab by its fetched status when browsing a word directly', async () => {
+    // Tabs belong on the browse route, where you arrived at a WORD rather than
+    // being handed a task, and moving between its axes is the point.
+    installFetchMock();
+    window.location.hash = '#/word/some_word/entry';
     render(<App />);
 
     await waitFor(() => {

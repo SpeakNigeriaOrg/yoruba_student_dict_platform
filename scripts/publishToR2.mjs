@@ -65,6 +65,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import { reportUpstreamHealth } from './upstreamPublishCheck.mjs';
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 const args = process.argv.slice(2);
@@ -184,6 +185,17 @@ async function main() {
   }
 
   const pool = new pg.Pool({ connectionString });
+
+  // Before anything is written or uploaded: say how much of what is about to
+  // ship still matches the Wiktionary etymologies it cites. Warns by default -
+  // see upstreamPublishCheck.mjs for why drift is a review signal rather than a
+  // reason to withhold human-validated content.
+  console.log('[0] Checking upstream citations...');
+  const upstream = await reportUpstreamHealth(pool, { strict: process.argv.includes('--strict-upstream') });
+  if (!upstream.ok) {
+    await pool.end();
+    process.exit(1);
+  }
 
   console.log('[1/6] Loading golden_record...');
   const wordsResult = await pool.query(

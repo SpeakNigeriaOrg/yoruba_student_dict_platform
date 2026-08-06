@@ -39,6 +39,7 @@
 // the contributor actually saw, and store the result.
 
 import { syllabifyWord } from './syllabify.js';
+import { FIELD_SEP, LIST_SEP, NULL_MARKER, normalizeGloss, normalizeText } from './textFingerprint.js';
 
 /** How many agreeing contributions make a (word, axis) eligible for rapid
  * bulk confirmation. One constant, read by both the API and the UI, so the
@@ -56,6 +57,11 @@ export interface EntryObservedState {
   displayText: string;
   syllables: string[];
   definition: string | null;
+  /** The etymology the word currently cites, so a contribution that does not
+   * change it still asserts it - "I agree this is the right etymology" is part of
+   * confirming an entry, not a separate act. Null for a word whose citation
+   * predates 0014 or which is explicitly exempt. */
+  citedEntryId?: string | null;
 }
 
 /** The action-shaped submission. Mirrors ApplyEntryDecisionInput's content
@@ -68,6 +74,9 @@ export interface EntryContributionInput {
   syllableAction?: 'keep_manual' | 'accept_programmatic';
   definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
+  /** The etymology this contributor says the word is. Set when they picked a
+   * different one from the candidates; absent means "the one already cited". */
+  senseEntryId?: string;
 }
 
 /** The asserted content state.
@@ -76,12 +85,25 @@ export interface EntryContributionInput {
  * record WHICH Kaikki record a contributor consulted - provenance, not the
  * claim. Two volunteers who reach the same spelling and the same definition
  * text by different routes are making the same assertion about the word, and
- * should count as agreeing. `note` is excluded for the same reason. */
+ * should count as agreeing. `note` is excluded for the same reason.
+ *
+ * `citedEntryId` is INCLUDED, and that distinction is the point. It looks like
+ * provenance and is not: under "an entry IS a Wiktionary etymology" the cited
+ * etymology is the word's identity, so two volunteers who both write "to hang,
+ * suspend" while citing different etymologies of `kọ́` are not agreeing about
+ * anything - they are describing two different words that share a spelling.
+ * Treating that as consensus would let a compound resolve to whichever one
+ * happened to be counted first.
+ *
+ * This corrects an earlier call in this file's own design: candidateForm was
+ * excluded as provenance, which was right for a form string (it identifies
+ * nothing) and wrong as a reason to ignore identity altogether. */
 export interface EntryOutcome {
   kind: 'entry';
   displayText: string;
   syllables: string[];
   definitionText: string | null;
+  citedEntryId: string | null;
 }
 
 /** Resolves an entry submission into the content state it asserts.
@@ -97,6 +119,8 @@ export interface EntryOutcome {
  *     spelling the word is BECOMING (post-adoption), not the one on record.
  *   - the definition is replaced only by 'custom'; 'confirm' blesses the text
  *     already present.
+ *   - the cited etymology changes only when the contributor names a different
+ *     one; otherwise they are asserting the one already on record.
  */
 export function resolveEntryOutcome(observed: EntryObservedState, input: EntryContributionInput): EntryOutcome {
   const displayText =
@@ -107,7 +131,12 @@ export function resolveEntryOutcome(observed: EntryObservedState, input: EntryCo
   const definitionText =
     input.definitionAction === 'custom' ? (input.definitionText ?? null) : observed.definition;
 
-  return { kind: 'entry', displayText, syllables, definitionText };
+  // ?? not ||: an explicitly cited etymology can never be an empty string, and
+  // falling back on falsiness would silently reinterpret a malformed id as
+  // "no change".
+  const citedEntryId = input.senseEntryId ?? observed.citedEntryId ?? null;
+
+  return { kind: 'entry', displayText, syllables, definitionText, citedEntryId };
 }
 
 // ---------------------------------------------------------------------------
@@ -160,46 +189,11 @@ export type ContributionOutcome = EntryOutcome | EtymologyOutcome;
 // Fingerprinting
 // ---------------------------------------------------------------------------
 
-/** A separator that cannot occur in Yoruba text or an English gloss, so field
- * boundaries in the fingerprint are unambiguous - joining with a printable
- * character would let "a|b" + "c" collide with "a" + "b|c". Written as
- * escapes rather than literal control bytes so an editor, formatter, or
- * copy-paste can't silently eat them. */
-const FIELD_SEP = '\u001f';
-const LIST_SEP = '\u001e';
-
-/** Distinct from the empty string, so "no definition at all" never collides
- * with "a definition that normalized to empty".
- *
- * Group separator (GS), NOT NUL. It was \u0000 first, which Postgres rejects
- * outright - `text` forbids 0x00 - so every entry with no definition produced a
- * fingerprint that could not be stored. Any control character except NUL is
- * storable and unreachable from a text input. */
-const NULL_MARKER = '\u001d';
-
-/** Unicode NFC + whitespace normalization, applied to every field.
- *
- * NFC matters here specifically: Yoruba text carries combining tone marks and
- * underdots, so the same visible form can arrive as precomposed or decomposed
- * codepoints depending on the contributor's keyboard or OS. Without NFC two
- * people who typed the identical word would fingerprint differently. */
-function normalizeText(value: string): string {
-  return value.normalize('NFC').trim().replace(/\s+/g, ' ');
-}
-
-/** Definition text only.
- *
- * Case is folded because definitions are English glosses and "Giraffe" is not
- * a different claim from "giraffe".
- *
- * Case is NOT folded on displayText or syllables. Yoruba orthography is
- * case-bearing in a way that matters - `Agẹmọ` is a month name, and folding
- * would merge proper nouns with common ones. Diacritics and underdots are
- * never folded anywhere: they ARE the semantic content, which is the whole
- * premise of the entry axis. */
-function normalizeDefinition(value: string): string {
-  return normalizeText(value).toLowerCase();
-}
+// The separator conventions, the NUL lesson, and the NFC/case-folding rules
+// live in textFingerprint.ts, shared with upstreamPin.ts's drift fingerprint.
+// normalizeGloss is what this module used to call normalizeDefinition - the
+// same function, renamed for what it operates on now that upstream glosses go
+// through it too.
 
 /** The comparison key for an outcome. Equal fingerprints mean two
  * contributors asserted the same thing. */
@@ -209,7 +203,21 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
       'entry',
       normalizeText(outcome.displayText),
       outcome.syllables.map(normalizeText).join(LIST_SEP),
-      outcome.definitionText === null ? NULL_MARKER : normalizeDefinition(outcome.definitionText),
+      outcome.definitionText === null ? NULL_MARKER : normalizeGloss(outcome.definitionText),
+      // NOT case-folded and NOT NFC-sensitive in practice: an entry id is an
+      // opaque ASCII token from upstream, so it is compared exactly. Folding it
+      // would risk merging two ids that differ only in case.
+      //
+      // `?? NULL_MARKER`, not `=== null`, because this function is also called on
+      // outcomes read back out of `contributions.resolved_value` (jsonb) - and a
+      // row stored before citations existed has no citedEntryId key at all.
+      // Strict null-checking left those as the literal string "undefined" in the
+      // fingerprint, which is not merely ugly: confirmConsensus writes that
+      // string into word_decisions.value_fingerprint, and dissent detection then
+      // compares every later contribution against a value nothing can ever equal,
+      // so the word reads as permanently dissented. Absent and null are the same
+      // claim - "no etymology cited" - and must fingerprint identically.
+      outcome.citedEntryId ?? NULL_MARKER,
     ].join(FIELD_SEP);
   }
   return [

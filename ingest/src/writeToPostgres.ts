@@ -32,7 +32,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], senseIds: string[]): Promise<void> {
   const rows = senses.map((sense, i) => ({ senseId: senseIds[i], sense }));
   for (const batch of chunk(rows, SENSE_BATCH_SIZE)) {
-    const columnsPerRow = 12;
+    const columnsPerRow = 13;
     const placeholders: string[] = [];
     const values: unknown[] = [];
     batch.forEach(({ senseId, sense }, i) => {
@@ -41,6 +41,12 @@ async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], sen
       placeholders.push(`(${p.join(', ')})`);
       values.push(
         senseId,
+        // kaikki-yoruba's stable per-etymology id. sense_id above is a
+        // gen_random_uuid() minted per ingest and this function truncates
+        // beforehand, so sense_id changes on EVERY run and can never be cited
+        // by anything durable. entry_id is what a student entry cites; it was
+        // reaching this function and being dropped. See 0014.
+        sense.entryId,
         sense.pos,
         sense.etymologyNumber,
         sense.etymologyText,
@@ -56,8 +62,9 @@ async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], sen
     });
     await client.query(
       `insert into kaikki_senses
-         (sense_id, pos, etymology_number, etymology_text, headword, canonical_value, canonical_inference_method,
-          canonical_confidence, canonical_original_value, standard_forms, glosses, alt_of_targets)
+         (sense_id, entry_id, pos, etymology_number, etymology_text, headword, canonical_value,
+          canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms,
+          glosses, alt_of_targets)
        values ${placeholders.join(', ')}`,
       values,
     );

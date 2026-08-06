@@ -32,6 +32,7 @@ import {
 import { withTransaction, type Queryable } from '../db.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { WordNotFoundError } from './errors.js';
+import { writeCitationInTransaction } from './upstreamCitations.js';
 
 export interface ApplyEntryDecisionInput {
   /** The written-form half. Required - see the module comment. */
@@ -51,6 +52,13 @@ export interface ApplyEntryDecisionInput {
    * different entry via manual search). Read back by getEntryReview.ts's
    * loadAxisOverride. */
   definitionSourceForm?: string;
+  /** The etymology this decision says the word IS. Set when the decider picked a
+   * different one than is currently cited (the `kọ́` case: three etymologies, one
+   * spelling); absent means "the etymology already on record is right".
+   *
+   * Distinct from candidateForm, which records only a SPELLING and therefore
+   * cannot identify an etymology at all - see CandidateConsidered.entryId. */
+  senseEntryId?: string;
   note?: string;
 }
 
@@ -129,7 +137,14 @@ export async function applyEntryDecisionInTransaction(
     syllables: string[];
     entry_type: string | null;
     definition: string | null;
-  }>('select display_text, syllables, entry_type, definition from golden_record where word_id = $1', [wordId]);
+    entry_id: string | null;
+  }>(
+    `select g.display_text, g.syllables, g.entry_type, g.definition, c.entry_id
+     from golden_record g
+     left join upstream_citations c on c.word_id = g.word_id
+     where g.word_id = $1`,
+    [wordId],
+  );
   const currentRow = existing.rows[0];
   if (!currentRow) {
     throw new WordNotFoundError(wordId);
@@ -194,15 +209,30 @@ export async function applyEntryDecisionInTransaction(
     definitionAction: input.definitionAction,
     definitionText: input.definitionText,
     definitionSourceForm: input.definitionSourceForm,
+    senseEntryId: input.senseEntryId,
   };
   // Fingerprinted with the same function contributions use, so a later
   // contribution that disagrees with this decision can be detected by equality
   // rather than re-derivation. Resolved from the state observed BEFORE the
   // writes above, which by construction equals the state after them.
   const outcome = resolveEntryOutcome(
-    { displayText: currentRow.display_text, syllables: currentRow.syllables, definition: currentRow.definition },
+    {
+      displayText: currentRow.display_text,
+      syllables: currentRow.syllables,
+      definition: currentRow.definition,
+      citedEntryId: currentRow.entry_id,
+    },
     input,
   );
+
+  // Re-cite only when the decision actually names a different etymology. Writing
+  // unconditionally would re-pin (and restamp pinned_at) on every routine
+  // confirmation, turning "when was this etymology last verified against
+  // upstream" into "when was this word last touched" - and that timestamp is
+  // what reconciliation reasons about.
+  if (input.senseEntryId && input.senseEntryId !== currentRow.entry_id) {
+    await writeCitationInTransaction(client, wordId, { entryId: input.senseEntryId }, decidedBy);
+  }
 
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
@@ -239,12 +269,28 @@ export async function applyEntryOutcomeInTransaction(
   note: string | null,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query<{ display_text: string; syllables: string[]; definition: string | null }>(
-    'select display_text, syllables, definition from golden_record where word_id = $1',
+  const existing = await client.query<{
+    display_text: string;
+    syllables: string[];
+    definition: string | null;
+    entry_id: string | null;
+  }>(
+    `select g.display_text, g.syllables, g.definition, c.entry_id
+     from golden_record g
+     left join upstream_citations c on c.word_id = g.word_id
+     where g.word_id = $1`,
     [wordId],
   );
   const row = existing.rows[0];
   if (!row) throw new WordNotFoundError(wordId);
+
+  // A consensus that settled on a different etymology re-cites the word. This is
+  // the one case where volunteers can change a word's identity, and it is
+  // correct that they can: which etymology a word is is exactly the kind of
+  // question several people looking at it independently are good at.
+  if (outcome.citedEntryId && outcome.citedEntryId !== row.entry_id) {
+    await writeCitationInTransaction(client, wordId, { entryId: outcome.citedEntryId }, decidedBy);
+  }
 
   const syllablesDiffer =
     row.syllables.length !== outcome.syllables.length || row.syllables.some((s, i) => s !== outcome.syllables[i]);

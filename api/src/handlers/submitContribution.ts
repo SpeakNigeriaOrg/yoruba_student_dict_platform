@@ -35,12 +35,24 @@ import {
 import { WordNotFoundError } from './errors.js';
 import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import type { ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
+import type { UpstreamCitationInput } from './upstreamCitations.js';
 
 export interface NewEntryProposedValue {
   proposedWordId: string;
   displayText: string;
   syllables: string[];
   type: 'word' | 'phrase';
+  /** Which Wiktionary etymology the proposed WORD is - captured when the
+   * volunteer picked it from the Kaikki search, so approval creates a cited
+   * word rather than one that has to be matched back by spelling later.
+   *
+   * Optional in the type, unlike CreateWordInput.citation, because this value is
+   * read back out of `contributions.proposed_value` as a jsonb cast - the
+   * compiler cannot enforce anything about it, so pretending otherwise would be
+   * a false guarantee. Enforced for real at the two places that matter: the HTTP
+   * edge that accepts it (parseNewEntryInput) and the approval that consumes it
+   * (approveNewEntry). Absent for type 'phrase', which is exempt by nature. */
+  citation?: UpstreamCitationInput;
   /** Only meaningful (and required) for type: 'phrase' - must reference
    * already-approved golden_record word_ids, never another still-pending
    * draft, exactly like createPhrase.ts (checked at approval time, not
@@ -68,9 +80,28 @@ export interface SubmittedContribution {
 async function loadObservedState(
   client: Queryable,
   wordId: string,
-): Promise<{ displayText: string; syllables: string[]; definition: string | null; components: string[] }> {
-  const word = await client.query<{ display_text: string; syllables: string[]; definition: string | null }>(
-    'select display_text, syllables, definition from golden_record where word_id = $1',
+): Promise<{
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  citedEntryId: string | null;
+  components: string[];
+}> {
+  // Left-joined rather than a second query: the cited etymology is part of the
+  // state a contributor is looking at, so it must be read in the SAME snapshot
+  // as the rest of it. Null covers both "no citation row" and "explicitly
+  // exempt", which are the same thing from a contributor's point of view - there
+  // is no etymology to agree or disagree about.
+  const word = await client.query<{
+    display_text: string;
+    syllables: string[];
+    definition: string | null;
+    entry_id: string | null;
+  }>(
+    `select g.display_text, g.syllables, g.definition, c.entry_id
+     from golden_record g
+     left join upstream_citations c on c.word_id = g.word_id
+     where g.word_id = $1`,
     [wordId],
   );
   const row = word.rows[0];
@@ -85,6 +116,7 @@ async function loadObservedState(
     displayText: row.display_text,
     syllables: row.syllables,
     definition: row.definition,
+    citedEntryId: row.entry_id,
     components: components.rows.map((r) => r.component_word_id),
   };
 }
@@ -97,7 +129,12 @@ function resolveOutcome(
 ): ContributionOutcome {
   if (input.axis === 'entry') {
     return resolveEntryOutcome(
-      { displayText: observed.displayText, syllables: observed.syllables, definition: observed.definition },
+      {
+        displayText: observed.displayText,
+        syllables: observed.syllables,
+        definition: observed.definition,
+        citedEntryId: observed.citedEntryId,
+      },
       input.proposedValue,
     );
   }

@@ -96,3 +96,49 @@ export async function cleanUpTestData(pool: pg.Pool, namespace: string): Promise
   await pool.query('delete from golden_record where word_id like $1', [wordPattern]);
   await pool.query('delete from users where email like $1', [usernamePattern]);
 }
+
+/** A Kaikki etymology for a citation to point at.
+ *
+ * kaikki_senses is deliberately NOT covered by cleanUpTestData: it is the shared
+ * ingested corpus keyed by upstream ids, not by this repo's word_id namespaces,
+ * so a prefix delete there would be a delete against real corpus data. Callers
+ * insert what they need and remove it with deleteTestKaikkiSenses, scoping by an
+ * entry_id prefix they own.
+ *
+ * upstream_citations needs no such handling - its word_id cascades from
+ * golden_record, so step 4 above already removes it. */
+export async function insertTestKaikkiSense(
+  pool: pg.Pool,
+  sense: {
+    entryId: string;
+    headword: string;
+    canonicalValue: string;
+    glosses: string[];
+    pos?: string;
+    etymologyNumber?: string | null;
+    etymologyText?: string | null;
+    standardForms?: string[];
+  },
+): Promise<void> {
+  await pool.query(
+    `insert into kaikki_senses
+       (entry_id, pos, etymology_number, etymology_text, headword, canonical_value,
+        canonical_inference_method, canonical_confidence, canonical_original_value,
+        standard_forms, glosses, alt_of_targets)
+     values ($1, $2, $3, $4, $5, $6, 'explicit_canonical_tag', 1.0, $6, $7, $8, '{}')`,
+    [
+      sense.entryId,
+      sense.pos ?? 'verb',
+      sense.etymologyNumber ?? null,
+      sense.etymologyText ?? null,
+      sense.headword,
+      sense.canonicalValue,
+      sense.standardForms ?? [sense.canonicalValue],
+      sense.glosses,
+    ],
+  );
+}
+
+export async function deleteTestKaikkiSenses(pool: pg.Pool, entryIdPrefix: string): Promise<void> {
+  await pool.query('delete from kaikki_senses where entry_id like $1', [likePrefix(entryIdPrefix)]);
+}

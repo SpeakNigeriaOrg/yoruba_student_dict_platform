@@ -281,7 +281,16 @@ describe('EtymologyReview', () => {
           ok: true,
           json: async () => ({
             results: [
-              { form: 'fixturegen2_missingpart', pos: 'noun', glosses: ['a missing part'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['fixturegen2_missingpart'] },
+              {
+                form: 'fixturegen2_missingpart',
+                pos: 'noun',
+                glosses: ['a missing part'],
+                matchedVia: 'yoruba_exact',
+                altOfTargets: [],
+                standardForms: ['fixturegen2_missingpart'],
+                entryId: 'en-fix-yo-noun-MISSING1',
+                etymologyNumber: '1',
+              },
             ],
           }),
         });
@@ -313,6 +322,9 @@ describe('EtymologyReview', () => {
     expect(createBody).toMatchObject({
       wordId: 'fixturegen2_missingpart_missing_part',
       displayText: 'fixturegen2_missingpart',
+      // The compound case: the component records WHICH etymology it is, so the
+      // derived word references one meaning rather than an ambiguous spelling.
+      citation: { entryId: 'en-fix-yo-noun-MISSING1' },
     });
 
     // Refetches the whole review after creating the word - the proposal

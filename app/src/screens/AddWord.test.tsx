@@ -17,7 +17,16 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
         ok: true,
         json: async () => ({
           results: overrides.kaikkiResults ?? [
-            { form: 'testform', pos: 'noun', glosses: ['a test gloss'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['testform'] },
+            {
+              form: 'testform',
+              pos: 'noun',
+              glosses: ['a test gloss'],
+              matchedVia: 'yoruba_exact',
+              altOfTargets: [],
+              standardForms: ['testform'],
+              entryId: 'en-test-yo-noun-ABC123',
+              etymologyNumber: '2',
+            },
           ],
         }),
       });
@@ -56,12 +65,13 @@ describe('AddWord - Word tab', () => {
 
     expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('te,stfo,rm');
 
+    await user.clear(screen.getByLabelText(/Word ID hint/));
     await user.type(screen.getByLabelText(/Word ID hint/), 'meaning');
 
     expect(screen.getByText('testform_meaning')).toBeInTheDocument();
   });
 
-  it('submits createWord with the preview word_id and edited syllables', async () => {
+  it('submits createWord citing the picked etymology, not just its spelling', async () => {
     const fetchMock = mockFetch();
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
@@ -70,6 +80,7 @@ describe('AddWord - Word tab', () => {
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText('testform'));
     await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.clear(screen.getByLabelText(/Word ID hint/));
     await user.type(screen.getByLabelText(/Word ID hint/), 'meaning');
 
     await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
@@ -81,7 +92,124 @@ describe('AddWord - Word tab', () => {
     const call = fetchMock.mock.calls.find((c) => c[0] === '/api/words');
     expect(call).toBeDefined();
     const body = JSON.parse(call![1].body);
-    expect(body).toEqual({ wordId: 'testform_meaning', displayText: 'testform', syllables: ['te', 'stfo', 'rm'] });
+    expect(body).toEqual({
+      wordId: 'testform_meaning',
+      displayText: 'testform',
+      syllables: ['te', 'stfo', 'rm'],
+      // Seeded from the etymology's primary gloss, not typed from scratch.
+      definition: 'a test gloss',
+      // The whole point: identity travels with the word, and never has to be
+      // guessed back from 'testform' later.
+      citation: { entryId: 'en-test-yo-noun-ABC123' },
+    });
+  });
+
+  it('shows which etymology a result is, so several senses of one spelling can be told apart', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+
+    expect(screen.getByLabelText('Kaikki search results')).toHaveTextContent('etymology 2');
+  });
+
+  it('seeds the student definition from the etymology and shows what it is simplifying', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.getByLabelText('Student definition')).toHaveValue('a test gloss');
+    expect(screen.getByLabelText('Upstream glosses')).toHaveTextContent('Wiktionary says: a test gloss');
+    expect(screen.getByText(/simplification, not a correction/)).toBeInTheDocument();
+  });
+
+  it('cannot submit before an etymology is picked', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+
+    expect(screen.queryByRole('button', { name: 'Add to vocabulary' })).not.toBeInTheDocument();
+  });
+
+  it('refuses to cite a Kaikki record with no etymology id (a corpus ingested before 0014)', async () => {
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        { form: 'testform', pos: 'noun', glosses: ['g'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['testform'], entryId: null, etymologyNumber: null },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.getByRole('button', { name: 'Add to vocabulary' })).toBeDisabled();
+    expect(fetchMock.mock.calls.find((c) => c[0] === '/api/words')).toBeUndefined();
+  });
+
+  describe('the off-path branch: a word with no Wiktionary entry', () => {
+    it('warns, and names the preferred route rather than just allowing it', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+
+      expect(screen.getByLabelText('Off-path warning')).toHaveTextContent('ask a curator to add it to Wiktionary first');
+    });
+
+    it('will not submit until the exemption is explained', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+      await user.type(screen.getByLabelText('Spelling'), 'rédíò');
+      await user.type(screen.getByLabelText(/Word ID hint/), 'radio');
+
+      expect(screen.getByRole('button', { name: 'Add to vocabulary' })).toBeDisabled();
+    });
+
+    it('submits an explicit exemption, never a blank one', async () => {
+      const fetchMock = mockFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+      await user.type(screen.getByLabelText('Spelling'), 'redio');
+      await user.type(screen.getByLabelText(/Word ID hint/), 'radio');
+      await user.type(screen.getByLabelText(/not in Wiktionary/), 'recent loanword');
+      await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added redio_radio'));
+      const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+      expect(body.citation).toEqual({ exemptReason: 'recent loanword' });
+    });
+
+    it('leaving the off-path branch clears it, so the two paths cannot be half-entered', async () => {
+      vi.stubGlobal('fetch', mockFetch());
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+      await user.type(screen.getByLabelText('Spelling'), 'redio');
+      await user.click(screen.getByRole('button', { name: 'Back to search' }));
+
+      expect(screen.queryByLabelText('Spelling')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add to vocabulary' })).not.toBeInTheDocument();
+    });
   });
 
   it('shows a duplicate warning when the duplicate-check endpoint reports matches', async () => {

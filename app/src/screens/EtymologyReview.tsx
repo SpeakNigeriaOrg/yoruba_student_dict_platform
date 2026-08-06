@@ -45,6 +45,16 @@ export interface EtymologyReviewProps {
 // spelling, since that's already known) and creates the missing word,
 // which both adds it to golden_record AND resolves this candidate in one
 // action, rather than requiring a separate trip through Add Word first.
+//
+// The etymology picked here matters more than anywhere else in the app. This is
+// the compound case: a derived word must reference ONE etymology of its
+// component, not a spelling that maps to several. Creating the component while
+// discarding which `kọ́` was meant would put the ambiguity straight into
+// golden_record_components, where nothing downstream could resolve it.
+//
+// No off-path branch here on purpose: a component genuinely absent from
+// Wiktionary is a judgement call about a word in its own right, which belongs on
+// the Add Word screen with its warning, not buried in resolving a candidate.
 function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAdded: (wordId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
@@ -67,11 +77,17 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
       setStatus('Enter a word_id hint first.');
       return;
     }
+    if (!selected?.entryId) {
+      setStatus('Pick a Kaikki etymology first - a component has to reference one, not just a spelling.');
+      return;
+    }
     try {
       const result = await createWord({
         wordId: wordIdPreview,
         displayText: selectedForm,
         syllables: syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
+        definition: selected.glosses[0] ?? null,
+        citation: { entryId: selected.entryId },
       });
       onAdded(result.wordId);
     } catch (err) {
@@ -94,7 +110,8 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
         initialQuery={kaikkiForm}
         renderResult={(r) => (
           <>
-            <strong>{r.form}</strong> ({r.pos}) - {r.glosses.join('; ')}
+            <strong>{r.form}</strong> ({r.pos}
+            {r.etymologyNumber ? `, etymology ${r.etymologyNumber}` : ''}) - {r.glosses.join('; ')}
           </>
         )}
         onSelect={pickResult}
@@ -104,6 +121,11 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
       />
       {selected ? (
         <>
+          <p aria-label="Cited etymology for missing component">
+            Citing: <strong>{selected.form}</strong> ({selected.pos}
+            {selected.etymologyNumber ? `, etymology ${selected.etymologyNumber}` : ''}) -{' '}
+            {selected.glosses.join('; ')}
+          </p>
           <div className="field">
             <label htmlFor={`missing-component-syllables-${kaikkiForm}`}>Syllables (comma-separated)</label>
             <input
@@ -125,7 +147,7 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
           <p>
             Word ID: <strong>{wordIdPreview || '(enter a hint)'}</strong>
           </p>
-          <button type="button" className="btn btn-primary" onClick={submit}>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={!selected.entryId}>
             Add & use as component
           </button>
         </>

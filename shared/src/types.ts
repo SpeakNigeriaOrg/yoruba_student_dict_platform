@@ -29,6 +29,23 @@ export interface ComponentCandidate {
 }
 
 export interface KaikkiSense {
+  /** kaikki-yoruba's stable per-etymology identifier, e.g.
+   * 'en-fa-yo-verb-OFVmd8R8'. THE key for citing a sense.
+   *
+   * A spelling does not identify a word: `kọ́` is three separate etymologies
+   * (a negation particle, "to build/learn", "to hang/suspend") and all three
+   * carry canonicalForm.value === 'kọ́'. Resolving a citation by form therefore
+   * picks whichever sense happens to come first, silently discarding whichever
+   * one a human actually chose - see findCandidateByForm in diagnoseEntry.ts.
+   *
+   * Measured stable: across kaikki-yoruba build-4 -> build-9 every one of the
+   * 6272 entries changed in some field while 100% of ids survived unchanged.
+   * And necessary: 39 senses collide on headword + pos + etymologyNumber, so
+   * the key cannot be reconstructed locally.
+   *
+   * Optional because pre-0014 fixtures and callers predate it, and because a
+   * corpus ingested before 0014 has the column null until re-ingested. */
+  entryId?: string | null;
   pos: string;
   etymologyNumber: string | null;
   /** Kaikki/Wiktionary's free-text etymology prose - distinct from

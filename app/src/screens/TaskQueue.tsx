@@ -123,6 +123,9 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
         // not a queue control.
         onAxisChange={(axis) => onOpenWord(task.wordId, axis)}
         onDecided={() => void advance()}
+        // The queue already chose this task and says so above. Tabs here would
+        // invite the navigation the queue exists to remove.
+        showAxisTabs={false}
       />
 
       <div className="btn-row">

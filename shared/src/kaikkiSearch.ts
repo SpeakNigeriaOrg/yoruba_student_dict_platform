@@ -52,17 +52,31 @@ export interface KaikkiSearchResult {
   matchedVia: KaikkiSearchTier;
   altOfTargets: string[];
   standardForms: string[];
+  /** The etymology this result IS. Picking a search result is how a word
+   * enters the dictionary, so this is the moment the citation is free to
+   * capture - the human has just told us which etymology they mean. Null
+   * only for a corpus/fixture predating 0014. */
+  entryId: string | null;
+  /** Rendered alongside the glosses so the person picking can see WHICH
+   * etymology they are choosing. `kọ́` returns three results differing only
+   * by this and their glosses. */
+  etymologyNumber: string | null;
 }
 
-// Keyed by sense CONTENT, not object identity: the lexicon deliberately
-// cross-indexes the same underlying record under every spelling it's
-// known by, which means the identical sense can appear under multiple
-// lexicon keys - and after a JSON round-trip those become
-// separate-but-equal objects. A content key collapses those back into one
-// result while still keeping genuinely different homograph senses that
-// merely share a spelling (different pos/glosses) separate.
-function contentKey(sense: KaikkiSense): string {
-  return JSON.stringify([sense.canonicalForm.value, sense.pos, sense.glosses]);
+// One key per ETYMOLOGY. The lexicon deliberately cross-indexes the same
+// underlying record under every spelling it's known by, so the identical
+// etymology can appear under multiple lexicon keys - and after a JSON
+// round-trip those become separate-but-equal objects. Keying collapses those
+// back into one result while keeping genuinely different etymologies that
+// merely share a spelling (the three `kọ́`s) separate.
+//
+// entryId is the right key and the content fallback is strictly worse: two
+// distinct etymologies that happen to agree on form, pos AND glosses collapse
+// into one under the content key, silently hiding one of them from the person
+// choosing. The fallback exists only for a corpus/fixture predating 0014.
+function senseKey(sense: KaikkiSense): string {
+  if (sense.entryId) return `id:${sense.entryId}`;
+  return `content:${JSON.stringify([sense.canonicalForm.value, sense.pos, sense.glosses])}`;
 }
 
 /** Searches Yoruba spellings (tiered exact/tone/underdot-insensitive/
@@ -97,7 +111,7 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
 
     if (tier) {
-      const key = contentKey(sense);
+      const key = senseKey(sense);
       const existing = results.get(key);
       if (!existing || TIER_RANK[tier] < TIER_RANK[existing.tier]) {
         results.set(key, { tier, score: 0, sense });
@@ -107,7 +121,7 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
 
   if (qTokens.length > 0) {
     for (const { sense } of records) {
-      const key = contentKey(sense);
+      const key = senseKey(sense);
       if (results.has(key)) continue; // already found via a Yoruba tier - don't downgrade to English
       const glossTokens = tokenizeEnglish(sense.glosses.join(' '));
       const score = qTokens.reduce((sum, t) => sum + glossTokens.filter((g) => g === t).length, 0);
@@ -134,5 +148,11 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     // specific alternate spelling instead of always defaulting to
     // canonical.
     standardForms: sense.standardForms && sense.standardForms.length > 0 ? sense.standardForms : [sense.canonicalForm.value],
+    // The whole point of the search, under the "an entry IS a Wiktionary
+    // etymology" model: the caller persists this as the citation instead of
+    // re-deriving it from the spelling later, which cannot be done (a
+    // spelling maps to several etymologies).
+    entryId: sense.entryId ?? null,
+    etymologyNumber: sense.etymologyNumber ?? null,
   }));
 }

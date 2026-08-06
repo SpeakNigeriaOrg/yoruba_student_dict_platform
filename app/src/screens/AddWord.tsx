@@ -6,6 +6,26 @@
 // warning that never blocks, and an editable syllables field. New words
 // are deliberately "unverified" on every axis at creation - vetting is a
 // separate, later step via the review screens.
+//
+// ---------------------------------------------------------------------------
+// Adding a word IS choosing an etymology
+// ---------------------------------------------------------------------------
+// This screen already searched Kaikki and had a human pick a result, and a
+// result is one Wiktionary etymology. It then threw that away and posted only
+// the spelling - so the word's identity had to be guessed back later by matching
+// forms, which cannot work: `kọ́` is three etymologies sharing one spelling.
+//
+// So the pick is now the citation, captured at the one moment it is unambiguous
+// and free. Everything downstream - the student definition seeded from the
+// etymology's glosses, drift detection, compounds referencing one etymology -
+// follows from having it.
+//
+// The off-path branch is deliberately secondary rather than absent. Some real
+// words have no Wiktionary entry at all (loanwords, calendar names, local
+// compounds), and refusing them outright would only pressure someone into citing
+// an unrelated etymology to get past the form, which is worse than an honest
+// exemption. The preferred route - have a curator add it upstream first - is
+// stated where the choice is made.
 
 import { useEffect, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
@@ -32,13 +52,43 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
   );
 }
 
+/** How an etymology reads in the result list and in the confirmation banner.
+ * The etymology number is shown because it is the only thing distinguishing the
+ * three `kọ́` results from each other at a glance. */
+function EtymologyLabel({ result }: { result: KaikkiSearchResult }) {
+  return (
+    <>
+      <strong>{result.form}</strong> ({result.pos}
+      {result.etymologyNumber ? `, etymology ${result.etymologyNumber}` : ''}) - {result.glosses.join('; ')}
+    </>
+  );
+}
+
+/** A word_id hint from the etymology's primary gloss, so the field arrives filled
+ * rather than blank. Still editable: the hint is a human-readable disambiguator
+ * in the id, and the first gloss is only a good first guess at one. */
+function hintFromGloss(gloss: string | undefined): string {
+  if (!gloss) return '';
+  return gloss
+    .split(/[,;(]/)[0]
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 function WordTab() {
   const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
   const [selectedForm, setSelectedForm] = useState('');
   const [syllablesText, setSyllablesText] = useState('');
+  const [definitionText, setDefinitionText] = useState('');
   const [hint, setHint] = useState('');
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  /** The off-path branch: a real word with no Wiktionary entry. Separate state
+   * rather than a null selection, so the two paths cannot be half-entered. */
+  const [offPath, setOffPath] = useState(false);
+  const [exemptReason, setExemptReason] = useState('');
 
   useEffect(() => {
     if (!selectedForm) {
@@ -55,13 +105,47 @@ function WordTab() {
     const form = result.standardForms[0] ?? result.form;
     setSelectedForm(form);
     setSyllablesText(syllabifyWord(form).join(','));
+    // Seeded from the etymology's primary gloss, not authored from scratch: the
+    // student definition is a simplification OF this etymology's meaning.
+    setDefinitionText(result.glosses[0] ?? '');
+    setHint(hintFromGloss(result.glosses[0]));
+  }
+
+  function startOffPath() {
+    setOffPath(true);
+    setSelected(null);
+    setSelectedForm('');
+    setSyllablesText('');
+    setDefinitionText('');
+    setHint('');
+  }
+
+  function backToSearch() {
+    setOffPath(false);
+    setExemptReason('');
+    setSelectedForm('');
+    setSyllablesText('');
+    setDefinitionText('');
+    setHint('');
   }
 
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
+  const citable = offPath ? Boolean(exemptReason.trim()) : Boolean(selected?.entryId);
 
   async function submit() {
     if (!wordIdPreview) {
-      setStatus('Pick a Kaikki result and enter a word_id hint first.');
+      setStatus(
+        offPath ? 'Enter a spelling and a word_id hint first.' : 'Pick a Kaikki result and enter a word_id hint first.',
+      );
+      return;
+    }
+    if (offPath && !exemptReason.trim()) {
+      setStatus('Say why this word has no Wiktionary entry - a blank cannot be told apart from unfinished work.');
+      return;
+    }
+    if (!offPath && !selected?.entryId) {
+      // Only reachable against a corpus ingested before entry ids existed.
+      setStatus('That Kaikki record carries no etymology id - re-ingest the corpus before citing it.');
       return;
     }
     try {
@@ -69,6 +153,8 @@ function WordTab() {
         wordId: wordIdPreview,
         displayText: selectedForm,
         syllables: syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
+        definition: definitionText.trim() || null,
+        citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
     } catch (err) {
@@ -76,24 +162,62 @@ function WordTab() {
     }
   }
 
+  const showDetails = offPath || selected !== null;
+
   return (
     <div aria-label="Add word tab">
-      <SearchBox
-        search={searchKaikki}
-        renderResult={(r) => (
-          <>
-            <strong>{r.form}</strong> ({r.pos}) - {r.glosses.join('; ')}
-          </>
-        )}
-        onSelect={pickResult}
-        selectLabel="Select"
-        placeholder="Search Kaikki by spelling or meaning..."
-        resultsAriaLabel="Kaikki search results"
-      />
+      {offPath ? (
+        <div className="warning-banner" aria-label="Off-path warning">
+          <p>
+            <strong>This word has no Wiktionary entry.</strong> The preferred route is to ask a curator to add it to
+            Wiktionary first, then come back and cite it - a cited word can be checked against upstream forever, and this
+            one cannot.
+          </p>
+          <button type="button" className="btn btn-secondary" onClick={backToSearch}>
+            Back to search
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="field-note">
+            A word enters the dictionary as one Wiktionary etymology. Search for it and pick the etymology you mean - the
+            same spelling often has several.
+          </p>
+          <SearchBox
+            search={searchKaikki}
+            renderResult={(r) => <EtymologyLabel result={r} />}
+            onSelect={pickResult}
+            selectLabel="Select"
+            placeholder="Search Kaikki by spelling or meaning..."
+            resultsAriaLabel="Kaikki search results"
+          />
+        </>
+      )}
 
       {selected ? (
+        <p aria-label="Cited etymology">
+          Citing: <EtymologyLabel result={selected} />
+        </p>
+      ) : null}
+
+      {showDetails ? (
         <>
-          {selected.standardForms.length > 1 ? (
+          {offPath ? (
+            <div className="field">
+              <label htmlFor="word-spelling-field">Spelling</label>
+              <input
+                id="word-spelling-field"
+                type="text"
+                value={selectedForm}
+                onChange={(e) => {
+                  setSelectedForm(e.target.value);
+                  setSyllablesText(syllabifyWord(e.target.value).join(','));
+                }}
+              />
+            </div>
+          ) : null}
+
+          {selected && selected.standardForms.length > 1 ? (
             <div className="field">
               <p>Choose a spelling:</p>
               {selected.standardForms.map((form) => (
@@ -118,6 +242,37 @@ function WordTab() {
           </div>
 
           <div className="field">
+            <label htmlFor="word-definition-field">Student definition</label>
+            {selected && selected.glosses.length > 0 ? (
+              <p className="field-note" aria-label="Upstream glosses">
+                Wiktionary says: {selected.glosses.join('; ')}
+              </p>
+            ) : null}
+            <textarea
+              id="word-definition-field"
+              value={definitionText}
+              onChange={(e) => setDefinitionText(e.target.value)}
+            />
+            <p className="field-note">
+              Plain wording a student will understand. Simplifying Wiktionary's wording is expected - it is a
+              simplification, not a correction.
+            </p>
+          </div>
+
+          {offPath ? (
+            <div className="field">
+              <label htmlFor="word-exempt-field">Why is this word not in Wiktionary?</label>
+              <input
+                id="word-exempt-field"
+                type="text"
+                value={exemptReason}
+                onChange={(e) => setExemptReason(e.target.value)}
+                placeholder="e.g. recent loanword; traditional calendar name"
+              />
+            </div>
+          ) : null}
+
+          <div className="field">
             <label htmlFor="word-hint-field">Word ID hint (English meaning, e.g. "hand")</label>
             <input id="word-hint-field" type="text" value={hint} onChange={(e) => setHint(e.target.value.replace(/\s+/g, '_'))} />
           </div>
@@ -128,11 +283,20 @@ function WordTab() {
 
           <DuplicateWarning matches={duplicates} />
 
-          <button type="button" className="btn btn-primary" onClick={submit}>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={!citable}>
             Add to vocabulary
           </button>
         </>
       ) : null}
+
+      {!offPath ? (
+        <p className="field-note">
+          <button type="button" className="btn btn-secondary" onClick={startOffPath}>
+            This word isn't in Wiktionary
+          </button>
+        </p>
+      ) : null}
+
       {status ? <p role="status" className="status-banner">{status}</p> : null}
     </div>
   );

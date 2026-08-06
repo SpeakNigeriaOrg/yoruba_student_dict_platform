@@ -17,7 +17,7 @@ const OBSERVED: EntryObservedState = {
 };
 
 function entryOutcome(over: Partial<EntryOutcome> = {}): EntryOutcome {
-  return { kind: 'entry', displayText: 'ikun', syllables: ['i', 'kun'], definitionText: 'stomach', ...over };
+  return { kind: 'entry', displayText: 'ikun', syllables: ['i', 'kun'], definitionText: 'stomach', citedEntryId: null, ...over };
 }
 
 let seq = 0;
@@ -33,6 +33,75 @@ function contribution(fingerprint: string, submittedBy: string, submittedAt: str
   };
 }
 
+describe('the cited etymology is part of the claim, not provenance', () => {
+  const KO_OBSERVED: EntryObservedState = {
+    displayText: 'kọ́',
+    syllables: ['kọ́'],
+    definition: 'to hang, suspend',
+    citedEntryId: 'en-ko-yo-verb-HANG',
+  };
+
+  it('carries the cited etymology through when the contributor does not change it', () => {
+    const out = resolveEntryOutcome(KO_OBSERVED, { action: 'keep_ours', definitionAction: 'confirm' });
+    expect(out.citedEntryId).toBe('en-ko-yo-verb-HANG');
+  });
+
+  it('takes the contributor\'s etymology when they name a different one', () => {
+    const out = resolveEntryOutcome(KO_OBSERVED, {
+      action: 'select_candidate',
+      candidateForm: 'kọ́',
+      senseEntryId: 'en-ko-yo-verb-BUILD',
+      definitionAction: 'custom',
+      definitionText: 'to build',
+    });
+    expect(out.citedEntryId).toBe('en-ko-yo-verb-BUILD');
+  });
+
+  it('scores two contributors citing DIFFERENT etymologies of one spelling as disagreeing', () => {
+    // The case that forced this change. Both write the same definition text and
+    // the same spelling; they are describing two different words.
+    const hang = entryOutcome({ displayText: 'kọ́', definitionText: 'to hang', citedEntryId: 'en-ko-yo-verb-HANG' });
+    const build = entryOutcome({ displayText: 'kọ́', definitionText: 'to hang', citedEntryId: 'en-ko-yo-verb-BUILD' });
+    expect(fingerprintOutcome(hang)).not.toBe(fingerprintOutcome(build));
+  });
+
+  it('still scores two contributors citing the SAME etymology as agreeing', () => {
+    const a = entryOutcome({ citedEntryId: 'en-ko-yo-verb-HANG' });
+    const b = entryOutcome({ citedEntryId: 'en-ko-yo-verb-HANG' });
+    expect(fingerprintOutcome(a)).toBe(fingerprintOutcome(b));
+  });
+
+  it('does not confuse "no etymology cited" with a cited one', () => {
+    expect(fingerprintOutcome(entryOutcome({ citedEntryId: null }))).not.toBe(
+      fingerprintOutcome(entryOutcome({ citedEntryId: 'en-ko-yo-verb-HANG' })),
+    );
+  });
+
+  it('compares entry ids exactly rather than case-folded - they are opaque upstream tokens', () => {
+    expect(fingerprintOutcome(entryOutcome({ citedEntryId: 'en-ko-yo-verb-HANG' }))).not.toBe(
+      fingerprintOutcome(entryOutcome({ citedEntryId: 'en-ko-yo-verb-hang' })),
+    );
+  });
+
+  it('treats a pre-citation stored outcome (no citedEntryId key) as "none cited", not as "undefined"', () => {
+    // resolved_value is jsonb, so a contribution submitted before citations
+    // existed comes back with the key absent. It is re-fingerprinted when a
+    // curator confirms it, and strict null-checking produced the literal string
+    // "undefined" - which then went into word_decisions and made the word read as
+    // permanently dissented, because no later fingerprint could ever match it.
+    const legacy = { kind: 'entry', displayText: 'ikun', syllables: ['i', 'kun'], definitionText: 'stomach' } as EntryOutcome;
+    expect(fingerprintOutcome(legacy)).not.toContain('undefined');
+    expect(fingerprintOutcome(legacy)).toBe(fingerprintOutcome(entryOutcome({ citedEntryId: null })));
+  });
+
+  it('keeps the fingerprint free of NUL, which Postgres text cannot store', () => {
+    for (const cited of [null, 'en-ko-yo-verb-HANG']) {
+      const fp = fingerprintOutcome(entryOutcome({ citedEntryId: cited, definitionText: null }));
+      expect(fp).not.toContain(String.fromCharCode(0));
+    }
+  });
+});
+
 describe('resolveEntryOutcome', () => {
   it('keep_ours asserts the state as observed', () => {
     expect(resolveEntryOutcome(OBSERVED, { action: 'keep_ours', definitionAction: 'confirm' })).toEqual({
@@ -40,6 +109,7 @@ describe('resolveEntryOutcome', () => {
       displayText: 'ikun',
       syllables: ['i', 'kun'],
       definitionText: 'stomach',
+      citedEntryId: null,
     });
   });
 

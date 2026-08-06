@@ -18,9 +18,24 @@ export interface AxisBannerProps {
   definition: string | null;
   axisDecided: AxisDecided;
   currentAxis: 'Entry' | 'Etymology';
+  /** Off in the task queue.
+   *
+   * The chips name the same three axes as the tab bar, so wherever the tabs are
+   * shown they are a second copy of the same information - and in the queue,
+   * where the tabs are gone, they are worse than redundant: they advertise two
+   * other axes to someone who was handed one specific task, and the progress line
+   * above already says where they are. */
+  showAxisChips?: boolean;
 }
 
-export function AxisBanner({ displayText, syllables, definition, axisDecided, currentAxis }: AxisBannerProps) {
+export function AxisBanner({
+  displayText,
+  syllables,
+  definition,
+  axisDecided,
+  currentAxis,
+  showAxisChips = true,
+}: AxisBannerProps) {
   const chips: Array<{ label: string; done: boolean }> = [
     { label: 'entry', done: axisDecided.entry },
     { label: 'etymology', done: axisDecided.etymology },
@@ -36,16 +51,20 @@ export function AxisBanner({ displayText, syllables, definition, axisDecided, cu
         <strong>Definition:</strong> {definition ?? '(not yet decided)'}
       </p>
 
-      <p aria-label="Review axis status" className="badge-row">
-        {chips.map((chip) => (
-          <span key={chip.label} className={`badge${chip.done ? ' decided' : ''}`}>
-            {chip.done ? `${chip.label} ✓` : chip.label}
-          </span>
-        ))}
-      </p>
-      {/* The tab bar shows this visually; kept for screen readers, which
-          don't get the tab bar's aria-current as page context here. */}
-      <span className="visually-hidden">You are viewing {currentAxis}.</span>
+      {showAxisChips ? (
+        <>
+          <p aria-label="Review axis status" className="badge-row">
+            {chips.map((chip) => (
+              <span key={chip.label} className={`badge${chip.done ? ' decided' : ''}`}>
+                {chip.done ? `${chip.label} ✓` : chip.label}
+              </span>
+            ))}
+          </p>
+          {/* The tab bar shows this visually; kept for screen readers, which
+              don't get the tab bar's aria-current as page context here. */}
+          <span className="visually-hidden">You are viewing {currentAxis}.</span>
+        </>
+      ) : null}
     </>
   );
 }

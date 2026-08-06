@@ -62,6 +62,30 @@ is the statement — it just isn't needed for the legacy data:
 update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';
 ```
 
+## After 0014: give every existing word its citation
+
+`0014_upstream_sense_citations.sql` adds `kaikki_senses.entry_id` and the
+`upstream_citations` table, but it deliberately backfills **nothing** - a word's
+etymology cannot be recovered from its spelling (`kọ́` is three etymologies), so
+guessing in SQL would write confident, permanent, sometimes-wrong citations.
+
+Two steps after applying it, in this order:
+
+```
+npm run --workspace=ingest run                        # populates entry_id (null until re-ingested)
+node scripts/backfillUpstreamCitations.mjs            # dry run: shows exactly what --apply will do
+node scripts/backfillUpstreamCitations.mjs --apply --by <curator-email>
+```
+
+The backfill links only the words resolving to exactly one etymology, records an
+explicit `exempt_reason` for those genuinely absent from Wiktionary, and **leaves
+the ambiguous ones untouched** - listed for a curator, and visible as outstanding
+because they have no row at all. Re-running it is safe; already-cited words are
+reported as such and their `pinned_at` is not restamped.
+
+Until a word is cited, its entry screen says so plainly rather than showing a
+volunteer the form-matching diagnosis that predates citations.
+
 ## After 0011: the archived pre-merge decisions
 
 `0011_merge_entry_axis.sql` merged the `spelling` and `definition` review axes

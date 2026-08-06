@@ -12,6 +12,7 @@
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
+import { writeCitationInTransaction } from './upstreamCitations.js';
 
 export interface CreatePhraseInput {
   wordId: string;
@@ -80,4 +81,19 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
       [input.wordId, position, componentWordId],
     );
   }
+
+  // A phrase is exempt BY NATURE, and recorded as exempt rather than left with
+  // no row at all. Without this, golden_record has three citation states -
+  // cited, explicitly exempt, and simply absent - and "absent" would mean both
+  // "a phrase, correctly" and "a word nobody has got round to". The publish gate
+  // and the reconciliation queue both need "no row" to mean exactly one thing.
+  //
+  // Its identity is not missing, it is derived: a phrase is a composition of
+  // golden_record words, each of which cites its own etymology.
+  await writeCitationInTransaction(
+    client,
+    input.wordId,
+    { exemptReason: 'composed phrase - its identity comes from its components, each of which cites its own etymology' },
+    createdBy,
+  );
 }

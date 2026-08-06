@@ -1,0 +1,53 @@
+{
+  "wordId": "fixturegenentry_ilu_drum",
+  "displayText": "fixturegenentry_ilu",
+  "englishHint": "drum",
+  "status": "tone_mismatch",
+  "matchedForm": "fixturegenentry_ìlù",
+  "canonicalForm": "fixturegenentry_ìlù",
+  "adoptionTarget": "fixturegenentry_ìlù",
+  "matchedEntryId": "fixturegenentry-etym-legacy",
+  "matchedEtymologyNumber": "1",
+  "matchedPos": "noun",
+  "matchedGlosses": [
+    "drum"
+  ],
+  "matchedAltOfTargets": [],
+  "matchedComponentCandidates": [],
+  "matchedUsedInCandidates": [],
+  "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
+  "syllableSplitStatus": "mismatch",
+  "syllableSplitManual": [
+    "i",
+    "lu"
+  ],
+  "syllableSplitProgrammatic": [
+    "fi",
+    "tu",
+    "re",
+    "ge",
+    "nen",
+    "tryi",
+    "lu"
+  ],
+  "definitionCandidateGlosses": [
+    "drum"
+  ],
+  "definitionSourceForm": "fixturegenentry_ìlù",
+  "definitionSourceIsCrossReference": false,
+  "definitionLinkedSameAsSpelling": true,
+  "definitionStatus": "proposed",
+  "definitionCurrent": "drum",
+  "definitionProposed": "drum",
+  "syllables": [
+    "i",
+    "lu"
+  ],
+  "axisDecided": {
+    "entry": false,
+    "etymology": false,
+    "audio": false
+  },
+  "citation": null,
+  "spellingVsUpstream": "not_cited"
+}

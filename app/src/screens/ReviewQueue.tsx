@@ -22,6 +22,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   confirmConsensus,
   getConsensus,
+  getUpstreamDrift,
+  repinUpstream,
+  type DriftItem,
+  type UpstreamDriftResult,
   type ConfirmConsensusResult,
   type ConsensusGroup,
 } from '../api.js';
@@ -118,6 +122,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ConfirmConsensusResult | null>(null);
+  const [drift, setDrift] = useState<UpstreamDriftResult | null>(null);
 
   const key = (g: ConsensusGroup) => `${g.wordId}:${g.axis}`;
 
@@ -133,9 +138,21 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
     }
   }, []);
 
+  /** Loaded separately from the consensus queue, and its failure is deliberately
+   * not fatal to the page: drift is a background health check, and a corpus that
+   * cannot be read should not take the curator's actual work queue down with it. */
+  const loadDrift = useCallback(async () => {
+    try {
+      setDrift(await getUpstreamDrift());
+    } catch {
+      setDrift(null);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadDrift();
+  }, [load, loadDrift]);
 
   async function confirm(items: Array<{ group: ConsensusGroup; fingerprint: string }>) {
     if (items.length === 0) return;
@@ -298,6 +315,153 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
           </div>
         ),
       )}
+
+      <UpstreamDriftSection
+        drift={drift}
+        busy={busy}
+        onOpenWord={(wordId) => onOpenWord(wordId, 'entry')}
+        onRepin={async (wordId, entryId) => {
+          setBusy(true);
+          try {
+            await repinUpstream(wordId, entryId);
+            await loadDrift();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
     </section>
+  );
+}
+
+const DRIFT_LABELS: Record<DriftItem['kind'], { title: string; blurb: string }> = {
+  unchanged: { title: '', blurb: '' },
+  content_changed: {
+    title: 'Wiktionary edited an etymology we cite',
+    blurb:
+      'The etymology is still there and still ours, but it no longer says what it said when this word was validated. Our spelling and student definition are untouched - decide whether they should follow.',
+  },
+  re_identified: {
+    title: 'An etymology we cite moved',
+    blurb:
+      'The id we cited is gone, but the same content is now under a different one - a renumber or re-identification upstream. Re-linking keeps the word pointing at the etymology it always meant.',
+  },
+  disappeared: {
+    title: 'An etymology we cite is gone',
+    blurb:
+      'Neither the id nor its content is in the corpus any more. Nothing can be proposed automatically; the pinned copy below is the record of what was validated.',
+  },
+};
+
+const DRIFT_ORDER: Array<DriftItem['kind']> = ['disappeared', 're_identified', 'content_changed'];
+
+/** The other half of the pin's guarantee.
+ *
+ * The pin makes an entry independent of upstream - it renders from a copy, so an
+ * edit on Wiktionary can never silently change what we assert. Without somewhere
+ * to SEE drift, that independence quietly becomes unawareness, and a citation
+ * stops describing anything real. This is that somewhere. */
+function UpstreamDriftSection({
+  drift,
+  busy,
+  onOpenWord,
+  onRepin,
+}: {
+  drift: UpstreamDriftResult | null;
+  busy: boolean;
+  onOpenWord: (wordId: string) => void;
+  onRepin: (wordId: string, entryId: string) => void;
+}) {
+  // Guards the shape, not just the null: this section promises to fail quietly
+  // rather than take the curator's work queue down with it, and that promise is
+  // worth nothing if an unexpected payload throws during render.
+  if (!drift || !Array.isArray(drift.items)) return null;
+
+  if (drift.items.length === 0) {
+    return (
+      <p className="field-note" aria-label="Upstream drift status">
+        Every cited etymology still matches Wiktionary ({drift.counts.unchanged} checked
+        {drift.exempt > 0 ? `, ${drift.exempt} exempt` : ''}
+        {drift.uncited > 0 ? `, ${drift.uncited} not linked yet` : ''}).
+      </p>
+    );
+  }
+
+  return (
+    <div className="review-section" aria-label="Upstream drift">
+      {DRIFT_ORDER.map((kind) => {
+        const items = drift.items.filter((i) => i.kind === kind);
+        if (items.length === 0) return null;
+        return (
+          <div key={kind}>
+            <h3>
+              {DRIFT_LABELS[kind].title} ({items.length})
+            </h3>
+            <p className="field-note">{DRIFT_LABELS[kind].blurb}</p>
+            <ul aria-label={DRIFT_LABELS[kind].title} className="card-list">
+              {items.map((item) => (
+                <li key={item.wordId} className="card-row">
+                  <div className="review-head">
+                    <button type="button" className="row-title" onClick={() => onOpenWord(item.wordId)}>
+                      {item.displayText}
+                    </button>
+                    <span className="badge">{item.citedEntryId}</span>
+                  </div>
+
+                  <div className="comparison" aria-label={`Upstream change for ${item.displayText}`}>
+                    <div className="col">
+                      <div className="col-label">Pinned when validated</div>
+                      {item.pin.glosses.join('; ')}
+                      {item.pin.etymologyNumber ? ` (etymology ${item.pin.etymologyNumber})` : ''}
+                    </div>
+                    <div className="col">
+                      <div className="col-label">Wiktionary now</div>
+                      {item.current ? (
+                        <>
+                          {item.current.glosses.join('; ')}
+                          {item.current.etymologyNumber ? ` (etymology ${item.current.etymologyNumber})` : ''}
+                        </>
+                      ) : (
+                        'not in the corpus'
+                      )}
+                    </div>
+                  </div>
+
+                  {item.kind === 're_identified' && item.proposedEntryId ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy}
+                      onClick={() => onRepin(item.wordId, item.proposedEntryId!)}
+                    >
+                      Re-link to {item.proposedEntryId}
+                    </button>
+                  ) : null}
+
+                  {item.kind === 'content_changed' ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy}
+                      onClick={() => onRepin(item.wordId, item.citedEntryId)}
+                    >
+                      Accept the new upstream content
+                    </button>
+                  ) : null}
+
+                  {item.kind === 'disappeared' ? (
+                    <p className="field-note">
+                      Open the word to re-link it to a different etymology, or record why it has none.
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }

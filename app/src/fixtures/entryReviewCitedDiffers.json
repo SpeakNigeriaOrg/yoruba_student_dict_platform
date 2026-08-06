@@ -1,0 +1,68 @@
+{
+  "wordId": "fixturegenentry_kasu_fail",
+  "displayText": "fixturegenentry_kasu",
+  "englishHint": "fail",
+  "status": "tone_mismatch",
+  "matchedForm": "fixturegenentry_kásù",
+  "canonicalForm": "fixturegenentry_kásù",
+  "adoptionTarget": "fixturegenentry_kásù",
+  "matchedEntryId": "fixturegenentry-etym-kasu",
+  "matchedEtymologyNumber": "2",
+  "matchedPos": "verb",
+  "matchedGlosses": [
+    "to fail",
+    "to fall short"
+  ],
+  "matchedAltOfTargets": [],
+  "matchedComponentCandidates": [],
+  "matchedUsedInCandidates": [],
+  "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
+  "syllableSplitStatus": "mismatch",
+  "syllableSplitManual": [
+    "ka",
+    "su"
+  ],
+  "syllableSplitProgrammatic": [
+    "fi",
+    "tu",
+    "re",
+    "ge",
+    "nen",
+    "tryka",
+    "su"
+  ],
+  "definitionCandidateGlosses": [
+    "to fail",
+    "to fall short"
+  ],
+  "definitionSourceForm": "fixturegenentry_kásù",
+  "definitionSourceIsCrossReference": false,
+  "definitionLinkedSameAsSpelling": true,
+  "definitionStatus": "proposed",
+  "definitionCurrent": "to fail",
+  "definitionProposed": "to fail",
+  "syllables": [
+    "ka",
+    "su"
+  ],
+  "axisDecided": {
+    "entry": false,
+    "etymology": false,
+    "audio": false
+  },
+  "citation": {
+    "entryId": "fixturegenentry-etym-kasu",
+    "exemptReason": null,
+    "pin": {
+      "pos": "verb",
+      "glosses": [
+        "to fail",
+        "to fall short"
+      ],
+      "canonicalForm": "fixturegenentry_kásù",
+      "etymologyText": "Inherited from Proto-Yoruboid.",
+      "etymologyNumber": "2"
+    }
+  },
+  "spellingVsUpstream": "differs"
+}

@@ -16,7 +16,7 @@
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
 import { createPhraseInTransaction } from './createPhrase.js';
-import { createWord } from './createWord.js';
+import { createWordInTransaction } from './createWord.js';
 import type { NewEntryProposedValue } from './submitContribution.js';
 
 export class ContributionNotFoundError extends Error {
@@ -75,6 +75,20 @@ export class LegacyAxisNotApprovableError extends Error {
       `contribution '${contributionId}' is on the pre-merge '${axis}' axis and cannot be approved - spelling and definition are now decided together as one 'entry' contribution, which must be resubmitted`,
     );
     this.name = 'LegacyAxisNotApprovableError';
+  }
+}
+
+/** A 'new_entry' word proposal with no cited etymology. Only reachable for a
+ * contribution submitted before citations existed, since parseNewEntryInput now
+ * refuses one at the HTTP edge - hence the resubmit instruction rather than a
+ * repair path. */
+export class CitationMissingOnNewEntryError extends Error {
+  constructor(proposedWordId: string) {
+    super(
+      `proposed word '${proposedWordId}' cites no Wiktionary etymology and cannot be approved - a word's identity is the ` +
+        `etymology it cites, and that cannot be recovered from its spelling afterwards. Resubmit it, picking the etymology`,
+    );
+    this.name = 'CitationMissingOnNewEntryError';
   }
 }
 
@@ -144,9 +158,22 @@ async function approveNewEntry(client: Queryable, proposedValue: NewEntryPropose
       approvedBy,
     );
   } else {
-    await createWord(
+    // proposed_value is a jsonb cast, so the compiler guarantees nothing about
+    // it - this is the real enforcement that an approved word arrives cited.
+    // Fail loudly rather than defaulting to an exemption: an uncited word cannot
+    // be repaired later from its spelling (one spelling maps to several
+    // etymologies), so a silent default would be unrecoverable data loss.
+    if (!proposedValue.citation) {
+      throw new CitationMissingOnNewEntryError(proposedValue.proposedWordId);
+    }
+    await createWordInTransaction(
       client,
-      { wordId: proposedValue.proposedWordId, displayText: proposedValue.displayText, syllables: proposedValue.syllables },
+      {
+        wordId: proposedValue.proposedWordId,
+        displayText: proposedValue.displayText,
+        syllables: proposedValue.syllables,
+        citation: proposedValue.citation,
+      },
       approvedBy,
     );
   }

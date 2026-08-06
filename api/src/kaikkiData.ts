@@ -13,6 +13,7 @@ import type { ComponentCandidate, KaikkiLexicon, KaikkiSense } from '@yoruba-stu
 import type { Queryable } from './db.js';
 
 interface KaikkiSenseRow {
+  entry_id: string | null;
   pos: string | null;
   etymology_number: string | null;
   etymology_text: string | null;
@@ -30,6 +31,7 @@ interface KaikkiSenseRow {
 
 function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
   return {
+    entryId: row.entry_id,
     pos: row.pos ?? '',
     etymologyNumber: row.etymology_number,
     etymologyText: row.etymology_text,
@@ -54,26 +56,57 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
   };
 }
 
+/** Every column rowToKaikkiSense reads, so the three queries below select the
+ * same shape from one definition instead of three drifting copies. */
+const SENSE_COLUMNS = `s.entry_id, s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
+       s.canonical_inference_method, s.canonical_confidence,
+       s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
+       coalesce(
+         (select json_agg(json_build_object('form', c.form, 'provenance', c.provenance) order by c.position)
+          from kaikki_component_candidates c where c.sense_id = s.sense_id),
+         '[]'::json
+       ) as component_candidates,
+       coalesce(
+         (select json_agg(json_build_object('form', u.form, 'provenance', u.provenance) order by u.position)
+          from kaikki_used_in_candidates u where u.sense_id = s.sense_id),
+         '[]'::json
+       ) as used_in_candidates`;
+
 export async function loadKaikkiSensesForKey(client: Queryable, orthographyInsensitiveKey: string): Promise<KaikkiSense[]> {
   const { rows } = await client.query<KaikkiSenseRow>(
-    `select s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
-            s.canonical_inference_method, s.canonical_confidence,
-            s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
-            coalesce(
-              (select json_agg(json_build_object('form', c.form, 'provenance', c.provenance) order by c.position)
-               from kaikki_component_candidates c where c.sense_id = s.sense_id),
-              '[]'::json
-            ) as component_candidates,
-            coalesce(
-              (select json_agg(json_build_object('form', u.form, 'provenance', u.provenance) order by u.position)
-               from kaikki_used_in_candidates u where u.sense_id = s.sense_id),
-              '[]'::json
-            ) as used_in_candidates
+    `select ${SENSE_COLUMNS}
      from kaikki_senses s
      join kaikki_sense_keys k on k.sense_id = s.sense_id
      where k.orthography_insensitive_key = $1`,
     [orthographyInsensitiveKey],
   );
+  return rows.map(rowToKaikkiSense);
+}
+
+/** The one etymology a citation names. Deliberately does NOT join
+ * kaikki_sense_keys - that join is one row per spelling the etymology is known
+ * by, which would return the same etymology several times over.
+ *
+ * Returns null when the id is absent from the corpus, which is a real state, not
+ * an error: it is exactly the "disappeared or re-identified" case reconciliation
+ * has to classify after an upstream change. */
+export async function loadSenseByEntryId(client: Queryable, entryId: string): Promise<KaikkiSense | null> {
+  const { rows } = await client.query<KaikkiSenseRow>(
+    `select ${SENSE_COLUMNS} from kaikki_senses s where s.entry_id = $1`,
+    [entryId],
+  );
+  return rows.length > 0 ? rowToKaikkiSense(rows[0]) : null;
+}
+
+/** Every etymology in the corpus, once each.
+ *
+ * Distinct from loadFullKaikkiLexicon, which keys by spelling and therefore
+ * repeats an etymology under each form it is known by. Reconciliation needs to
+ * ask "is this pinned content anywhere in the corpus now?", and a repeated
+ * etymology would be scanned several times and could be proposed as several
+ * different re-links to the same place. */
+export async function loadAllSenses(client: Queryable): Promise<KaikkiSense[]> {
+  const { rows } = await client.query<KaikkiSenseRow>(`select ${SENSE_COLUMNS} from kaikki_senses s`);
   return rows.map(rowToKaikkiSense);
 }
 
@@ -86,20 +119,7 @@ export async function loadKaikkiSensesForKey(client: Queryable, orthographyInsen
  * tradeoff already accepted there. */
 export async function loadFullKaikkiLexicon(client: Queryable): Promise<KaikkiLexicon> {
   const { rows } = await client.query<KaikkiSenseRow & { orthography_insensitive_key: string }>(
-    `select k.orthography_insensitive_key,
-            s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
-            s.canonical_inference_method, s.canonical_confidence,
-            s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
-            coalesce(
-              (select json_agg(json_build_object('form', c.form, 'provenance', c.provenance) order by c.position)
-               from kaikki_component_candidates c where c.sense_id = s.sense_id),
-              '[]'::json
-            ) as component_candidates,
-            coalesce(
-              (select json_agg(json_build_object('form', u.form, 'provenance', u.provenance) order by u.position)
-               from kaikki_used_in_candidates u where u.sense_id = s.sense_id),
-              '[]'::json
-            ) as used_in_candidates
+    `select k.orthography_insensitive_key, ${SENSE_COLUMNS}
      from kaikki_senses s
      join kaikki_sense_keys k on k.sense_id = s.sense_id`,
   );

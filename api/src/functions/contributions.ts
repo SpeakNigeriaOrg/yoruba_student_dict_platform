@@ -12,6 +12,7 @@ import { validateEntryDecisionInput } from '../handlers/applyEntryDecision.js';
 import { submitContribution, type NewEntryProposedValue, type SubmitContributionInput } from '../handlers/submitContribution.js';
 import { listContributions } from '../handlers/listContributions.js';
 import { WordNotFoundError } from '../handlers/errors.js';
+import { parseCitationInput } from '../handlers/upstreamCitations.js';
 
 function requireWordId(b: Record<string, unknown>): string {
   if (typeof b.wordId !== 'string' || !b.wordId) throw new Error('wordId is required');
@@ -28,12 +29,24 @@ function parseNewEntryInput(b: Record<string, unknown>): NewEntryProposedValue {
   if (b.components !== undefined && (!Array.isArray(b.components) || !b.components.every((c) => typeof c === 'string'))) {
     throw new Error('components must be an array of word_id strings if provided');
   }
+  // A citation is required for a word and refused for a phrase: a phrase's
+  // identity comes from its components (createPhrase.ts records that exemption
+  // itself), so citing an etymology on one would be a claim nobody can act on.
+  //
+  // Enforced at submission rather than only at approval, matching the 'entry'
+  // axis below: a volunteer who proposes an uncited word should be told now, not
+  // have it sit in the queue until a curator hits the same error.
+  if (b.type === 'phrase' && b.citation !== undefined) {
+    throw new Error('a phrase cannot cite an etymology - its components do');
+  }
+
   return {
     proposedWordId: b.proposedWordId,
     displayText: b.displayText,
     syllables: b.syllables as string[],
     type: b.type,
     components: b.components as string[] | undefined,
+    ...(b.type === 'word' ? { citation: parseCitationInput(b.citation) } : {}),
   };
 }
 

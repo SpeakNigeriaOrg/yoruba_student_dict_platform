@@ -9,6 +9,10 @@ import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } 
 import { getPool } from '../db.js';
 import { ForbiddenError, requireCurator, UnauthenticatedError } from '../httpAuth.js';
 import { createWord, WordIdAlreadyExistsError, type CreateWordInput } from '../handlers/createWord.js';
+// A bad citation (unknown or non-citable entry_id) surfaces through the generic
+// Error -> 400 branch below, which is the right status and carries the handler's
+// own message.
+import { parseCitationInput } from '../handlers/upstreamCitations.js';
 
 function parseCreateWordInput(body: unknown): CreateWordInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
@@ -26,6 +30,7 @@ function parseCreateWordInput(body: unknown): CreateWordInput {
     displayText: b.displayText,
     syllables: b.syllables as string[],
     definition: (b.definition as string | null | undefined) ?? null,
+    citation: parseCitationInput(b.citation),
   };
 }
 
