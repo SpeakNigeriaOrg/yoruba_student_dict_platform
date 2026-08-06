@@ -300,6 +300,41 @@ now returns `exemptItems` and not only a count. A collision on that path is **re
 tell two entries apart, a same-spelling same-meaning collision means it is the word we
 already hold, and guessing either way would be silent.
 
+## The syllable split is a claim, and a recording is only valid while it holds
+
+A nasal after a vowel is either a coda nasalising that vowel or a syllable of its own, and
+bare spelling does not always say which (`alangba` = `a·lan·gba` or `a·la·n·gba`).
+`shared/src/syllabify.ts` settles what the letters settle — plain `e`/`o` do not nasalise so a
+nasal after them must be syllabic; a coda is written `m` only before `b`/`p` — and defaults the
+rest to coda. That default agrees with **Wiktionary's own IPA on 3,993 of 3,996** forms, which is
+checkable because `0016` keeps the IPA ingest used to parse and drop:
+
+```
+DATABASE_URL=postgres://... node scripts/checkSyllableSplitAgainstIpa.mjs   # read-only
+```
+
+It is a **check, not a source**: IPA counts phonetic syllables and we count tone-bearing units, so
+it disagrees on 420 forms where ours is the unit we want (`àámú` is `/àá.mṹ/` upstream and
+`['à','á','mú']` here, because `à` and `á` carry different tones). One finding today —
+`Ṣóyínká`, where Wiktionary's spelling and its own IPA disagree with each other.
+
+Two consequences on this side of the wire:
+
+- **An explicit `respell` beats `accept_programmatic`.** They can arrive together (any tone or
+  letter edit produces a respell, and the client forwards `syllableAction` whenever it is set).
+  Both used to write, the row kept the programmatic split, and `resolveEntryOutcome` fingerprinted
+  the authored one — a `value_fingerprint` describing a split the row did not hold, which makes
+  that word read as **permanently dissented** because nothing can ever match it again. The write
+  now follows the fingerprint, because an authored split is a claim and re-deriving it is not.
+- **A recording counts only while it still matches the word.** `0006` freezes each recording's own
+  `recorded_display_text`/`recorded_syllables`, and the publish scripts admit a recording only
+  while those equal `golden_record`'s current values. `reviewShared.ts` used to ask the weaker
+  question — "does this user have a row in `utterances`?" — so a re-spelled or re-split word read
+  as **done** in the app while every one of its recordings was being dropped from the export.
+  Both `AxisDecided.audio` and the curator-facing `speakerCount` now apply the publish scripts'
+  comparison verbatim, element-wise and not Unicode-normalising: the aim is to agree with what
+  publish does, and a more lenient check would just move the gap along one step.
+
 Two scripts, both safe to run read-only first:
 
 ```

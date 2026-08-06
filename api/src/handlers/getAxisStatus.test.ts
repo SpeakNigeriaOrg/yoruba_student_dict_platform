@@ -100,6 +100,48 @@ describe('getAxisStatus', () => {
     expect(result.audio).toBe(false);
   });
 
+  it('stops reporting audio once the word is re-split, because publish stops accepting it', async () => {
+    // The gap this closes: the axis used to ask only "does this user have a row in utterances?", so
+    // a word whose spelling or split changed after recording read as DONE while every one of its
+    // recordings was being silently dropped from the game export. The axis that should have raised
+    // it was the one saying green.
+    const wordId = `${NS}word_resplit`;
+    await insertWord(wordId);
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (display_name, user_id) values ($1, $2) returning speaker_id',
+      [`${NS}resplitspeaker`, userId],
+    );
+    await pool.query(
+      `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+       values ($1, $2, 1, 'x', $3, $4)`,
+      [wordId, speaker.rows[0].speaker_id, wordId, [wordId]],
+    );
+    expect((await getAxisStatus(pool, wordId, userId)).audio).toBe(true);
+
+    // Re-split the word without touching the recording - exactly what freeing a nasal does.
+    await pool.query('update golden_record set syllables = $1 where word_id = $2', [[wordId, 'n̄'], wordId]);
+
+    expect((await getAxisStatus(pool, wordId, userId)).audio).toBe(false);
+  });
+
+  it('stops reporting audio once the word is re-spelled', async () => {
+    const wordId = `${NS}word_respelled`;
+    await insertWord(wordId);
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (display_name, user_id) values ($1, $2) returning speaker_id',
+      [`${NS}respellspeaker`, userId],
+    );
+    await pool.query(
+      `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+       values ($1, $2, 1, 'x', $3, $4)`,
+      [wordId, speaker.rows[0].speaker_id, wordId, [wordId]],
+    );
+
+    await pool.query('update golden_record set display_text = $1 where word_id = $2', [`${wordId}x`, wordId]);
+
+    expect((await getAxisStatus(pool, wordId, userId)).audio).toBe(false);
+  });
+
   it('rejects a word_id that does not exist', async () => {
     await expect(getAxisStatus(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });

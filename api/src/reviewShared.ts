@@ -75,12 +75,31 @@ export interface AxisDecided {
   example: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// A recording only counts while it still matches the word
+// ---------------------------------------------------------------------------
+// 0006 freezes each recording's own recorded_display_text/recorded_syllables so a recording's
+// pronunciation is never silently reinterpreted. The publish scripts then admit a recording only
+// while those still equal golden_record's current values, and exclude it otherwise.
+//
+// The audio axis used to ask a weaker question - "does this user have a row in utterances?" - so a
+// word whose spelling or split changed after recording read as DONE in the app while every one of
+// its recordings was being dropped from the game. Nobody was told, and the axis that would have
+// told them said green.
+//
+// So this is the publish scripts' comparison, deliberately verbatim: element-wise SQL array
+// equality, not Unicode-normalising. The point is to agree with what publish actually does, and a
+// more lenient check here would recreate the same gap one step further along.
+const RECORDING_STILL_MATCHES = `u.recorded_display_text = g.display_text and u.recorded_syllables = g.syllables`;
+
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
   const [decisionRows, utteranceRows, contributionRows, exampleRows] = await Promise.all([
     client.query<{ axis: DecisionAxis }>('select axis from word_decisions where word_id = $1', [wordId]),
     client.query(
-      `select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
-       where u.word_id = $1 and s.user_id = $2 limit 1`,
+      `select 1 from utterances u
+         join speakers s on s.speaker_id = u.speaker_id
+         join golden_record g on g.word_id = u.word_id
+       where u.word_id = $1 and s.user_id = $2 and ${RECORDING_STILL_MATCHES} limit 1`,
       [wordId, userId],
     ),
     client.query<{ axis: DecisionAxis }>(
@@ -120,8 +139,10 @@ export async function loadAxisDecidedBatch(
       wordIds,
     ]),
     client.query<{ word_id: string }>(
-      `select distinct u.word_id from utterances u join speakers s on s.speaker_id = u.speaker_id
-       where s.user_id = $1 and u.word_id = any($2)`,
+      `select distinct u.word_id from utterances u
+         join speakers s on s.speaker_id = u.speaker_id
+         join golden_record g on g.word_id = u.word_id
+       where s.user_id = $1 and u.word_id = any($2) and ${RECORDING_STILL_MATCHES}`,
       [userId, wordIds],
     ),
     client.query<{ word_id: string; axis: DecisionAxis }>(
@@ -193,9 +214,13 @@ export async function loadGlobalAxisStatusBatch(
        where word_id = any($1) and status = 'active' and axis in ('entry', 'etymology')`,
       [wordIds],
     ),
+    // Same condition as AxisDecided's, so a curator's coverage number and a volunteer's done flag
+    // cannot disagree about the same recording. A count that includes recordings publish will drop
+    // is the curator-facing version of exactly the defect described above.
     client.query<{ word_id: string; speakers: string }>(
       `select u.word_id, count(distinct u.speaker_id) as speakers
-       from utterances u where u.word_id = any($1) group by u.word_id`,
+       from utterances u join golden_record g on g.word_id = u.word_id
+       where u.word_id = any($1) and ${RECORDING_STILL_MATCHES} group by u.word_id`,
       [wordIds],
     ),
   ]);

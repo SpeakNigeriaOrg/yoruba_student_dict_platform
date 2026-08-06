@@ -274,6 +274,31 @@ async function main() {
        and u.recorded_display_text = w.display_text
        and u.recorded_syllables = w.syllables`,
   );
+  // Say what was dropped, and name WHY.
+  //
+  // publishToR2.mjs has warned about this since the check was added; this script did not, so the
+  // same exclusion was silent here. That asymmetry was pure trap: a re-spelling or a re-split
+  // takes a word's recordings out of the game, and the difference between the two scripts was
+  // whether anyone found out. Now the words are named rather than only counted, because "3
+  // recordings excluded" does not tell you which word to go and re-record.
+  const staleResult = await pool.query(
+    `select w.word_id, w.display_text
+     from utterances u
+     join golden_record w on w.word_id = u.word_id
+     where u.take_number = 1
+       and u.audio_data is not null
+       and (u.recorded_display_text != w.display_text or u.recorded_syllables != w.syllables)
+     group by w.word_id, w.display_text
+     order by w.word_id`,
+  );
+  if (staleResult.rows.length > 0) {
+    console.warn(
+      `      ${staleResult.rows.length} word(s) with take-1 recordings EXCLUDED: the recorded pronunciation no longer matches golden_record (re-spelled or re-split since recording - needs re-recording)`,
+    );
+    for (const row of staleResult.rows) {
+      console.warn(`        ${row.word_id} (${row.display_text})`);
+    }
+  }
   // speaker -> word_id -> Buffer
   const wordAudioBySpeaker = new Map();
   for (const row of wordAudioResult.rows) {
