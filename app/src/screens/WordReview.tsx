@@ -94,7 +94,9 @@ export function WordReview({
       {axis === 'entry' ? (
         <EntryReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />
       ) : null}
-      {axis === 'etymology' ? <EtymologyReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} /> : null}
+      {axis === 'etymology' ? (
+        <EtymologyReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />
+      ) : null}
       {axis === 'audio' ? <AudioRecording wordId={wordId} onDecided={handleDecided} /> : null}
     </>
   );

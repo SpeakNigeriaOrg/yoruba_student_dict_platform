@@ -149,9 +149,9 @@ describe('TaskQueue', () => {
     const user = userEvent.setup();
 
     render(<TaskQueue isCurator={false} onOpenWord={() => {}} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Show my whole list' }));
+    await waitFor(() => screen.getByRole('button', { name: 'My whole list' }));
 
-    await user.click(screen.getByRole('button', { name: 'Show my whole list' }));
+    await user.click(screen.getByRole('button', { name: 'My whole list' }));
 
     const list = screen.getByLabelText('My assignments');
     expect(list).toHaveTextContent('display_w1');
@@ -164,8 +164,8 @@ describe('TaskQueue', () => {
     const user = userEvent.setup();
 
     render(<TaskQueue isCurator={false} onOpenWord={onOpenWord} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Show my whole list' }));
-    await user.click(screen.getByRole('button', { name: 'Show my whole list' }));
+    await waitFor(() => screen.getByRole('button', { name: 'My whole list' }));
+    await user.click(screen.getByRole('button', { name: 'My whole list' }));
     await user.click(screen.getByRole('button', { name: 'display_w1' }));
 
     expect(onOpenWord).toHaveBeenCalledWith('w1', 'entry');

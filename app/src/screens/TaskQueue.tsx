@@ -5,7 +5,7 @@
 // The old flow asked a phone user to navigate: read a list of assigned
 // words, pick one, pick one of the axis tabs, then work a dense form. This
 // hands over one task instead - the next unfinished (word, axis) pair - and
-// advances on submit. The list is still reachable (see "Show my whole list"
+// advances on submit. The list is still reachable (see "My whole list"
 // below, and the bottom nav for curators); it just isn't the thing you have
 // to work through to get to the work.
 //
@@ -91,7 +91,7 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
           {total} tasks complete.
         </p>
         <button type="button" className="btn btn-secondary" onClick={() => setShowList((s) => !s)}>
-          {showList ? 'Hide my list' : 'Show my whole list'}
+          {showList ? 'Hide my list' : 'My whole list'}
         </button>
         {showList ? (
           <AssignmentsList assignments={assignments} onSelect={(wordId) => onOpenWord(wordId, 'entry')} />
@@ -112,6 +112,20 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
           <div className="progress-fill" style={{ width: `${total === 0 ? 0 : (done / total) * 100}%` }} />
         </div>
         <p className="queue-task-label">{AXIS_TASK_LABEL[task.axis]}</p>
+        {/* Reachable without scrolling past the whole task.
+          *
+          * The queue is the root view, so there is nothing to go "back" to from
+          * here - which is why only the word screen carries a Back button. But
+          * that left a volunteer with no navigation at all until they scrolled to
+          * the bottom of the longest screen in the app, and volunteers get no
+          * bottom nav either. The list is the way to revisit a word already done,
+          * or to jump ahead, so it belongs at the top. */}
+        <button type="button" className="btn btn-secondary queue-list-toggle" onClick={() => setShowList((s) => !s)}>
+          {showList ? 'Hide my list' : 'My whole list'}
+        </button>
+        {showList ? (
+          <AssignmentsList assignments={assignments} onSelect={(wordId) => onOpenWord(wordId, 'entry')} />
+        ) : null}
       </div>
 
       <WordReview
@@ -132,13 +146,7 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
         <button type="button" className="btn btn-secondary" onClick={() => void advance()}>
           Skip for now
         </button>
-        <button type="button" className="btn btn-secondary" onClick={() => setShowList((s) => !s)}>
-          {showList ? 'Hide my list' : 'Show my whole list'}
-        </button>
       </div>
-      {showList ? (
-        <AssignmentsList assignments={assignments} onSelect={(wordId) => onOpenWord(wordId, 'entry')} />
-      ) : null}
     </section>
   );
 }

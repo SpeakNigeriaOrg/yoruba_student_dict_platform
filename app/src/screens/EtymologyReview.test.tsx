@@ -12,6 +12,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The manual component builder, the note, and "already confirmed as used in" are
+ * behind a collapsed curator-tools disclosure now - assembling word_ids is a
+ * curator instrument, and an empty picker was noise on a volunteer's phone. */
+async function openCuratorTools(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+}
+
 describe('EtymologyReview', () => {
   it('renders real componentsProposal and usedInProposal data (fixture generated via the real getEtymologyReview handler against real Postgres)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
@@ -31,7 +38,10 @@ describe('EtymologyReview', () => {
     expect(screen.getByText('fixturegen2_usedintargetspelling')).toBeInTheDocument();
     expect(screen.getByText(/fixturegen2_usedintarget_otherword/)).toBeInTheDocument();
 
-    // No confirmed usedAsComponentOf relationships yet in this fixture.
+    // No confirmed usedAsComponentOf relationships yet in this fixture - now
+    // curator-only, since it is provenance about OTHER words and rendered
+    // "No confirmed relationships yet." on essentially every word.
+    await openCuratorTools(userEvent.setup());
     expect(screen.getByText('No confirmed relationships yet.')).toBeInTheDocument();
 
     // Read-only entry context, and the axis status chip row.
@@ -85,14 +95,80 @@ describe('EtymologyReview', () => {
     });
   });
 
-  it('disables Confirm components for an atomic word and enables Reject when a proposal exists', async () => {
+  it('offers only the applicable answers: a proposal exists, no components on record', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.getByRole('button', { name: 'Confirm components' })).toBeDisabled();
+    // Accept / reject apply because there IS a proposal; "Confirm components" does
+    // not, because none are on record - and it is now absent rather than a greyed
+    // button with no explanation.
+    expect(screen.getByRole('button', { name: 'Accept proposed components' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Reject this etymology' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Confirm components' })).not.toBeInTheDocument();
+  });
+
+  it('offers no accept/reject at all when there is nothing proposed to accept or reject', async () => {
+    // The reported defect: "Accept proposed components" appeared, ENABLED, on a
+    // word with no proposal - submitting accept_proposed over an empty list - and
+    // "Reject this etymology" sat greyed out with nothing to reject.
+    const fixture = { ...etymologyFixture, componentsProposal: [], components: [] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByRole('button', { name: 'Accept proposed components' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject this etymology' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm components' })).not.toBeInTheDocument();
+    // Exactly one answer, and it is a positive claim about the word.
+    expect(screen.getByRole('button', { name: 'It has no parts' })).toBeInTheDocument();
+    expect(screen.getByText(/Wiktionary proposes no breakdown/)).toBeInTheDocument();
+  });
+
+  it('never offers a volunteer the curator-only "add this missing word" button', async () => {
+    // It posts to POST /api/words, which is curator-only - a volunteer filling the
+    // form in got a bare "403" at the end of it.
+    const fixture = {
+      ...etymologyFixture,
+      componentsProposal: [
+        { kaikkiForm: 'abo adìyẹ', wordId: null, ambiguous: false, possibleMatches: [], previewGlosses: ['hen'] },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByRole('button', { name: /Add "abo adìyẹ" to vocabulary/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Ask a curator to add this word/)).toBeInTheDocument();
+  });
+
+  it('still offers a curator the add-missing-word button', async () => {
+    const fixture = {
+      ...etymologyFixture,
+      componentsProposal: [
+        { kaikkiForm: 'abo adìyẹ', wordId: null, ambiguous: false, possibleMatches: [], previewGlosses: ['hen'] },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.getByRole('button', { name: /Add "abo adìyẹ" to vocabulary/ })).toBeInTheDocument();
+  });
+
+  it('hides the manual builder and the note from a volunteer entirely', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByRole('button', { name: 'Curator tools' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Note')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search existing vocabulary...')).not.toBeInTheDocument();
   });
 
   it('rejects the proposed etymology', async () => {
@@ -146,6 +222,7 @@ describe('EtymologyReview', () => {
 
     render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+    await openCuratorTools(userEvent.setup());
 
     const draft = screen.getByLabelText('Draft components');
     expect(draft).toHaveTextContent('fixturegenconfirmed_part_word');
@@ -156,8 +233,13 @@ describe('EtymologyReview', () => {
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+    await openCuratorTools(userEvent.setup());
 
-    expect(screen.getByText('No components picked yet.')).toBeInTheDocument();
+    // No chip list at all, rather than a "No components picked yet." placeholder,
+    // and no Save button until something is actually picked - saving an empty
+    // custom list asserted "these are the parts" about nothing.
+    expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save custom components' })).not.toBeInTheDocument();
   });
 
   it('adding a manual search result and saving submits componentsAction: custom with the draft list', async () => {
@@ -180,6 +262,7 @@ describe('EtymologyReview', () => {
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+    await openCuratorTools(user);
 
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText('manual_component_word'));
@@ -210,10 +293,11 @@ describe('EtymologyReview', () => {
     render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
 
+    await openCuratorTools(user);
     expect(screen.getByLabelText('Draft components')).toHaveTextContent('fixturegenconfirmed_part_word');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
-    expect(screen.getByText('No components picked yet.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
   });
 
   it('flags a plaintext-only etymology note as "no structured breakdown" when there is no proposal at all', async () => {

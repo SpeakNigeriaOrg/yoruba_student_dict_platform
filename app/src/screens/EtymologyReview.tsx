@@ -36,6 +36,10 @@ export interface EtymologyReviewProps {
   isCurator: boolean;
   /** Called after a successful submit, so the task queue can advance. */
   onDecided?: () => void;
+  /** Off in the task queue, matching EntryReview. The chips name the same three
+   * axes as the tab bar the queue does not show, and in the queue they advertise
+   * two other axes to someone handed one specific task. */
+  showAxisChips?: boolean;
 }
 
 // A Kaikki-proposed component that resolves to no existing word_id at
@@ -157,7 +161,15 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
   );
 }
 
-function ProposalItemRow({ item, onAdded }: { item: ComponentsProposalItem; onAdded: (wordId: string) => void }) {
+function ProposalItemRow({
+  item,
+  onAdded,
+  isCurator,
+}: {
+  item: ComponentsProposalItem;
+  onAdded: (wordId: string) => void;
+  isCurator: boolean;
+}) {
   const notInVocabYet = !item.wordId && !item.ambiguous && item.possibleMatches.length === 0;
   return (
     <li>
@@ -172,27 +184,39 @@ function ProposalItemRow({ item, onAdded }: { item: ComponentsProposalItem; onAd
         <span> — not in golden_record yet</span>
       )}
       {item.previewGlosses.length > 0 ? <span> ({item.previewGlosses.join('; ')})</span> : null}
+      {/* Adding the missing word posts to POST /api/words, which is curator-only
+          both in staticwebapp.config.json and in the handler's own requireCurator.
+          Offering it to a volunteer produced a live "403" at the end of a filled-in
+          form - the same shape of defect as the /api/contributions route-ordering
+          403: a member-facing control wired to a curator-only endpoint. A
+          volunteer is told what to do instead. */}
       {notInVocabYet ? (
-        <div className="btn-row">
-          <AddMissingComponent kaikkiForm={item.kaikkiForm} onAdded={onAdded} />
-        </div>
+        isCurator ? (
+          <div className="btn-row">
+            <AddMissingComponent kaikkiForm={item.kaikkiForm} onAdded={onAdded} />
+          </div>
+        ) : (
+          <p className="field-note">Ask a curator to add this word before it can be linked as a part.</p>
+        )
       ) : null}
     </li>
   );
 }
 
-export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyReviewProps) {
+export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = true }: EtymologyReviewProps) {
   const [review, setReview] = useState<EtymologyReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [draftComponents, setDraftComponents] = useState<string[]>([]);
+  const [showTools, setShowTools] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setReview(null);
     setError(null);
     setDraftComponents([]);
+    setShowTools(false);
     getEtymologyReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -278,6 +302,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyRevie
 
   const hasRealExistingComponents =
     review !== null && review.components.length > 0 && !(review.components.length === 1 && review.components[0] === wordId);
+  const hasProposal = (review?.componentsProposal.length ?? 0) > 0;
 
   if (error) return <p role="alert" className="error-banner">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
@@ -292,6 +317,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyRevie
         definition={review.definition}
         axisDecided={review.axisDecided}
         currentAxis="Etymology"
+        showAxisChips={showAxisChips}
       />
 
       <h3>Proposed components (this word's own decomposition)</h3>
@@ -300,7 +326,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyRevie
       ) : (
         <ul aria-label="Proposed components">
           {review.componentsProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} />
+            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
           ))}
         </ul>
       )}
@@ -325,73 +351,124 @@ export function EtymologyReview({ wordId, isCurator, onDecided }: EtymologyRevie
       ) : (
         <ul aria-label="Used in proposals">
           {review.usedInProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} />
+            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
           ))}
         </ul>
       )}
 
-      <h3>Already confirmed as used in</h3>
-      {review.usedAsComponentOf.length === 0 ? (
-        <p>No confirmed relationships yet.</p>
-      ) : (
-        <ul aria-label="Confirmed used in">
-          {review.usedAsComponentOf.map((id) => (
-            <li key={id}>{id}</li>
-          ))}
-        </ul>
-      )}
+      {/* Assembling a component list out of word_ids, and the free-text note, are
+        * curator instruments - the same judgement as EntryReview's curator tools,
+        * and hidden for the same reason. A volunteer answering "does this word
+        * break into parts?" does not need a vocabulary search, and "No components
+        * picked yet." above an empty picker was pure noise on a phone.
+        *
+        * "Already confirmed as used in" lives here too: it is provenance about
+        * other words, and it rendered "No confirmed relationships yet." on
+        * essentially every word. */}
+      {isCurator ? (
+        <div className="curator-tools">
+          <button type="button" className="btn btn-secondary" aria-expanded={showTools} onClick={() => setShowTools((v) => !v)}>
+            {showTools ? 'Hide curator tools' : 'Curator tools'}
+          </button>
+          {!showTools ? null : (
+            <div aria-label="Etymology curator tools">
+              <h4>Already confirmed as used in</h4>
+              {review.usedAsComponentOf.length === 0 ? (
+                <p>No confirmed relationships yet.</p>
+              ) : (
+                <ul aria-label="Confirmed used in">
+                  {review.usedAsComponentOf.map((id) => (
+                    <li key={id}>{id}</li>
+                  ))}
+                </ul>
+              )}
 
-      <h3>Manually build the component list</h3>
-      {draftComponents.length === 0 ? (
-        <p>No components picked yet.</p>
-      ) : (
-        <ul aria-label="Draft components" className="plain-list">
-          {draftComponents.map((componentWordId) => (
-            <li key={componentWordId} className="search-result-row">
-              <span className="result-text">{componentWordId}</span>
-              <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <SearchBox
-        search={searchVocab}
-        renderResult={(r) => (
-          <>
-            <strong>{r.wordId}</strong> - {r.displayText}
-          </>
-        )}
-        onSelect={addManualComponent}
-        selectLabel="Add"
-        placeholder="Search existing vocabulary..."
-        resultsAriaLabel="Vocab search results"
-      />
+              <h4>Build the component list by hand</h4>
+              {draftComponents.length === 0 ? null : (
+                <ul aria-label="Draft components" className="plain-list">
+                  {draftComponents.map((componentWordId) => (
+                    <li key={componentWordId} className="search-result-row">
+                      <span className="result-text">{componentWordId}</span>
+                      <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <SearchBox
+                search={searchVocab}
+                renderResult={(r) => (
+                  <>
+                    <strong>{r.wordId}</strong> - {r.displayText}
+                  </>
+                )}
+                onSelect={addManualComponent}
+                selectLabel="Add"
+                placeholder="Search existing vocabulary..."
+                resultsAriaLabel="Vocab search results"
+              />
+              {/* Only offered once something is actually picked - saving an empty
+                  custom list asserted "these are the parts" about nothing. */}
+              {draftComponents.length > 0 ? (
+                <div className="btn-row">
+                  <button type="button" className="btn btn-secondary" onClick={saveCustomComponents}>
+                    {label('Save custom components')}
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="field">
+                <label htmlFor="etymology-note-field">Note</label>
+                <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Only the applicable answers, and hidden rather than disabled.
+        *
+        * Before this, all four appeared on every word: "Accept proposed
+        * components" was offered - and ENABLED - on a word with no proposal at
+        * all, which submits accept_proposed over an empty list; and "Reject this
+        * etymology" sat there greyed out with nothing to reject. A reviewer was
+        * being asked to choose between options that, for most words, either did
+        * nothing or meant nothing.
+        *
+        * Confirming atomic is the one answer that always applies, because it is a
+        * positive claim about the word ("it has no parts") rather than a response
+        * to a proposal. */}
+      <h3>{hasProposal ? 'Is this breakdown right?' : 'Does this word break into parts?'}</h3>
+      {!hasProposal && !hasRealExistingComponents ? (
+        <p className="field-note">
+          Wiktionary proposes no breakdown for this word, and none is on record. If it is a single indivisible word, say
+          so - that is a real answer, not a fallback.
+        </p>
+      ) : null}
       <div className="btn-row">
-        <button type="button" className="btn btn-secondary" onClick={saveCustomComponents}>
-          {label('Save custom components')}
+        {hasProposal ? (
+          <button type="button" className="btn btn-primary" onClick={acceptProposedComponents}>
+            {label('Accept proposed components')}
+          </button>
+        ) : null}
+        {hasRealExistingComponents ? (
+          <button type="button" className="btn btn-secondary" onClick={confirmExisting}>
+            {label('Confirm components')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={`btn ${hasProposal || hasRealExistingComponents ? 'btn-secondary' : 'btn-primary'}`}
+          onClick={confirmAtomic}
+        >
+          {label(hasProposal ? 'No, it has no parts' : 'It has no parts')}
         </button>
-      </div>
-
-      <div className="field">
-        <label htmlFor="etymology-note-field">Note</label>
-        <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
-      </div>
-
-      <div className="btn-row">
-        <button type="button" className="btn btn-primary" onClick={acceptProposedComponents}>
-          {label('Accept proposed components')}
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={confirmAtomic}>
-          {label('Confirm atomic (no components)')}
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={confirmExisting} disabled={!hasRealExistingComponents}>
-          {label('Confirm components')}
-        </button>
-        <button type="button" className="btn btn-danger" onClick={rejectProposed} disabled={review.componentsProposal.length === 0}>
-          {label('Reject this etymology')}
-        </button>
+        {hasProposal ? (
+          <button type="button" className="btn btn-danger" onClick={rejectProposed}>
+            {label('Reject this etymology')}
+          </button>
+        ) : null}
       </div>
       {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>

@@ -626,6 +626,14 @@ audio {
 .queue-header {
   margin-bottom: 14px;
 }
+/* The list is the only navigation a volunteer has - they get no bottom nav -
+   so it sits with the progress line rather than below the whole task. Compact
+   and secondary: it is an escape hatch, not the thing to do next. */
+.queue-list-toggle {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
 .queue-progress {
   font-size: 0.78rem;
   font-weight: 600;
