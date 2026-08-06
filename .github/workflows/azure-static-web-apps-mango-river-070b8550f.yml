@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  # Lets a deploy be started by hand from the Actions tab, against any ref.
+  #
+  # Added during a GitHub Actions outage that throttled webhook deliveries: pushes landed on
+  # main and triggered no runs at all, and re-running an earlier run rebuilds that run's OWN
+  # commit - so there was no way to deploy the newest one. A push-only trigger means the ability
+  # to deploy depends on the same webhook path that had failed.
+  workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches:
@@ -11,7 +18,11 @@ on:
 
 jobs:
   build_and_deploy_job:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    # workflow_dispatch must be listed here too - this condition is what actually gates the job,
+    # and omitting it would leave the new trigger silently doing nothing.
+    if: >-
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     steps:
