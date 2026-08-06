@@ -21,6 +21,7 @@ import './functions/duplicateCheck.js';
 import './functions/excludeContribution.js';
 import './functions/consensus.js';
 import './functions/upstreamDrift.js';
+import './functions/examples.js';
 import './functions/utteranceSasToken.js';
 import './functions/utterances.js';
 import './functions/axisStatus.js';

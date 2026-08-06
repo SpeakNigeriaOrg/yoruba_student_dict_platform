@@ -185,6 +185,10 @@ export interface AxisDecided {
   entry: boolean;
   etymology: boolean;
   audio: boolean;
+  /** Whether THIS user has contributed an example of the word in use. Per-user like
+   * audio: several different examples are more material, not a conflict, so someone
+   * else's example must not read as done. */
+  example: boolean;
 }
 
 // Mirrors api/src/handlers/getAxisStatus.ts - a lightweight fetch of just
@@ -623,6 +627,48 @@ export function listUtterances(wordId: string): Promise<UtteranceSummary[]> {
   return fetchJson<{ utterances: UtteranceSummary[] }>(`/api/words/${encodeURIComponent(wordId)}/utterances`).then(
     (r) => r.utterances,
   );
+}
+
+// Mirrors api/src/handlers/submitExample.ts and listExamples.ts - the example axis.
+export type ExampleType = 'derived_term' | 'derived_phrase' | 'usage_phrase';
+
+export interface ExampleSummary {
+  exampleId: string;
+  exampleType: ExampleType;
+  exampleText: string;
+  translation: string;
+  audioDataBase64: string;
+  submittedAt: string;
+  contributorLabel: string;
+  isOwn: boolean;
+  recordedWordText: string;
+  /** The word has been respelled since this example was contributed. The example may
+   * still be fine; it is surfaced rather than silently ignored. */
+  wordTextChanged: boolean;
+}
+
+export function getExamples(wordId: string): Promise<ExampleSummary[]> {
+  return fetchJson<{ examples: ExampleSummary[] }>(`/api/words/${encodeURIComponent(wordId)}/examples`).then(
+    (r) => r.examples,
+  );
+}
+
+/** All three parts together - the phrase, what it means, and hearing it said. An example
+ * missing any of them is not an example, so there is no partial submit. */
+export async function submitExample(
+  wordId: string,
+  input: { exampleType: ExampleType; exampleText: string; translation: string; audio: Blob },
+): Promise<{ exampleId: string }> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/examples`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      exampleType: input.exampleType,
+      exampleText: input.exampleText,
+      translation: input.translation,
+      audioBase64: await blobToBase64(input.audio),
+    }),
+  });
 }
 
 /** Inverse of blobToBase64 - turns a base64 string back into a playable

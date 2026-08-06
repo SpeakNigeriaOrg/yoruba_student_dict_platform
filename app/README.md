@@ -43,6 +43,28 @@ time (confirmed: `npm run build` puts it in `dist/staticwebapp.config.json`).
 It used to live at the platform repo root, where Azure's build would never
 have actually picked it up.
 
+## Writing Yoruba without a Yoruba keyboard
+
+Two screens need a contributor to produce `ẹ ọ ṣ` and tone marks, and neither can assume
+the device does. The answer is the same in both, and it is deliberately not a full keypad:
+
+**Tone is never typed.** `ToneGrid` renders one column per syllable and one row per tone,
+and *generates* the diacritic - so a malformed mark is not merely discouraged, it is
+unreachable. That leaves only the underdotted letters as a typing problem.
+
+**Six keys cover the rest.** `ẹ ọ ṣ` and their capitals `Ẹ Ọ Ṣ` (`yorubaLetters.ts`). The
+capitals are not a nicety: they are distinct codepoints, not a shift state a device can
+synthesise, and a sentence example like `Ọ̀pọ̀lọ́ ń fò` begins with one.
+
+It also degrades upward. Someone who has Keyman installed and types the phrase fully
+marked gets the grids pre-filled from what they wrote, so the tone step becomes a
+confirmation rather than re-entry.
+
+`PhraseComposer` applies this per word (`phraseWords.ts` splits and rejoins, peeling
+punctuation so a *sentence* example still gets a grid on its last word). Its text field
+holds the composed phrase and is the only state - what the contributor reads is exactly
+what gets stored.
+
 ## A review screen must never be answerable only one way
 
 Every review surface has to offer a way to DISAGREE, not just a way to confirm. This
@@ -65,6 +87,7 @@ How each axis satisfies it now:
 | entry | The tone row is an **editor**, not a confirmation - every syllable's tone is one tap away on every word, and the letters sit behind "the letters are wrong" |
 | etymology | Both "it has no parts" and "it does have parts" (which reveals the component picker, available to volunteers) |
 | audio | Inherently generative - the act is contributing a recording, and the spelling and syllables being recorded against are both editable |
+| example | Inherently generative - the contributor writes their own phrase. Nothing to agree or disagree with, and several different examples are the intended outcome rather than a conflict |
 
 Each of those is covered by a named test in the corresponding `*.test.tsx`; search for
 "agreement" to find them. Abstention is separate and already handled: the queue's

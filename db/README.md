@@ -62,6 +62,28 @@ is the statement — it just isn't needed for the legacy data:
 update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';
 ```
 
+## After 0015: the example axis needs no backfill
+
+`0015_word_examples.sql` adds the fourth axis's table and nothing else. No backfill: an
+example is one contributor's own work, so there is nothing to recover for words that
+predate it - they simply have no examples yet, and the axis shows as outstanding for
+everyone until someone gives one.
+
+Two things about it that are deliberate and easy to undo by accident:
+
+- **It is not `utterances`.** That table is a word's PRONUNCIATION, and both
+  `scripts/publishToR2.mjs` and `scripts/exportGameContent.mjs` select take-1 utterances
+  per word as the audio the game plays. An example is a phrase (`abo adìyẹ`,
+  `Ọ̀pọ̀lọ́ ń fò`), so putting it there would feed sentences into the game as single-word
+  pronunciations. A test asserts a submission leaves `utterances` untouched.
+- **No `word_decisions` row and no fingerprint.** Two volunteers offering different
+  examples are not in conflict - they have produced more material. The axis works like
+  audio: per contributor, everything kept, `axisDecided.example` meaning "this person has
+  given one".
+
+Excluding an example hides it from the collection without deleting the row, the same rule
+`0013` applies to contributions.
+
 ## After 0014: give every existing word its citation
 
 `0014_upstream_sense_citations.sql` adds `kaikki_senses.entry_id` and the

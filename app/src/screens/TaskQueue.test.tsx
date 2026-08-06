@@ -16,6 +16,7 @@ interface AxisFlags {
   entry?: boolean;
   etymology?: boolean;
   audio?: boolean;
+  example?: boolean;
 }
 
 function assignment(wordId: string, flags: AxisFlags = {}) {
@@ -26,7 +27,7 @@ function assignment(wordId: string, flags: AxisFlags = {}) {
     definition: `def_${wordId}`,
     entryType: null,
     assignedAt: '2026-08-01T00:00:00.000Z',
-    axisDecided: { entry: false, etymology: false, audio: false, ...flags },
+    axisDecided: { entry: false, etymology: false, audio: false, example: false, ...flags },
   };
 }
 
@@ -39,7 +40,7 @@ function installFetchMock(getAssignments: () => unknown[]) {
       return Promise.resolve({ ok: true, json: async () => getAssignments() });
     }
     if (url.includes('/axis-status')) {
-      return Promise.resolve({ ok: true, json: async () => ({ entry: false, etymology: false, audio: false }) });
+      return Promise.resolve({ ok: true, json: async () => ({ entry: false, etymology: false, audio: false, example: false }) });
     }
     if (url.includes('/etymology')) {
       return Promise.resolve({
@@ -49,7 +50,7 @@ function installFetchMock(getAssignments: () => unknown[]) {
           displayText: 'display_w1',
           syllables: ['w1'],
           definition: null,
-          axisDecided: { entry: true, etymology: false, audio: false },
+          axisDecided: { entry: true, etymology: false, audio: false, example: false },
           etymologyText: null,
           components: [],
           componentsProposal: [],
@@ -75,7 +76,7 @@ describe('TaskQueue', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Queue progress')).toBeInTheDocument());
     // Two words x three axes, none done.
-    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 1 of 6');
+    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 1 of 8');
     expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument();
     // The review screen has its own fetch, so it lands after the queue header.
     await waitFor(() => expect(screen.getByLabelText('Entry review')).toBeInTheDocument());
@@ -87,13 +88,14 @@ describe('TaskQueue', () => {
     render(<TaskQueue isCurator={false} onOpenWord={() => {}} />);
 
     await waitFor(() => expect(screen.getByLabelText('Queue progress')).toBeInTheDocument());
-    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 3 of 3');
-    // Only audio is left, so that is what it hands over.
+    // Four axes per word; two are done, so this is task 3 of 4.
+    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 3 of 4');
+    // Audio comes before example, so that is what it hands over.
     expect(screen.getByText('Record this word')).toBeInTheDocument();
   });
 
   it('shows an all-caught-up state instead of a task when nothing is pending', async () => {
-    installFetchMock(() => [assignment('w1', { entry: true, etymology: true, audio: true })]);
+    installFetchMock(() => [assignment('w1', { entry: true, etymology: true, audio: true, example: true })]);
 
     render(<TaskQueue isCurator={false} onOpenWord={() => {}} />);
 
@@ -127,7 +129,7 @@ describe('TaskQueue', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() => expect(screen.getByText('Check the word parts')).toBeInTheDocument());
-    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 2 of 6');
+    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 2 of 8');
   });
 
   it('skip moves on without submitting anything', async () => {

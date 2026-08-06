@@ -19,7 +19,7 @@ afterEach(() => {
   window.location.hash = '';
 });
 
-const AXIS_STATUS = { entry: true, etymology: false, audio: true };
+const AXIS_STATUS = { entry: true, etymology: false, audio: true, example: false };
 
 function installFetchMock(roles: string[] = ['authenticated']) {
   vi.stubGlobal(
@@ -81,6 +81,19 @@ describe('App', () => {
     });
     expect(screen.getByRole('button', { name: 'Etymology' })).toHaveClass('axis-pending');
     expect(screen.getByRole('button', { name: 'Audio' })).toHaveClass('axis-complete');
+    // Four axes now: the example is the fourth and last.
+    expect(screen.getByRole('button', { name: 'Example' })).toHaveClass('axis-pending');
+  });
+
+  it('renders all four axis tabs, so none is unreachable', async () => {
+    installFetchMock();
+    window.location.hash = '#/word/some_word/entry';
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByLabelText('Review axis tabs')).toBeInTheDocument());
+    for (const label of ['Entry', 'Etymology', 'Audio', 'Example']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
   });
 
   describe('routing', () => {

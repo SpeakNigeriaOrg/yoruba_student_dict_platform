@@ -22,9 +22,9 @@
 // parse/format are pure and exported separately from the hook so they can be
 // tested without a DOM.
 
-export type Axis = 'entry' | 'etymology' | 'audio';
+export type Axis = 'entry' | 'etymology' | 'audio' | 'example';
 
-export const AXES: readonly Axis[] = ['entry', 'etymology', 'audio'];
+export const AXES: readonly Axis[] = ['entry', 'etymology', 'audio', 'example'];
 
 export type Route =
   | { view: 'queue' }

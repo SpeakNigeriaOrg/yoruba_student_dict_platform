@@ -57,7 +57,7 @@ describe('listMyAssignments', () => {
     const word1 = assignments.find((a) => a.wordId === `${NS}word1`);
     expect(word1).toMatchObject({ displayText: 'epo', syllables: ['e', 'po'], definition: 'oil', entryType: null });
     expect(word1?.assignedAt).toBeInstanceOf(Date);
-    expect(word1?.axisDecided).toEqual({ entry: false, etymology: false, audio: false });
+    expect(word1?.axisDecided).toEqual({ entry: false, etymology: false, audio: false, example: false });
   });
 
   it("does not leak another user's assignments", async () => {
@@ -96,13 +96,13 @@ describe('listMyAssignments', () => {
 
     const assignmentsA = await listMyAssignments(pool, userAId);
     const word1ForA = assignmentsA.find((a) => a.wordId === `${NS}word1`);
-    expect(word1ForA?.axisDecided).toEqual({ entry: true, etymology: false, audio: true });
+    expect(word1ForA?.axisDecided).toEqual({ entry: true, etymology: false, audio: true, example: false });
 
     const assignmentsB = await listMyAssignments(pool, userBId);
     const word1ForB = assignmentsB.find((a) => a.wordId === `${NS}word1`);
     // entry: decided is a global fact (a curator decided it) - true
     // for both users. audio: userB hasn't recorded it themselves, so
     // false, even though userA has.
-    expect(word1ForB?.axisDecided).toEqual({ entry: true, etymology: false, audio: false });
+    expect(word1ForB?.axisDecided).toEqual({ entry: true, etymology: false, audio: false, example: false });
   });
 });

@@ -43,7 +43,7 @@ describe('getAxisStatus', () => {
     await insertWord(wordId);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ entry: false, etymology: false, audio: false });
+    expect(result).toEqual({ entry: false, etymology: false, audio: false, example: false });
   });
 
   it('reports spelling as decided once a word_decisions row exists', async () => {
@@ -59,7 +59,7 @@ describe('getAxisStatus', () => {
     ]);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ entry: true, etymology: false, audio: false });
+    expect(result).toEqual({ entry: true, etymology: false, audio: false, example: false });
   });
 
   it('reports audio as recorded once the REQUESTING user has their own utterance registered', async () => {

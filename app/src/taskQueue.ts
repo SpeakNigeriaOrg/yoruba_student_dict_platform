@@ -11,11 +11,13 @@
 // app/src/audio/*).
 //
 // Ordering is assignment order (the server's own, so a curator's intent is
-// preserved), and within one word: entry -> etymology -> audio. Entry first
-// because both of the others depend on it in practice - a spelling change
+// preserved), and within one word: entry -> etymology -> audio -> example. Entry
+// first because the others depend on it in practice - a spelling change
 // invalidates recordings (see scripts/publishToR2.mjs's
 // recorded_display_text check), and etymology components are matched against
-// the decided spelling.
+// the decided spelling. Example last because it is the only generative task:
+// illustrating a word is easiest once you have read it, checked its parts, and
+// said it aloud.
 
 import type { AssignmentSummary, AxisDecided } from './api.js';
 import type { Axis } from './route.js';
@@ -28,7 +30,7 @@ export interface Task {
 }
 
 /** Axis order within a single word. Also the order the tab bar shows. */
-export const AXIS_ORDER: readonly Axis[] = ['entry', 'etymology', 'audio'];
+export const AXIS_ORDER: readonly Axis[] = ['entry', 'etymology', 'audio', 'example'];
 
 function isPending(axisDecided: AxisDecided, axis: Axis): boolean {
   return !axisDecided[axis];

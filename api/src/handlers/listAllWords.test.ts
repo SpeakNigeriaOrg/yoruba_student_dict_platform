@@ -44,8 +44,8 @@ describe('listAllWords', () => {
     const decided = words.find((w) => w.wordId === decidedWordId);
     const undecided = words.find((w) => w.wordId === undecidedWordId);
 
-    expect(decided?.axisDecided).toEqual({ entry: true, etymology: false, audio: false });
-    expect(undecided?.axisDecided).toEqual({ entry: false, etymology: false, audio: false });
+    expect(decided?.axisDecided).toEqual({ entry: true, etymology: false, audio: false, example: false });
+    expect(undecided?.axisDecided).toEqual({ entry: false, etymology: false, audio: false, example: false });
   });
 
   it('sorts results by word_id', async () => {

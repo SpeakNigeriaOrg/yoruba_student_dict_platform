@@ -188,8 +188,9 @@ audio {
   flex: 1;
   /* min-width: 0 lets a flex item actually shrink below its content width;
      without it the label plus its 7px status dot overflows the track at
-     360px. The merge from four axes to three bought most of the headroom
-     back, but the ellipsis is the guarantee. */
+     360px. There are four axes again since the example axis was added, so the
+     ellipsis is doing real work rather than sitting in reserve: at 360px each
+     tab gets roughly 70px of text, and "Etymology" is the one that clips. */
   min-width: 0;
   border: none;
   background: transparent;
@@ -672,6 +673,47 @@ audio {
   padding: 2px 6px;
   white-space: nowrap;
 }
+/* ---- Example axis ---- */
+/* The three kinds stack rather than sitting in a row: each carries a label AND a worked
+   example, which is the part that teaches, and squeezing three of those side by side on a
+   phone makes both unreadable. */
+.example-kind {
+  flex: 1 1 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 14px;
+}
+.example-kind-label {
+  font-weight: 600;
+}
+.example-kind-hint {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+/* Wider than the per-syllable palette: these six keys are tapped while composing a whole
+   phrase, not squeezed under one syllable box. */
+.phrase-palette {
+  margin-top: 6px;
+  gap: 4px;
+}
+.phrase-palette .palette-btn {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 1.05rem;
+}
+.phrase-word {
+  margin-bottom: 10px;
+}
+.phrase-word-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin: 0 0 4px;
+}
+
 .changed-note {
   color: var(--ink-soft);
   font-size: 0.85rem;

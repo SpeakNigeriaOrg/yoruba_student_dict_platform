@@ -93,6 +93,18 @@ export async function cleanUpTestData(pool: pg.Pool, namespace: string): Promise
         or assigned_by in (select user_id from users where email like $2)`,
     [wordPattern, usernamePattern],
   );
+  // word_examples.submitted_by has no ON DELETE CASCADE (deliberately - an example is a
+  // contribution, and removing a user should not silently destroy what they said), so an
+  // example by a namespaced user against a word OUTSIDE the namespace would survive the
+  // golden_record delete below and then block the users delete. Same shape as the
+  // assignments.assigned_by case in note 1's neighbour above.
+  await pool.query(
+    `delete from word_examples
+     where word_id like $1
+        or submitted_by in (select user_id from users where email like $2)
+        or excluded_by in (select user_id from users where email like $2)`,
+    [wordPattern, usernamePattern],
+  );
   await pool.query('delete from golden_record where word_id like $1', [wordPattern]);
   await pool.query('delete from users where email like $1', [usernamePattern]);
 }

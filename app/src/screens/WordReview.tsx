@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { AudioRecording } from './AudioRecording.js';
+import { ExampleContribution } from './ExampleContribution.js';
 import { EntryReview } from './EntryReview.js';
 import { EtymologyReview } from './EtymologyReview.js';
 import { getAxisStatus, type AxisDecided } from '../api.js';
@@ -17,6 +18,7 @@ const AXIS_LABELS: Record<Axis, string> = {
   entry: 'Entry',
   etymology: 'Etymology',
   audio: 'Audio',
+  example: 'Example',
 };
 
 export interface WordReviewProps {
@@ -122,6 +124,7 @@ export function WordReview({
         <EtymologyReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />
       ) : null}
       {axis === 'audio' ? <AudioRecording wordId={wordId} onDecided={handleDecided} /> : null}
+      {axis === 'example' ? <ExampleContribution wordId={wordId} onDecided={handleDecided} /> : null}
     </>
   );
 }

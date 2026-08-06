@@ -68,10 +68,15 @@ export interface AxisDecided {
   // would show green/done for a word this user personally hasn't touched yet,
   // just because a different speaker got to it first.
   audio: boolean;
+  /** Whether this user has contributed an example of the word in use. Per-user for the
+   * same reason audio is: an example is one person's own contribution, and several
+   * different examples are more material rather than a conflict, so "someone else gave
+   * one" must not read as done. Excluded examples do not count. */
+  example: boolean;
 }
 
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
-  const [decisionRows, utteranceRows, contributionRows] = await Promise.all([
+  const [decisionRows, utteranceRows, contributionRows, exampleRows] = await Promise.all([
     client.query<{ axis: DecisionAxis }>('select axis from word_decisions where word_id = $1', [wordId]),
     client.query(
       `select 1 from utterances u join speakers s on s.speaker_id = u.speaker_id
@@ -83,6 +88,13 @@ export async function loadAxisDecided(client: Queryable, wordId: string, userId:
        where word_id = $1 and submitted_by = $2 and status = 'active' and axis in ('entry', 'etymology')`,
       [wordId, userId],
     ),
+    // Per-user and live-only, exactly like audio above: an example is one person's
+    // contribution, not a claim to adjudicate, so this axis is done for THEM once they
+    // have given one - and undone again if a curator excludes it.
+    client.query(
+      'select 1 from word_examples where word_id = $1 and submitted_by = $2 and excluded_at is null limit 1',
+      [wordId, userId],
+    ),
   ]);
   const decided = new Set(decisionRows.rows.map((r) => r.axis));
   const mine = new Set(contributionRows.rows.map((r) => r.axis));
@@ -90,19 +102,20 @@ export async function loadAxisDecided(client: Queryable, wordId: string, userId:
     entry: decided.has('entry') || mine.has('entry'),
     etymology: decided.has('etymology') || mine.has('etymology'),
     audio: (utteranceRows.rowCount ?? 0) > 0,
+    example: (exampleRows.rowCount ?? 0) > 0,
   };
 }
 
 /** Batched version of loadAxisDecided - for callers listing many words at
  * once (listMyAssignments.ts), which each need every word's own status but
  * shouldn't run one query set per word. Same semantics as loadAxisDecided,
- * computed for a whole word_id set in three queries total instead of 3*N. */
+ * computed for a whole word_id set in four queries total instead of 4*N. */
 export async function loadAxisDecidedBatch(
   client: Queryable,
   wordIds: string[],
   userId: string,
 ): Promise<Map<string, AxisDecided>> {
-  const [decisionRows, utteranceRows, contributionRows] = await Promise.all([
+  const [decisionRows, utteranceRows, contributionRows, exampleRows] = await Promise.all([
     client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
       wordIds,
     ]),
@@ -114,6 +127,11 @@ export async function loadAxisDecidedBatch(
     client.query<{ word_id: string; axis: DecisionAxis }>(
       `select distinct word_id, axis from contributions
        where submitted_by = $1 and word_id = any($2) and status = 'active' and axis in ('entry', 'etymology')`,
+      [userId, wordIds],
+    ),
+    client.query<{ word_id: string }>(
+      `select distinct word_id from word_examples
+       where submitted_by = $1 and word_id = any($2) and excluded_at is null`,
       [userId, wordIds],
     ),
   ]);
@@ -130,6 +148,7 @@ export async function loadAxisDecidedBatch(
     else mineByWord.set(row.word_id, new Set([row.axis]));
   }
   const wordsWithAudio = new Set(utteranceRows.rows.map((r) => r.word_id));
+  const wordsWithMyExample = new Set(exampleRows.rows.map((r) => r.word_id));
 
   const result = new Map<string, AxisDecided>();
   for (const wordId of wordIds) {
@@ -139,6 +158,7 @@ export async function loadAxisDecidedBatch(
       entry: decided.has('entry') || mine.has('entry'),
       etymology: decided.has('etymology') || mine.has('etymology'),
       audio: wordsWithAudio.has(wordId),
+      example: wordsWithMyExample.has(wordId),
     });
   }
   return result;

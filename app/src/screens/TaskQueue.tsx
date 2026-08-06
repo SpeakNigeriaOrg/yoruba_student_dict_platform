@@ -23,6 +23,7 @@ const AXIS_TASK_LABEL: Record<Task['axis'], string> = {
   entry: 'Confirm the spelling and meaning',
   etymology: 'Check the word parts',
   audio: 'Record this word',
+  example: 'Show the word in use',
 };
 
 export interface TaskQueueProps {

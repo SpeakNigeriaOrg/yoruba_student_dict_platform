@@ -40,6 +40,7 @@ export function AxisBanner({
     { label: 'entry', done: axisDecided.entry },
     { label: 'etymology', done: axisDecided.etymology },
     { label: 'audio', done: axisDecided.audio },
+    { label: 'example', done: axisDecided.example },
   ];
 
   return (

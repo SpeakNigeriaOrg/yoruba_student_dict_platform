@@ -10,7 +10,7 @@ function assignment(wordId: string, axisDecided: Partial<AxisDecided> = {}): Ass
     definition: `def_${wordId}`,
     entryType: null,
     assignedAt: '2026-08-01T00:00:00.000Z',
-    axisDecided: { entry: false, etymology: false, audio: false, ...axisDecided },
+    axisDecided: { entry: false, etymology: false, audio: false, example: false, ...axisDecided },
   };
 }
 
@@ -21,23 +21,23 @@ describe('buildTaskQueue', () => {
 
   it('emits one task per pending axis, entry first', () => {
     const queue = buildTaskQueue([assignment('w1')]);
-    expect(queue.map((t) => t.axis)).toEqual(['entry', 'etymology', 'audio']);
+    expect(queue.map((t) => t.axis)).toEqual(['entry', 'etymology', 'audio', 'example']);
   });
 
   it('skips axes already done', () => {
     const queue = buildTaskQueue([assignment('w1', { entry: true, audio: true })]);
-    expect(queue.map((t) => t.axis)).toEqual(['etymology']);
+    expect(queue.map((t) => t.axis)).toEqual(['etymology', 'example']);
   });
 
   it('omits a fully-done word entirely', () => {
-    const queue = buildTaskQueue([assignment('w1', { entry: true, etymology: true, audio: true })]);
+    const queue = buildTaskQueue([assignment('w1', { entry: true, etymology: true, audio: true, example: true })]);
     expect(queue).toEqual([]);
   });
 
   it('preserves the server\'s assignment order across words', () => {
     const queue = buildTaskQueue([
-      assignment('w1', { entry: true, etymology: true }),
-      assignment('w2', { etymology: true, audio: true }),
+      assignment('w1', { entry: true, etymology: true, example: true }),
+      assignment('w2', { etymology: true, audio: true, example: true }),
     ]);
     expect(queue.map((t) => `${t.wordId}:${t.axis}`)).toEqual(['w1:audio', 'w2:entry']);
   });
@@ -52,15 +52,16 @@ describe('progress counting', () => {
   it('counts every axis of every assigned word, done or not', () => {
     // The denominator must not shrink as work completes, or the UI reads as
     // making no progress.
+    // Four axes per word now: entry, etymology, audio, example.
     const assignments = [assignment('w1', { entry: true }), assignment('w2')];
-    expect(totalTaskCount(assignments)).toBe(6);
+    expect(totalTaskCount(assignments)).toBe(8);
     expect(completedTaskCount(assignments)).toBe(1);
   });
 
   it('reports everything complete when nothing is pending', () => {
-    const assignments = [assignment('w1', { entry: true, etymology: true, audio: true })];
-    expect(totalTaskCount(assignments)).toBe(3);
-    expect(completedTaskCount(assignments)).toBe(3);
+    const assignments = [assignment('w1', { entry: true, etymology: true, audio: true, example: true })];
+    expect(totalTaskCount(assignments)).toBe(4);
+    expect(completedTaskCount(assignments)).toBe(4);
     expect(buildTaskQueue(assignments)).toEqual([]);
   });
 });
@@ -68,7 +69,7 @@ describe('progress counting', () => {
 describe('nextTask', () => {
   it('returns null when the queue is empty', () => {
     expect(nextTask([])).toBeNull();
-    expect(nextTask([assignment('w1', { entry: true, etymology: true, audio: true })])).toBeNull();
+    expect(nextTask([assignment('w1', { entry: true, etymology: true, audio: true, example: true })])).toBeNull();
   });
 
   it('returns the head of the queue with no preference', () => {
@@ -84,7 +85,7 @@ describe('nextTask', () => {
   });
 
   it('moves on once the preferred word is finished', () => {
-    const assignments = [assignment('w1'), assignment('w2', { entry: true, etymology: true, audio: true })];
+    const assignments = [assignment('w1'), assignment('w2', { entry: true, etymology: true, audio: true, example: true })];
     expect(nextTask(assignments, 'w2')?.wordId).toBe('w1');
   });
 });
@@ -94,6 +95,7 @@ describe('nextAxisForWord', () => {
     entry: false,
     etymology: false,
     audio: false,
+    example: false,
     ...over,
   });
 
@@ -106,13 +108,17 @@ describe('nextAxisForWord', () => {
   });
 
   it('returns null when the word is finished, so the caller stays put', () => {
-    expect(nextAxisForWord(decided({ entry: true, etymology: true, audio: true }), 'entry')).toBeNull();
+    expect(nextAxisForWord(decided({ entry: true, etymology: true, audio: true, example: true }), 'entry')).toBeNull();
   });
 
   it('never offers the axis just decided, even if it somehow reads as pending', () => {
     // The submission succeeded (this is only called on success), so re-offering the same
     // axis would be a loop rather than a next step.
-    expect(nextAxisForWord(decided({ etymology: true, audio: true }), 'entry')).toBeNull();
+    expect(nextAxisForWord(decided({ etymology: true, audio: true, example: true }), 'entry')).toBeNull();
+  });
+
+  it('sends a finished audio axis on to the example', () => {
+    expect(nextAxisForWord(decided({ entry: true, etymology: true, audio: true }), 'audio')).toBe('example');
   });
 
   it('follows AXIS_ORDER rather than "whatever comes after", sending a pending entry first', () => {
