@@ -349,6 +349,54 @@ describe('correcting the letters', () => {
     });
   });
 
+  it('submits a re-split when the reviewer frees an absorbed nasal', async () => {
+    // The one correction that was previously unreachable. Tone goes on a syllable's vowel, so the
+    // three buttons over `jẹ̀n` never touch its `n` - a reviewer who knew the nasal was its own
+    // syllable had no way to say so, and every recorded vote agreed with the default because the
+    // default was all there was.
+    //
+    // `dùjẹ̀nkù` is invented but orthographically real, and verified absent from the corpus, like
+    // the rest of these fixtures.
+    const nasalFixture = { ...entryFixture, displayText: 'dùjẹ̀nkù', syllables: ['dù', 'jẹ̀n', 'kù'] };
+    const user = userEvent.setup();
+    const fetchMock = await loaded(nasalFixture);
+
+    await user.click(screen.getByRole('button', { name: 'Make the nasal of syllable 2 its own syllable' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.action).toBe('respell');
+      // Four, not three - and the macron is what carries that claim into the spelling.
+      expect(body.newSyllables).toEqual(['dù', 'jẹ̀', 'n̄', 'kù']);
+      expect(body.newDisplayText).toBe('dùjẹ̀n̄kù');
+      // The server refuses a list that does not rejoin to the spelling; this is the client's half.
+      expect((body.newSyllables as string[]).join('')).toBe(body.newDisplayText);
+    });
+  });
+
+  it('gives the freed nasal its own tone column, so its tone can then be set', async () => {
+    const nasalFixture = { ...entryFixture, displayText: 'dùjẹ̀nkù', syllables: ['dù', 'jẹ̀n', 'kù'] };
+    const user = userEvent.setup();
+    const fetchMock = await loaded(nasalFixture);
+
+    await user.click(screen.getByRole('button', { name: 'Make the nasal of syllable 2 its own syllable' }));
+    // Four columns now, and the nasal is the third.
+    await user.click(screen.getByRole('button', { name: 'Syllable 3 low tone' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.newSyllables).toEqual(['dù', 'jẹ̀', 'ǹ', 'kù']);
+      expect(body.newDisplayText).toBe('dùjẹ̀ǹkù');
+    });
+  });
+
+  it('offers no nasal control on a word that has none', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByRole('button', { name: /its own syllable/ })).not.toBeInTheDocument();
+  });
+
   it('offers a way out: Discard puts the word back as it was when the editor opened', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);

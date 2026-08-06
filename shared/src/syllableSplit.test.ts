@@ -53,6 +53,14 @@ function computeSyllableSplitFields(wordId: string): CheckSyllableSplitResult {
   return checkSyllableSplit(displayText, entry.syllables, override, wasSubstituted);
 }
 
+/** The one word whose programmatic split deliberately differs from the Python engine's - see
+ * DELIBERATE_DIVERGENCES in syllabify.test.ts for the rule and the reason. Its *status* is
+ * unaffected: it was a mismatch before and it is a mismatch now, which is the report field that
+ * actually drives the review UI. */
+const DIVERGENT_PROGRAMMATIC_SPLIT: Record<string, string[]> = {
+  agunfon_giraffe: ['à', 'gùn', 'fo', 'n'],
+};
+
 describe('checkSyllableSplit (parity with generate_diagnostics.py, via real fixtures)', () => {
   it('has fixtures to test against', () => {
     expect(Object.keys(vocab).length).toBeGreaterThan(0);
@@ -63,7 +71,21 @@ describe('checkSyllableSplit (parity with generate_diagnostics.py, via real fixt
       const expectedFull = reportById.get(wordId);
       expect(expectedFull, `no report entry found for ${wordId}`).toBeDefined();
       const actual = computeSyllableSplitFields(wordId);
-      expect(actual).toEqual(pickSyllableSplitFields(expectedFull!));
+      const expected = pickSyllableSplitFields(expectedFull!);
+      const divergent = DIVERGENT_PROGRAMMATIC_SPLIT[wordId];
+      if (divergent) {
+        // Assert the divergence explicitly rather than loosening the comparison: the Python value
+        // must still be what the report says, and ours must be the documented replacement.
+        expect(expected.syllableSplitProgrammatic).toEqual(['à', 'gùn', 'fon']);
+        expect(actual.syllableSplitProgrammatic).toEqual(divergent);
+        expect(actual.syllableSplitStatus).toBe(expected.syllableSplitStatus);
+        expect({ ...actual, syllableSplitProgrammatic: undefined }).toEqual({
+          ...expected,
+          syllableSplitProgrammatic: undefined,
+        });
+        return;
+      }
+      expect(actual).toEqual(expected);
     });
   }
 });
@@ -78,7 +100,10 @@ describe('checkSyllableSplit direct unit tests', () => {
     const result = checkSyllableSplit('àgùnfon', ['à', 'gùn', 'fọn'], { syllableAction: 'keep_manual' });
     expect(result.syllableSplitStatus).toBe('resolved_keep_manual');
     expect(result.syllableSplitManual).toEqual(['à', 'gùn', 'fọn']);
-    expect(result.syllableSplitProgrammatic).toEqual(['à', 'gùn', 'fon']);
+    // Four, not three: plain `o` cannot carry a nasal coda, so the `n` of `fon` is its own
+    // syllable. Still a mismatch against the manual split either way - which is the point of the
+    // test, and why this word makes a good fixture for it.
+    expect(result.syllableSplitProgrammatic).toEqual(['à', 'gùn', 'fo', 'n']);
   });
 
   it('reports a mismatch as resolved_accept_programmatic when syllableAction is accept_programmatic', () => {

@@ -16,6 +16,7 @@ import {
   RespellSyllablesRequiredError,
 } from './applyEntryDecision.js';
 import { WordNotFoundError } from './errors.js';
+import { fingerprintOutcome } from '@yoruba-student-dict-platform/shared';
 
 const NS = 'testentry_';
 const pool = getTestPool();
@@ -206,6 +207,81 @@ describe('applyEntryDecision', () => {
       // Recomputed from the spelling this word BECAME, not the one on record.
       expect(word.rows[0].syllables).toEqual(['ká', 'sù']);
       expect(word.rows[0].definition).toBe('to fail');
+    });
+  });
+
+  describe('respell wins over accept_programmatic, so the row and its fingerprint agree', () => {
+    // Both can arrive in one request - EntryReview forwards syllableAction whenever it is set, and
+    // any tone or letter edit also produces a respell. Before the guard the two writes raced and
+    // the row kept the programmatic split, while resolveEntryOutcome tests `respelled` first and
+    // fingerprinted the authored one. A word_decisions.value_fingerprint describing a split the
+    // row does not hold makes that word read as permanently dissented: nothing can ever match it
+    // again.
+    it('keeps the authored split, and the stored fingerprint describes what the row holds', async () => {
+      const wordId = `${NS}respell_wins`;
+      await insertWord(wordId, 'kasun', ['ka', 'sun'], 'a made-up word');
+
+      // An authored split that re-deriving would LOSE: the reviewer says the final nasal is its own
+      // syllable while writing it bare, which is legal Yoruba - the macron convention is not
+      // universal - and is exactly the residual case where the stored split has to carry
+      // information the spelling does not. syllabifyWord('kasun') returns ['ka','sun'], so the two
+      // answers genuinely differ here, which is what makes this a test of the guard rather than of
+      // a coincidence. (A split freed through the tone grid would agree with re-derivation, by
+      // construction - so it could never have exposed this.)
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'kasun',
+          newSyllables: ['ka', 'su', 'n'],
+          syllableAction: 'accept_programmatic',
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+
+      const word = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(word.rows[0].display_text).toBe('kasun');
+      expect(word.rows[0].syllables).toEqual(['ka', 'su', 'n']);
+
+      // The row and the fingerprint must describe the same word. Recomputed from what is actually
+      // stored, which is the comparison that was failing.
+      const decision = await pool.query<{ value_fingerprint: string }>(
+        'select value_fingerprint from word_decisions where word_id = $1 and axis = $2',
+        [wordId, 'entry'],
+      );
+      const stored = word.rows[0];
+      const expected = fingerprintOutcome({
+        kind: 'entry',
+        displayText: stored.display_text,
+        syllables: stored.syllables,
+        definitionText: 'a made-up word',
+        citedEntryId: null,
+      });
+      expect(decision.rows[0].value_fingerprint).toBe(expected);
+    });
+
+    it('still recomputes the split when accept_programmatic arrives WITHOUT a respell', async () => {
+      // The guard must not disable the feature it defers to - accept_programmatic on its own is
+      // still how a reviewer adopts the derived split.
+      const wordId = `${NS}programmatic_alone`;
+      await insertWord(wordId, 'kasu', ['ka', 'su', 'extra'], 'a word');
+
+      await applyEntryDecision(
+        pool,
+        wordId,
+        { action: 'keep_ours', syllableAction: 'accept_programmatic', definitionAction: 'confirm' },
+        curatorUserId,
+      );
+
+      const word = await pool.query<{ syllables: string[] }>('select syllables from golden_record where word_id = $1', [
+        wordId,
+      ]);
+      expect(word.rows[0].syllables).toEqual(['ka', 'su']);
     });
   });
 

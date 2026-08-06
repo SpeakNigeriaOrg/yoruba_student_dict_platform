@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyTone, applyTones, lettersOf, toneBearerKind, toneOf, tonesOf } from './tone';
+import { applyTone, applyToneExplicitly, applyTones, lettersOf, toneBearerKind, toneOf, tonesOf } from './tone';
 import { syllabifySpans, syllabifyWord } from './syllabify';
 import type { KaikkiLexicon } from './types';
 
@@ -86,6 +86,37 @@ describe('applyTone: mid depends on what carries it', () => {
   it('still changes an unmarked nasal to low or high on request', () => {
     expect(applyTone('n', 'high')).toBe('ń');
     expect(applyTone('n', 'low')).toBe('ǹ');
+  });
+
+  describe('applyToneExplicitly is the deliberate half of that rule', () => {
+    it('DOES write the macron onto an unmarked nasal, where applyTone would not', () => {
+      // The distinction is intent, not tone. Freeing a nasal into a syllable of its own
+      // (nasalSplit.ts) is a reviewer asserting "this is a syllable", and the macron is how that
+      // assertion is written down - without it the new boundary would not be re-derivable from the
+      // spelling. Merely rendering a tone grid over the same syllable must still leave it alone.
+      expect(applyTone('n', 'mid')).toBe('n');
+      expect(applyToneExplicitly('n', 'mid')).toBe(`n${MACRON}`.normalize('NFC'));
+      expect(applyToneExplicitly('m', 'mid')).toBe(`m${MACRON}`.normalize('NFC'));
+    });
+
+    it('agrees with applyTone everywhere the short-circuit does not apply', () => {
+      for (const syllable of ['n', 'm', 'ǹ', 'ń', 'dì', 'gba', 'kẹ́', 'gb']) {
+        for (const tone of ['low', 'high'] as const) {
+          expect(applyToneExplicitly(syllable, tone)).toBe(applyTone(syllable, tone));
+        }
+      }
+    });
+
+    it('leaves a syllable with no tone bearer alone, like applyTone', () => {
+      expect(applyToneExplicitly('gb', 'mid')).toBe('gb');
+    });
+
+    it('writes nothing for mid on a VOWEL, because mid on a vowel is unmarked', () => {
+      // Explicit does not mean "always add a mark" - it means "do not skip because it already
+      // reads that way". On a vowel the explicit form of mid IS the bare vowel.
+      expect(applyToneExplicitly('ka', 'mid')).toBe('ka');
+      expect(applyToneExplicitly('kà', 'mid')).toBe('ka');
+    });
   });
 
   it('replaces an existing mark rather than stacking a second one', () => {

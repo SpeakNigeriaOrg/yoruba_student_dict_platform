@@ -234,7 +234,23 @@ export async function applyEntryDecisionInTransaction(
     );
   }
 
-  if (input.syllableAction === 'accept_programmatic') {
+  // An explicit respell WINS over accept_programmatic, and the guard is the point.
+  //
+  // Without it the two writes raced and the row kept whichever ran last - the programmatic split -
+  // while resolveEntryOutcome tests `respelled` FIRST and so fingerprinted the authored one. The
+  // result was a word_decisions.value_fingerprint describing a split the row did not hold, which
+  // makes that word read as permanently dissented: nothing can ever produce a matching
+  // fingerprint again.
+  //
+  // Reachable from the UI, not hypothetical: EntryReview forwards syllableAction whenever it is
+  // set, and any tone or letter edit also produces a respell. Now more so - freeing a nasal is a
+  // respell whose whole content is the new split, and silently replacing it with the programmatic
+  // one would undo exactly the correction the reviewer came to make.
+  //
+  // The write follows the fingerprint rather than the other way round, because the fingerprint's
+  // precedence is the correct one: an authored split is a claim, and re-deriving it is not.
+  const respelled = input.action === 'respell' && input.newDisplayText !== undefined && input.newSyllables !== undefined;
+  if (input.syllableAction === 'accept_programmatic' && !respelled) {
     const programmatic = syllabifyWord(effectiveDisplayText);
     await client.query('update golden_record set syllables = $1, updated_at = now(), updated_by = $2 where word_id = $3', [
       programmatic,

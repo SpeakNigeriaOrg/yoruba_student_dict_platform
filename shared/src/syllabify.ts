@@ -12,6 +12,10 @@
 
 const VOWELS = new Set(['a', 'e', 'ẹ', 'i', 'o', 'ọ', 'u']);
 const NASALS = new Set(['m', 'n']);
+
+/** The one place the orthography writes a nasal CODA as `m` rather than `n`. */
+const LABIALS = new Set(['b', 'p']);
+
 const CONSONANTS = new Set([
   'b', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'p', 'r', 's', 'ṣ', 't', 'w', 'y',
 ]);
@@ -39,10 +43,6 @@ function isNasal(grapheme: string): boolean {
   return NASALS.has(extractBaseCharacter(grapheme));
 }
 
-function isBaseN(grapheme: string): boolean {
-  return extractBaseCharacter(grapheme) === 'n';
-}
-
 function isConsonant(grapheme: string): boolean {
   return CONSONANTS.has(extractBaseCharacter(grapheme));
 }
@@ -57,6 +57,55 @@ function hasToneMark(grapheme: string): boolean {
 
 function hasApostrophe(grapheme: string): boolean {
   return grapheme.includes("'");
+}
+
+// ---------------------------------------------------------------------------
+// Which vowels can carry a nasal coda, and which nasals can BE one
+// ---------------------------------------------------------------------------
+// Yoruba has three syllable types - CV, V and N (a syllabic nasal) - and only /n/ and /m/ can be
+// syllabic. So a nasal after a vowel is one of two things, and the letters do not always say
+// which: a CODA nasalising that vowel, or a syllable in its own right. The two predicates below
+// are the cases where the letters DO say, so nobody is asked about them.
+//
+// NASALISABLE. Only a, ẹ, i, ọ, u nasalise; plain `e` and `o` cannot. A nasal after a plain e/o
+// therefore cannot be a coda - it must be syllabic. Verified over the whole corpus: 0 of 5,580
+// forms have an absorbed nasal after a plain e/o, and the vowels that do take one are exactly
+// those five plus 27 dialectal ị/ụ spellings. The single production word this fires on is
+// `àgùnfon`, whose stored split already reads `fọn` and whose upstream form is `àgùnfọn` - so it
+// diagnoses a known typo rather than re-analysing a word.
+//
+// ABSORBABLE. The coda is written `n` in general but assimilates to `m` before b/p - the same
+// homorganic rule that writes the SYLLABIC nasal as `m` there. So `m` before a labial is
+// ambiguous exactly as `n` is elsewhere and must be absorbable, while `m` anywhere else is
+// always its own syllable because no coda `m` is licensed there. Inert on everything we hold: 0
+// corpus forms and 0 production words contain a bare `m` before any consonant, and all 17
+// m+labial forms are tone-marked (Wiktionary's own IPA transcribes every one as a standalone /ŋ/
+// syllable).
+//
+// These are predicates over the GRAPHEME, not character sets. Graphemes are built from NFD text,
+// so `ẹ` is `e` + U+0323 and shares a base character with `e` - which is also why VOWELS' own
+// 'ẹ'/'ọ' entries are dead weight, matching only via their plain bases.
+//
+// Sources: en.wikibooks.org/wiki/Yoruba/Pronunciation ("The letter m is also a nasal vowel.
+// However, it is only used for the letters b and p"; e and o cannot be nasalised);
+// wisc.pb.unizin.org/yorubadictionary (the vowel + n orthography for nasal vowels).
+
+/** Can this vowel grapheme carry a nasal coda? a/i/u always; e/o only underdotted (ẹ/ọ). */
+function isNasalisableVowel(grapheme: string): boolean {
+  const base = extractBaseCharacter(grapheme);
+  if (base === 'a' || base === 'i' || base === 'u') return true;
+  if (base === 'e' || base === 'o') return grapheme.includes(UNDERDOT);
+  return false;
+}
+
+/** Can this nasal be absorbed as a coda onto the vowel before it? A nasal carrying a tone mark
+ * never can - the mark is precisely what says it is syllabic. */
+function isAbsorbableNasal(grapheme: string, following: string | null): boolean {
+  if (hasToneMark(grapheme)) return false;
+  const base = extractBaseCharacter(grapheme);
+  if (base === 'n') return true;
+  if (base === 'm') return following !== null && LABIALS.has(extractBaseCharacter(following));
+  return false;
 }
 
 export function groupIntoGraphemes(word: string): string[] {
@@ -114,9 +163,13 @@ export function syllabifyWord(word: string): string[] {
 
       if (i + 1 < n) {
         const nextG = graphemes[i + 1];
-        if (isBaseN(nextG) && !hasToneMark(nextG)) {
-          const nextAfterN = i + 2 < n ? graphemes[i + 2] : null;
-          if (nextAfterN === null || !isVowel(nextAfterN)) {
+        const nextAfterN = i + 2 < n ? graphemes[i + 2] : null;
+        // A following vowel makes the nasal that vowel's ONSET, so there is nothing to absorb.
+        // Otherwise absorb it as a coda - but only where both halves are licensed: the vowel must
+        // be one that nasalises, and the nasal must be one that can be a coda in this position.
+        // See the block above; each condition rules out a class the letters already decide.
+        if (nextAfterN === null || !isVowel(nextAfterN)) {
+          if (isNasalisableVowel(g) && isAbsorbableNasal(nextG, nextAfterN)) {
             buffer += nextG;
             i += 1;
           }

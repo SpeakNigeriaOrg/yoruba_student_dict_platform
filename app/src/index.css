@@ -741,6 +741,17 @@ audio {
   line-height: 1.2;
   white-space: nowrap;
 }
+/* Sits under the tone buttons of the one column where the coda/syllabic ambiguity is live.
+   Deliberately quieter and smaller than a tone button: it is a rare correction, not one of the
+   three answers the column exists to collect, and it must not compete with them for the thumb. */
+.nasal-split-btn {
+  padding: 4px 2px;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .palette-btn {
   flex: 1 1 0;
   min-width: 0;

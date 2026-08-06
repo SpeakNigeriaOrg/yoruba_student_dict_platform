@@ -65,6 +65,34 @@ punctuation so a *sentence* example still gets a grid on its last word). Its tex
 holds the composed phrase and is the only state - what the contributor reads is exactly
 what gets stored.
 
+### One thing tone buttons alone could not say
+
+A nasal after a vowel is either a **coda** nasalising that vowel or a **syllable of its own**,
+and bare spelling does not always settle it: `alangba` is `a·lan·gba` or `a·la·n·gba`. Tone goes
+on a syllable's vowel when it has one, so the three buttons over `lan` write `làn`/`lan`/`lán`
+and never touch the `n` — there was **no sequence of taps that reached `aláǹgbá`**. The right
+answer was unreachable, not merely non-default, which is the worst shape this kind of gap can
+take: every recorded vote agreed with the default because the default was all there was.
+
+So `ToneGrid` carries one more control, on the one column where the ambiguity is live. Freeing a
+nasal **writes the macron at the same time**, and that is the whole trick:
+
+```
+alangba   a │ lan │ gba   ──▶   alan̄gba   a │ la │ n̄ │ gba   ──▶   aláǹgbá
+                 "split off n"                    tone it like any syllable
+```
+
+`syllabifyWord('alan̄gba')` returns exactly `['a','la','n̄','gba']`, so the new split is
+re-derivable from the new spelling. That matters because nothing stores a boundary the spelling
+does not imply: `EntryReview` seeds its rows from `syllabifySpans(displayText)`, not from
+`golden_record.syllables`, and `PhraseComposer` holds only the composed text. A boundary nobody
+could re-derive would be invisible on the next load and silently overwritten — taking that word's
+recordings out of the game with it.
+
+The rules live in `shared/src/syllabify.ts`; `nasalSplit.ts` builds each candidate and then
+**re-derives it** to check, returning null unless it comes back identical. So a rule added to the
+splitter withdraws the offer here automatically, and a flip can never disagree with the splitter.
+
 ## A missing part is not a dead end
 
 The etymology axis asks "what is this word made of?", and its component picker used to

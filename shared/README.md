@@ -27,6 +27,22 @@ representing a previously-fixed bug must be present as its own named test
 case, not just folded into an aggregate diff of the whole diagnostics
 report.
 
+### Diverging from the Python engine, when it is wrong
+
+Parity is the default, not a rule — the Python engine is a port target, not an
+authority on Yoruba. Where we now know it is wrong, `syllabify.test.ts` carries a
+`DELIBERATE_DIVERGENCES` map naming each case, the Python answer, ours, and why;
+the parity loop skips those and a separate test asserts **both** sides, so either
+drifting fires. One further test asserts the divergence set is *exactly* that map
+and no larger — a rule change that quietly re-analysed a second word shows up there
+rather than as one more edited expectation.
+
+There is one entry today. Plain `e` and `o` do not nasalise in Yoruba, so a nasal
+after them cannot be a coda; the Python engine absorbs it regardless. That rule
+fires on exactly one form in the 5,580-form corpus, and it is `àgùnfon` — the word
+already known to be malformed (see `syllableSplit.ts` below). So it diagnoses a
+typo from a second direction rather than re-analysing a healthy word.
+
 ## Status
 
 - `orthography.ts` - ported, 20/20 fixture tests passing. Close to a direct

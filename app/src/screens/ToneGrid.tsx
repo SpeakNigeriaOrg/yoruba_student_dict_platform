@@ -16,9 +16,31 @@
 // Each button renders THIS syllable carrying that tone, not a generic `à a á`: the result
 // is visible before it is chosen, and the mid-tone rule shows itself rather than needing
 // to be known (`du` on a vowel, `n̄` on a syllabic nasal).
+//
+// ---------------------------------------------------------------------------
+// The nasal control, and why it belongs on the grid
+// ---------------------------------------------------------------------------
+// A nasal after a vowel is either a coda nasalising that vowel or a syllable of its own, and
+// bare spelling does not always say which. syllabify.ts decides what the letters decide and
+// defaults the rest to coda - but tone goes on a syllable's VOWEL when it has one, so the three
+// buttons over `lan` write `làn`/`lan`/`lán` and never touch the `n`. There was no sequence of
+// taps that reached `aláǹgbá`; the correct answer was unreachable rather than merely non-default.
+//
+// So the grid is where the control goes: it is already the place a reviewer looks at a word one
+// syllable at a time, and freeing a nasal gives that nasal its own tone column, which is the
+// whole point of doing it. It appears ONLY on a column where the ambiguity is live - the same
+// rule this file already follows for the tone buttons themselves, and the reason it asks
+// nasalSplit.ts rather than pattern-matching letters here.
 
 import type { ReactNode } from 'react';
-import { applyTone, toneBearerKind, toneOf, type Tone } from '@yoruba-student-dict-platform/shared';
+import {
+  absorbNasalAt,
+  applyTone,
+  freeNasalAt,
+  toneBearerKind,
+  toneOf,
+  type Tone,
+} from '@yoruba-student-dict-platform/shared';
 
 /** Top to bottom: HIGH first, so vertical position matches pitch. */
 const TONES: Array<{ tone: Tone; hint: string }> = [
@@ -70,6 +92,10 @@ export function ToneGrid({ syllables, onChange, showAxis = true, labelSuffix = '
       {syllables.map((syllable, index) => {
         const bearerTone = toneOf(syllable);
         const toneable = toneBearerKind(syllable) !== null;
+        // Computed rather than predicated: these ARE the new arrays, so the handler has nothing
+        // left to decide and cannot render a button that turns out to do nothing.
+        const freed = freeNasalAt(syllables, index);
+        const absorbed = absorbNasalAt(syllables, index);
 
         return (
           <div key={index} className="syllable-col">
@@ -108,9 +134,41 @@ export function ToneGrid({ syllables, onChange, showAxis = true, labelSuffix = '
             ) : (
               <p className="field-note">no tone</p>
             )}
+
+            {/* At most one of these ever renders, because a syllable cannot both end in an
+                absorbed nasal and BE a lone nasal. Both ask nasalSplit.ts, which answers null
+                wherever the letters already settle the question - so a rule added there withdraws
+                the offer here with no change to this file. */}
+            {freed ? (
+              <button
+                type="button"
+                className="btn btn-secondary nasal-split-btn"
+                aria-label={`Make the nasal of syllable ${index + 1}${labelSuffix} its own syllable`}
+                onClick={() => onChange(freed)}
+              >
+                split off {lastLetterOf(syllable)}
+              </button>
+            ) : null}
+            {absorbed ? (
+              <button
+                type="button"
+                className="btn btn-secondary nasal-split-btn"
+                aria-label={`Join the nasal of syllable ${index + 1}${labelSuffix} to the syllable before it`}
+                onClick={() => onChange(absorbed)}
+              >
+                join to {syllables[index - 1]}
+              </button>
+            ) : null}
           </div>
         );
       })}
     </div>
   );
+}
+
+/** The nasal a "split off" button would free, for its own label - so the button names the letter
+ * it is about rather than saying "split" and leaving the reviewer to work out which one. */
+function lastLetterOf(syllable: string): string {
+  const chars = [...syllable.normalize('NFC')];
+  return chars[chars.length - 1] ?? '';
 }

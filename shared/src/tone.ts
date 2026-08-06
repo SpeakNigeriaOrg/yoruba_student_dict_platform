@@ -146,6 +146,26 @@ export function applyTone(syllable: string, tone: Tone): string {
   // explicit form is what the reviewer chose.
   if (tone === 'mid' && toneOf(syllable) === 'mid') return syllable;
 
+  return writeTone(syllable, tone, bearer);
+}
+
+/** applyTone without the mid-idempotence short-circuit: writes the EXPLICIT form of the tone even
+ * when the syllable already reads that way.
+ *
+ * The short-circuit above exists so that merely looking at a word cannot edit it - an unmarked `n`
+ * read as mid must come back as `n`, not `n̄`. But some acts are not incidental. Freeing a nasal
+ * into a syllable of its own (nasalSplit.ts) is a reviewer asserting "this is a syllable", and the
+ * macron is exactly how that assertion is written down - without it the new boundary would not be
+ * re-derivable from the spelling, which is the property that whole flip depends on.
+ *
+ * So: applyTone for anything driven by the tone grid, this for a deliberate re-analysis. */
+export function applyToneExplicitly(syllable: string, tone: Tone): string {
+  const bearer = toneBearerKind(syllable);
+  if (bearer === null) return syllable;
+  return writeTone(syllable, tone, bearer);
+}
+
+function writeTone(syllable: string, tone: Tone, bearer: Exclude<ToneBearer, null>): string {
   const mark = tone === 'low' ? GRAVE : tone === 'high' ? ACUTE : bearer === 'nasal' ? MACRON : '';
 
   const chars = [...syllable.normalize('NFD')];
