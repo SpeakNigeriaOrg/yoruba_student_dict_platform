@@ -133,11 +133,13 @@ export function ToneEditor({
           return (
             <div key={index} className="syllable-col">
               {/* Shown only when no button is highlighted, which is when the row would
-                  otherwise have nothing identifying it. Two cases: a syllable that
-                  cannot carry tone at all (Wiktionary's bare letter entries), and an
-                  under-marked syllabic nasal, where the source never said which tone it
-                  is and toneOf refuses to guess. When a tone IS selected the highlighted
-                  button already shows the syllable, so a face would just repeat it. */}
+                  otherwise have nothing identifying it. That now means one thing: a
+                  syllable with nothing that can carry tone at all - Wiktionary's bare
+                  letter entries like `gb`, or a half-typed syllable in the letters
+                  editor. An unmarked syllabic nasal is NOT one of these; it reads as mid
+                  (the macron convention is not universal), so its row is highlighted like
+                  any other. When a tone IS selected the highlighted button already shows
+                  the syllable, so a face would just repeat it. */}
               {bearerTone === null ? (
                 <div className="syllable-face" aria-label={`Syllable ${index + 1}`}>
                   {syllable}

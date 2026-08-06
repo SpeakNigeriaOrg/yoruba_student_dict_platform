@@ -45,12 +45,13 @@ describe('toneOf', () => {
     expect(toneOf('gba')).toBe('mid');
   });
 
-  it('refuses to read an unmarked syllabic NASAL as mid', () => {
-    // On a nasal, mid is written with a macron. An unmarked one is under-marked
-    // upstream (9 in the corpus); reporting "mid" would turn a gap in the data into
-    // a positive claim, and would also silently add a macron on the round trip.
-    expect(toneOf('n')).toBeNull();
-    expect(toneOf('m')).toBeNull();
+  it('reads an unmarked syllabic NASAL as mid too - the macron convention is not universal', () => {
+    // A bare `n` is mid written by someone who does not use macrons (6 in the corpus),
+    // not missing information. Treating it as unknown would make the editor demand an
+    // answer to a question the source already gave.
+    expect(toneOf('n')).toBe('mid');
+    expect(toneOf('m')).toBe('mid');
+    expect(toneOf('n̄')).toBe('mid');
   });
 
   it('reports nothing when nothing can carry tone', () => {
@@ -64,10 +65,27 @@ describe('applyTone: mid depends on what carries it', () => {
     expect(applyTone('dì', 'mid')).toBe('di');
   });
 
-  it('writes mid on a syllabic nasal as a macron', () => {
-    // Not cosmetic: the macron is what distinguishes syllabic n̄ from coda n.
-    expect(applyTone('n', 'mid')).toBe(`n${MACRON}`.normalize('NFC'));
+  it('writes the macron when a nasal is deliberately CHANGED to mid', () => {
+    // The explicit form is what a reviewer who actively chose mid should get - and the
+    // macron is not cosmetic, it is what distinguishes syllabic n̄ from coda n.
     expect(applyTone('ń', 'mid')).toBe(`n${MACRON}`.normalize('NFC'));
+    expect(applyTone('ǹ', 'mid')).toBe(`n${MACRON}`.normalize('NFC'));
+  });
+
+  it('leaves a nasal that ALREADY reads as mid byte-identical, in either convention', () => {
+    // The half of the rule that prevents silent damage. Both `n` and `n̄` read as mid, so
+    // writing mid back must not normalise one into the other: adding a macron to every
+    // unmarked nasal anyone merely looked at would produce a `respell` nobody asked for,
+    // and the publish scripts compare recorded_syllables to golden_record.syllables with
+    // exact equality - so it would drop that word's recordings from the game.
+    expect(applyTone('n', 'mid')).toBe('n');
+    expect(applyTone('m', 'mid')).toBe('m');
+    expect(applyTone(`n${MACRON}`.normalize('NFC'), 'mid')).toBe(`n${MACRON}`.normalize('NFC'));
+  });
+
+  it('still changes an unmarked nasal to low or high on request', () => {
+    expect(applyTone('n', 'high')).toBe('ń');
+    expect(applyTone('n', 'low')).toBe('ǹ');
   });
 
   it('replaces an existing mark rather than stacking a second one', () => {

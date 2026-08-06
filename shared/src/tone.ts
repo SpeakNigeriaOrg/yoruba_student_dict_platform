@@ -18,14 +18,20 @@
 //                                               letter-description entries ("the
 //                                               letter <ẹ> with mid tone (not
 //                                               usually marked overtly)"), not words
-//   on a SYLLABIC NASAL  mid is a MACRON        27 macron vs 9 unmarked
+//   on a SYLLABIC NASAL  mid is USUALLY a
+//                        MACRON, but not
+//                        always               26 macron vs 6 unmarked
 //
-// And there is a reason for the asymmetry, which is why it must be honoured rather
-// than normalised away: the macron is what distinguishes a SYLLABIC nasal from a
-// CODA one. syllabifyWord's vowel branch absorbs an untoned `n` before a consonant
-// as a coda, so `gbangba` is two syllables [gban][gba] while `gban̄gba` is three,
-// [gba][n̄][gba]. Dropping the macron does not just lose the tone, it silently
-// re-analyses the word.
+// The macron is not decorative: it is what distinguishes a SYLLABIC nasal from a CODA
+// one. syllabifyWord's vowel branch absorbs an untoned `n` before a consonant as a coda,
+// so `gbangba` is two syllables [gban][gba] while `gban̄gba` is three, [gba][n̄][gba].
+// Dropping it does not just lose the tone, it re-analyses the word.
+//
+// But the convention is not universal, which is why that last row matters in BOTH
+// directions. A bare `n` is ordinary mid tone written by someone who does not use
+// macrons, not missing information. Reading it as "unknown" would interrogate a reviewer
+// about a word nobody got wrong; writing a macron onto it would edit a spelling nobody
+// asked to change. toneOf and applyTone each handle one half of that.
 //
 // ---------------------------------------------------------------------------
 // One tone slot per syllable
@@ -41,7 +47,7 @@ import { TONE_MARKS } from './orthography.js';
 // this repo before, and an escape form was itself rewritten into literal bytes.
 const GRAVE = String.fromCharCode(0x0300); // low
 const ACUTE = String.fromCharCode(0x0301); // high
-const MACRON = String.fromCharCode(0x0304); // mid, on a syllabic nasal only
+const MACRON = String.fromCharCode(0x0304); // explicit mid on a syllabic nasal
 const CIRCUMFLEX = String.fromCharCode(0x0302); // not a Yoruba tone; see toneOf
 
 /** Base vowels as they appear AFTER NFD, so the underdot of ẹ/ọ has already been
@@ -69,42 +75,39 @@ export function toneBearerKind(syllable: string): ToneBearer {
 
 /** The tone this syllable is written with.
  *
- * Returns null in exactly two cases, and they mean different things:
+ * An unmarked bearer is MID, whether it is a vowel or a syllabic nasal. On a vowel that
+ * is simply the standard orthography. On a nasal the explicit form is a macron, but the
+ * convention is not universal - a bare `n` is mid written by someone who does not use
+ * macrons, so treating it as unknown would make the editor demand an answer to a question
+ * the source already answered.
  *
- *   no bearer at all          there is no tone to read (a bare consonant)
- *   unmarked syllabic nasal   the source did not say. NOT reported as mid, because
- *                             on a nasal mid is written with a macron - an unmarked
- *                             syllabic nasal is under-marked upstream (9 in the
- *                             corpus), and calling it "mid" would launder a gap in
- *                             the data into a positive claim.
+ * Null means only "there is no tone here to read", in three cases:
  *
- * An unmarked VOWEL is mid, definitively - that is the standard orthography. */
+ *   no bearer at all    a bare consonant - Wiktionary has letter-name entries (`gb`)
+ *   circumflex          `ộ` in the lexicon. Not one of Yoruba's three tones
+ *   macron on a VOWEL   `ọ̄`, `ẹ̄` - Wiktionary's letter-description entries ("the
+ *                       letter <ẹ> with mid tone (not usually marked overtly)"). Mid on
+ *                       a vowel is unmarked, so calling these mid would let applyTone
+ *                       strip the macron they exist to show.
+ *
+ * The last two are what keep applyTone(s, toneOf(s)) an exact identity: a syllable this
+ * editor cannot represent is left alone rather than rewritten. */
 export function toneOf(syllable: string): Tone | null {
   const bearer = toneBearerKind(syllable);
   if (bearer === null) return null;
 
   const chars = [...syllable.normalize('NFD')];
 
-  // Outside the three-tone model, and therefore NOT editable. Reporting a tone here
-  // would mean applyTone rewrites the syllable into something the source never said:
-  //
-  //   circumflex          `Ộ`/`ộ` in the lexicon. Not one of Yoruba's three tones;
-  //                       the codebase counts it as a tone mark (orthography.ts) but
-  //                       this editor has no button for it.
-  //   macron on a VOWEL   `ọ̄`, `ẹ̄` - Wiktionary's own letter-description entries
-  //                       ("the letter <ẹ> with mid tone (not usually marked
-  //                       overtly)"). Mid on a vowel is unmarked, so treating these
-  //                       as mid would silently strip the macron they exist to show.
-  //
-  // Both are left alone instead, which is what keeps applyTone(s, toneOf(s)) an
-  // exact identity for every syllable this editor will ever touch.
+  // The two out-of-model marks, documented above. Left alone rather than reported as a
+  // tone, which is what keeps applyTone(s, toneOf(s)) an exact identity.
   if (chars.includes(CIRCUMFLEX)) return null;
   if (bearer === 'vowel' && chars.includes(MACRON)) return null;
 
   if (chars.includes(GRAVE)) return 'low';
   if (chars.includes(ACUTE)) return 'high';
-  if (chars.includes(MACRON)) return 'mid';
-  return bearer === 'vowel' ? 'mid' : null;
+  // Marked mid (macron on a nasal) and unmarked mid (no mark at all) are the same claim,
+  // written by people following different conventions.
+  return 'mid';
 }
 
 /** The syllable with its tone mark removed and everything else kept - underdots
@@ -130,6 +133,18 @@ export function lettersOf(syllable: string): string {
 export function applyTone(syllable: string, tone: Tone): string {
   const bearer = toneBearerKind(syllable);
   if (bearer === null) return syllable;
+
+  // Mid is idempotent: a syllable that ALREADY reads as mid comes back byte-identical,
+  // whichever convention it was written in. Without this, `n` and `n̄` would both be
+  // read as mid (correctly) and then both written as `n̄` - adding a macron to every
+  // unmarked nasal that anyone merely looked at. That is not cosmetic: it produces a
+  // `respell` nobody asked for, and the publish scripts compare recorded_syllables to
+  // golden_record.syllables with exact equality, so it would silently drop that word's
+  // recordings from the game.
+  //
+  // Deliberately changing a nasal TO mid still writes the macron, because then the
+  // explicit form is what the reviewer chose.
+  if (tone === 'mid' && toneOf(syllable) === 'mid') return syllable;
 
   const mark = tone === 'low' ? GRAVE : tone === 'high' ? ACUTE : bearer === 'nasal' ? MACRON : '';
 

@@ -106,21 +106,31 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     expect(screen.queryByLabelText('Syllable 1')).not.toBeInTheDocument();
   });
 
-  it('keeps a label on a syllable with no tone selected, so the row is still identifiable', async () => {
+  it('keeps a label on a syllable that cannot carry tone at all, so the row stays identifiable', async () => {
     const user = userEvent.setup();
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    // A bare syllabic nasal: mid on a nasal is a macron, so an unmarked `n` is
-    // under-marked and toneOf refuses to call it mid - no button is highlighted.
+    // A consonant-only syllable. NOT a bare nasal: `n` reads as mid, because the macron
+    // convention is not universal, so its row is highlighted like any other.
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'gb');
+
+    expect(screen.getByLabelText('Syllable 1')).toHaveTextContent('gb');
+    expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
+  });
+
+  it('a bare syllabic nasal shows mid selected, not an empty row demanding a choice', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
     const box = screen.getByLabelText('Letters of syllable 1');
     await user.clear(box);
     await user.type(box, 'n');
 
-    expect(screen.getByLabelText('Syllable 1')).toHaveTextContent('n');
-    for (const hint of ['low', 'mid', 'high']) {
-      expect(screen.getByLabelText(`Syllable 1 ${hint} tone`)).toHaveAttribute('aria-pressed', 'false');
-    }
+    expect(screen.getByLabelText('Syllable 1 mid tone')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('pre-selects each syllable\'s current tone, so leaving it alone is agreement', async () => {
