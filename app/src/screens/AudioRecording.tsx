@@ -23,13 +23,19 @@
 // segment-count check and syllable identities are actually based on, not
 // necessarily golden_record's current (possibly later-revised) values.
 //
-// "Your recordings" vs "Other speakers' recordings" are kept as two
-// clearly separate sections (listUtterances.ts's isOwnRecording flag),
-// not one blended list - every participant is expected to record every
-// word themselves, so a single "someone recorded this" signal would be
-// actively misleading (this is also why the Audio axis tab's own
-// green/pending status, App.tsx's getAxisStatus, is scoped to the
-// current user's own recordings, not any speaker's).
+// A volunteer sees their OWN recordings and nobody else's; a curator sees every speaker's,
+// in a section kept clearly separate from their own rather than blended into one list.
+//
+// Hearing someone else say the word before recording it is an anchor, and the whole reason
+// every participant records every word themselves is to get INDEPENDENT pronunciations - the
+// divergence between speakers is the signal being collected, so supplying a reference take
+// quietly converts it into imitation. It is also other people's voices, which a volunteer has
+// no task that needs. A curator does: comparing speakers is how coverage gets judged.
+//
+// The API enforces this too (listUtterances.ts) - a volunteer is never sent the other
+// recordings, so this is not a hidden section with the audio still in the page. Same reason
+// the Audio axis tab's own green/pending status is scoped to the current user's recordings
+// rather than any speaker's.
 
 import { useEffect, useState } from 'react';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
@@ -40,6 +46,9 @@ import { base64ToAudioUrl, getEntryReview, listUtterances, registerUtterance, ty
 
 export interface AudioRecordingProps {
   wordId: string;
+  /** Whether other speakers' recordings are shown at all. Curator-only, and the API agrees -
+   * a volunteer is not sent them, so this gates a section that would otherwise be empty. */
+  isCurator: boolean;
   /** Called after a recording is successfully registered, so the task queue
    * can advance. */
   onDecided?: () => void;
@@ -108,7 +117,7 @@ function UtteranceRow({ u, showSpeakerName }: { u: UtteranceSummary; showSpeaker
   );
 }
 
-export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
+export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -224,7 +233,10 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
 
   const ownRecordings = previousRecordings?.filter((u) => u.isOwnRecording) ?? null;
   const otherRecordings = previousRecordings?.filter((u) => !u.isOwnRecording) ?? null;
-  const divergedCount = previousRecordings?.filter((u) => u.divergesFromGolden).length ?? 0;
+  // Counted over what this person can actually act on. A volunteer is only sent their own
+  // recordings anyway, but scoping it here as well means the warning never says "3 recordings"
+  // when re-recording their own would fix one - and a curator still sees the true total.
+  const divergedCount = (isCurator ? previousRecordings : ownRecordings)?.filter((u) => u.divergesFromGolden).length ?? 0;
 
   async function submit() {
     if (!take1Blob || !take2Blob || !segmentReviews || !countsMatch) return;
@@ -406,24 +418,24 @@ export function AudioRecording({ wordId, onDecided }: AudioRecordingProps) {
         )}
       </div>
 
-      {/* Whether to surface anyone else's recordings at all is a judgment
-          call (every participant is still expected to record every word
-          themselves - this is not a substitute for that) - kept, but
-          always clearly separated from "Your recordings" above, never
-          blended into one undifferentiated list or a single "done"
-          signal. */}
-      <div className="take-step" aria-label="Other speakers' recordings">
-        <h3>Other speakers' recordings</h3>
-        {previousRecordingsError ? null : otherRecordings === null ? null : otherRecordings.length === 0 ? (
-          <p>No other speakers have recorded this word yet.</p>
-        ) : (
-          <ul aria-label="Other speakers' recordings by take">
-            {otherRecordings.map((u) => (
-              <UtteranceRow key={u.utteranceId} u={u} showSpeakerName={true} />
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Curator-only, for the reasons in this file's header: a volunteer recording a word must
+          not hear someone else say it first, and the API does not send it to them either. Kept
+          clearly separate from "Your recordings" above rather than blended, so it can never read
+          as a single "someone has done this" signal. */}
+      {isCurator ? (
+        <div className="take-step" aria-label="Other speakers' recordings">
+          <h3>Other speakers' recordings</h3>
+          {previousRecordingsError ? null : otherRecordings === null ? null : otherRecordings.length === 0 ? (
+            <p>No other speakers have recorded this word yet.</p>
+          ) : (
+            <ul aria-label="Other speakers' recordings by take">
+              {otherRecordings.map((u) => (
+                <UtteranceRow key={u.utteranceId} u={u} showSpeakerName={true} />
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

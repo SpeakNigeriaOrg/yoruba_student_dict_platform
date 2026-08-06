@@ -111,7 +111,7 @@ describe('AudioRecording', () => {
     // and both fields describing what is being said are editable, so a speaker who
     // disagrees with the spelling or the split records what they actually say.
     installDefaultFetchMock();
-    render(<AudioRecording wordId="wòhun" />);
+    render(<AudioRecording wordId="wòhun" isCurator={false} />);
 
     await waitFor(() => expect(screen.getByLabelText('Spelling')).toBeInTheDocument());
     expect(screen.getByLabelText('Spelling')).not.toBeDisabled();
@@ -124,7 +124,7 @@ describe('AudioRecording', () => {
 
   it('defaults the pronunciation fields from the word being reviewed', async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
 
     await waitFor(() => {
       expect(screen.getByText('wòhun')).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe('AudioRecording', () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     await recordBothTakes(user);
@@ -152,7 +152,7 @@ describe('AudioRecording', () => {
     installAudioMocks(ONE_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     await recordBothTakes(user);
@@ -171,7 +171,7 @@ describe('AudioRecording', () => {
     installAudioMocks(ONE_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
@@ -199,7 +199,7 @@ describe('AudioRecording', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     await recordBothTakes(user);
@@ -230,7 +230,24 @@ describe('AudioRecording', () => {
     expect(typeof take2Register.segments[0].audioDataBase64).toBe('string');
   });
 
-  it("shows another speaker's recording under 'Other speakers' recordings', clearly separated from - and never counted as - the current user's own", async () => {
+  it('shows a VOLUNTEER no other speakers at all - not even an empty section', async () => {
+    // Hearing someone else say the word first is an anchor, and the point of every participant
+    // recording every word themselves is INDEPENDENT pronunciations - the divergence between
+    // speakers is the signal being collected, so a reference take converts it into imitation.
+    // The API does not send a volunteer these rows either (listUtterances.ts); this asserts the
+    // screen does not ask for a section to put them in.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByText('wòhun'));
+
+    expect(await screen.findByLabelText('Your recordings')).toBeInTheDocument();
+    // Absent, not empty: "No other speakers have recorded this word yet" is itself information
+    // about other people, and it would be a claim this screen can no longer support.
+    expect(screen.queryByLabelText("Other speakers' recordings")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No other speakers have recorded/)).not.toBeInTheDocument();
+  });
+
+  it("shows a CURATOR another speaker's recording, clearly separated from - and never counted as - their own", async () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const otherSpeakerUtterance = {
       utteranceId: 'utt-1',
@@ -258,7 +275,7 @@ describe('AudioRecording', () => {
       }),
     );
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={true} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     const yours = await screen.findByLabelText('Your recordings');
@@ -299,7 +316,7 @@ describe('AudioRecording', () => {
       }),
     );
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={true} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     const yours = await screen.findByLabelText('Your recordings');
@@ -314,7 +331,7 @@ describe('AudioRecording', () => {
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     await user.click(screen.getByRole('button', { name: /Record/ }));
@@ -341,7 +358,7 @@ describe('AudioRecording', () => {
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder as unknown as typeof MediaRecorder);
     const user = userEvent.setup();
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" />);
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
     await waitFor(() => screen.getByText('wòhun'));
 
     await user.click(screen.getByRole('button', { name: /Record/ }));

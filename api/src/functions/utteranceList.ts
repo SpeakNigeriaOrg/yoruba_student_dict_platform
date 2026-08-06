@@ -1,9 +1,12 @@
 // functions/utteranceList.ts
 //
-// GET /api/words/{wordId}/utterances - any authenticated user, same gate
-// as the review-axis GET endpoints. Returns every speaker's recordings
-// (not restricted to the caller's own), each flagged with isOwnRecording
-// so the UI can tell them apart - see listUtterances.ts's file header.
+// GET /api/words/{wordId}/utterances - any authenticated user, same gate as the review-axis GET
+// endpoints.
+//
+// A volunteer gets their OWN recordings only; a curator gets every speaker's. The role check
+// lives here because this is the layer that has the authenticated user - the handler takes a
+// flag and stays role-agnostic. See listUtterances.ts's file header for why the scoping is
+// server-side rather than a hidden section in the UI.
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
@@ -15,7 +18,9 @@ export async function listUtterancesFunction(request: HttpRequest, _context: Inv
   try {
     const user = await requireUser(request);
     const wordId = request.params.wordId;
-    const result = await listUtterances(getPool(), wordId, user.userId);
+    const result = await listUtterances(getPool(), wordId, user.userId, {
+      includeOtherSpeakers: user.role === 'curator',
+    });
     return { status: 200, jsonBody: { utterances: result } };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };

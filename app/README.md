@@ -126,6 +126,22 @@ not a pronunciation). It is stored with an **exempt** citation, which per `0014`
 gap but the durable record that the word awaits an upstream entry — and `ReviewQueue` now
 lists exempt words so that record is findable when Wiktionary gains one.
 
+## A volunteer records without hearing anyone else first
+
+The audio screen shows a volunteer **their own recordings and nobody else's**. Curators still see
+every speaker's, in a section kept separate from their own.
+
+Not a privacy nicety — it protects the data. Every participant records every word themselves
+precisely to get *independent* pronunciations, and the divergence between speakers is the signal
+being collected. Supplying a reference take turns that into imitation. (It is also other people's
+voices, which a volunteer has no task that needs.) A curator does have such a task: comparing
+speakers is how coverage gets judged.
+
+Enforced in the API, not just here — `listUtterances` never sends a volunteer the other rows, so
+this is not a hidden section with the audio still sitting in the page. The empty-state text is gone
+too, for a volunteer: "no other speakers have recorded this word yet" is itself information about
+other people.
+
 ## A review screen must never be answerable only one way
 
 Every review surface has to offer a way to DISAGREE, not just a way to confirm. This

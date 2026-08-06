@@ -124,12 +124,43 @@ describe('listUtterances', () => {
       otherUsername,
     );
 
-    const result = await listUtterances(pool, wordId, userId);
+    // The curator view: every speaker, flagged so the UI can keep them apart.
+    const result = await listUtterances(pool, wordId, userId, { includeOtherSpeakers: true });
     expect(result).toHaveLength(2);
     const mine = result.find((u) => u.speakerDisplayName === username)!;
     const theirs = result.find((u) => u.speakerDisplayName === otherUsername)!;
     expect(mine.isOwnRecording).toBe(true);
     expect(theirs.isOwnRecording).toBe(false);
+
+    // And the volunteer view of the same word: their own recording, and nothing else. Asserted
+    // at this layer because that is where it is enforced - hiding the section in the UI while
+    // still shipping the audio and the speaker names to the browser would make "volunteers do
+    // not see other contributors" true only of the DOM.
+    const scoped = await listUtterances(pool, wordId, userId);
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0].speakerDisplayName).toBe(username);
+    expect(scoped[0].isOwnRecording).toBe(true);
+  });
+
+  it('defaults to the caller\'s own recordings, so a new caller under-shares rather than over-shares', async () => {
+    const wordId = `${NS}word_default_scope`;
+    await insertWord(wordId, ['dà']);
+    const strangerName = `${NS}stranger`;
+    const stranger = await pool.query<{ user_id: string }>(
+      "insert into users (email, display_name, role) values ($1, $2, 'volunteer') returning user_id",
+      [strangerName, 'Stranger'],
+    );
+    await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: Buffer.from('theirs'), recordedDisplayText: 'dà', recordedSyllables: ['dà'] },
+      stranger.rows[0].user_id,
+      strangerName,
+    );
+
+    // The requester has recorded nothing here, so scoping correctly yields nothing at all -
+    // rather than someone else's voice.
+    expect(await listUtterances(pool, wordId, userId)).toEqual([]);
+    expect(await listUtterances(pool, wordId, userId, { includeOtherSpeakers: true })).toHaveLength(1);
   });
 
   it('returns an empty list for a word with no recordings yet', async () => {

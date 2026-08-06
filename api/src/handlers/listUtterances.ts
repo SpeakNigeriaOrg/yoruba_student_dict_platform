@@ -1,13 +1,32 @@
 // handlers/listUtterances.ts
 //
-// Backs GET /words/{wordId}/utterances - read-only playback of every
-// recording registered for a word, across every speaker. Recordings
-// aren't login-scoped (a speaker isn't necessarily a platform user at
-// all - see migrateLegacyAudio.mjs, which registers recordings under a
-// speaker with no user_id), so there's no notion of "viewing as" a
-// speaker: any authenticated user can already listen to any speaker's
-// recordings for a word, same permission tier as the other review-axis
-// GET endpoints.
+// Backs GET /words/{wordId}/utterances - read-only playback of recordings
+// registered for a word. Recordings aren't login-scoped at the data level
+// (a speaker isn't necessarily a platform user at all - see
+// migrateLegacyAudio.mjs, which registers recordings under a speaker with
+// no user_id), so isOwnRecording is only ever true for a genuine match.
+//
+// ---------------------------------------------------------------------------
+// A volunteer is sent their OWN recordings only
+// ---------------------------------------------------------------------------
+// This used to return every speaker's recordings to any authenticated user, and the audio
+// screen rendered them in a separate "Other speakers' recordings" section. Two reasons that
+// is wrong for a volunteer, and they point the same way:
+//
+//   Hearing someone else say the word before you record it is an anchor. The whole reason
+//   every participant records every word themselves is to get independent pronunciations;
+//   a reference take turns that into imitation, and the divergence between speakers is
+//   exactly the signal being collected.
+//
+//   It is also other people's voices. A volunteer has no task that requires them.
+//
+// A curator does have such a task - comparing speakers is how coverage gets judged - so
+// they still get everything.
+//
+// Scoped HERE rather than only in the UI. Hiding a section while still shipping the audio,
+// the speaker names and the take metadata to the browser would make "volunteers do not see
+// other contributors" true only of the DOM, and anyone with devtools open would see
+// otherwise. Same "check again server-side" rule the rest of this API follows.
 //
 // Audio bytes are included inline (base64), same short-term storage
 // choice as registerUtterance.ts - clips are short, so this stays small.
@@ -66,7 +85,21 @@ export interface UtteranceSummary {
   segments: UtteranceSegmentSummary[];
 }
 
-export async function listUtterances(client: Queryable, wordId: string, userId: string): Promise<UtteranceSummary[]> {
+export interface ListUtterancesOptions {
+  /** Whether to include speakers other than the caller's own.
+   *
+   * Curator-only, and passed in by the function layer rather than looked up here - this
+   * handler stays framework- and role-agnostic like the rest of them. Defaults to false, so a
+   * new caller that forgets it under-shares rather than over-shares. */
+  includeOtherSpeakers?: boolean;
+}
+
+export async function listUtterances(
+  client: Queryable,
+  wordId: string,
+  userId: string,
+  { includeOtherSpeakers = false }: ListUtterancesOptions = {},
+): Promise<UtteranceSummary[]> {
   const wordResult = await client.query<{ display_text: string; syllables: string[] }>(
     'select display_text, syllables from golden_record where word_id = $1',
     [wordId],
@@ -100,8 +133,11 @@ export async function listUtterances(client: Queryable, wordId: string, userId: 
      from utterances u
      join speakers s on s.speaker_id = u.speaker_id
      where u.word_id = $1
+       -- Filtered in SQL, not after the fact: the audio bytes are the bulk of this response,
+       -- and a row excluded here is never read out of the database at all.
+       and ($3 or s.user_id = $2)
      order by is_own_recording desc, s.display_name, u.take_number`,
-    [wordId, userId],
+    [wordId, userId, includeOtherSpeakers],
   );
 
   const segmentRows = await client.query<{
