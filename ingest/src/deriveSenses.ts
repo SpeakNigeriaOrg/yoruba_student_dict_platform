@@ -157,6 +157,10 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     standardForms: deriveStandardForms(entry),
     glosses: deriveGlosses(entry),
     altOfTargets: deriveAltOfTargets(entry),
+    // First transcription only: several means dialect variants, and a disagreement between them is
+    // a fact about Yoruba rather than about our splitting. Trimmed, and an empty string becomes
+    // null so "no transcription" has one representation.
+    ipa: entry.ipa?.[0]?.ipa?.trim() || null,
     componentCandidates: deriveComponentCandidateForms(entry).map(
       (form): ComponentCandidate => ({ form, provenance: 'etymology_template' }),
     ),

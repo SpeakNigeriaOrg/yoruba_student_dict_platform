@@ -123,6 +123,14 @@ export interface DerivedKaikkiSense {
   standardForms: string[];
   glosses: string[];
   altOfTargets: string[];
+  /** Wiktionary's IPA, first transcription only, verbatim - including the `.` syllable
+   * boundaries, which are the whole reason to keep it.
+   *
+   * The only independent evidence we have about syllabification: 5,040 entries carry dotted
+   * transcriptions, and they distinguish a coda nasal (`/ɛ̄.ʃĩ̄/`, tilde on the vowel) from a
+   * syllabic one (`/ō.ló.ŋ́.ɡ͡bò/`, `ŋ́` standing alone). Was parsed and dropped before 0016. It is
+   * a CHECK, not a source - see that migration for why its unit is not ours. */
+  ipa: string | null;
   componentCandidates: ComponentCandidate[];
   usedInCandidates: ComponentCandidate[];
   indexKeys: string[];

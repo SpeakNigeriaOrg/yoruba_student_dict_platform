@@ -32,7 +32,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], senseIds: string[]): Promise<void> {
   const rows = senses.map((sense, i) => ({ senseId: senseIds[i], sense }));
   for (const batch of chunk(rows, SENSE_BATCH_SIZE)) {
-    const columnsPerRow = 13;
+    const columnsPerRow = 14;
     const placeholders: string[] = [];
     const values: unknown[] = [];
     batch.forEach(({ senseId, sense }, i) => {
@@ -58,13 +58,16 @@ async function insertSenses(client: Queryable, senses: DerivedKaikkiSense[], sen
         sense.standardForms,
         sense.glosses,
         sense.altOfTargets,
+        // The only independent evidence about syllabification we have. Parsed and dropped until
+        // 0016; see that migration for why it is a check rather than a source.
+        sense.ipa,
       );
     });
     await client.query(
       `insert into kaikki_senses
          (sense_id, entry_id, pos, etymology_number, etymology_text, headword, canonical_value,
           canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms,
-          glosses, alt_of_targets)
+          glosses, alt_of_targets, ipa)
        values ${placeholders.join(', ')}`,
       values,
     );
