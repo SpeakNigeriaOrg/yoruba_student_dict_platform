@@ -88,6 +88,14 @@ type SpellingChoice =
   | { action: 'respell'; newDisplayText: string; newSyllables: string[] }
   | { action: 'select_candidate'; candidateForm: string; senseEntryId?: string };
 
+/** Compared NFC-normalized, for the same reason writtenFormFromSyllables is: a
+ * difference of Unicode composition alone is not an edit, and five production words
+ * store their text in NFD. */
+function sameSyllables(a: string[], b: string[] | null): boolean {
+  if (!b || a.length !== b.length) return false;
+  return a.every((s, i) => s.normalize('NFC') === b[i].normalize('NFC'));
+}
+
 /** The written-form half, derived from the syllable row.
  *
  * Unchanged syllables mean the reviewer left the word as it stands - keep_ours, the
@@ -123,6 +131,11 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   // yes/no, which is what stops the screen from only being able to record agreement.
   const [syllables, setSyllables] = useState<string[] | null>(null);
   const [editingLetters, setEditingLetters] = useState(false);
+  /** The syllables as they stood when the letters editor was opened, so Discard can put
+   * them back. Snapshotted on OPEN rather than on load, so tone choices made carefully
+   * before opening the letters editor survive a discard - only what changed inside the
+   * letters editor is thrown away. */
+  const [lettersSnapshot, setLettersSnapshot] = useState<string[] | null>(null);
   const [spelling, setSpelling] = useState<SpellingChoice | null>(null);
   const [syllableAction, setSyllableAction] = useState<'keep_manual' | 'accept_programmatic' | undefined>(undefined);
   const [definitionText, setDefinitionText] = useState('');
@@ -140,6 +153,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     setSpelling(null);
     setSyllables(null);
     setEditingLetters(false);
+    setLettersSnapshot(null);
     setSyllableAction(undefined);
     setShowTools(false);
     getEntryReview(wordId)
@@ -267,12 +281,37 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
             syllables={syllables}
             onChange={setSyllables}
             editingLetters={editingLetters}
-            onEditLetters={() => setEditingLetters(true)}
-            onStopEditingLetters={() => setEditingLetters(false)}
+            onEditLetters={() => {
+              setLettersSnapshot(syllables);
+              setEditingLetters(true);
+            }}
+            onKeepLetters={() => {
+              setLettersSnapshot(null);
+              setEditingLetters(false);
+            }}
+            onCancelLetters={() => {
+              if (lettersSnapshot) setSyllables(lettersSnapshot);
+              setLettersSnapshot(null);
+              setEditingLetters(false);
+            }}
+            lettersDirty={lettersSnapshot !== null && !sameSyllables(lettersSnapshot, syllables)}
           />
 
           <p aria-label="Spelling comparison">
             Reads: <strong>{proposed}</strong>
+            {/* Says so when the reviewer has deviated from the record, and from what.
+                Without this, tapping a tone produced no acknowledgement that anything
+                had changed - and no way to find the way back other than remembering it.
+                Every alternative is visible in the grid, so naming the original is
+                enough; a second reset button would clutter the primary path. */}
+            {proposed.normalize('NFC') !== review.displayText.normalize('NFC') ? (
+              <>
+                {' '}
+                <span className="changed-note" aria-label="Changed from">
+                  (changed from {review.displayText})
+                </span>
+              </>
+            ) : null}
             {upstreamForm ? (
               <>
                 <br />

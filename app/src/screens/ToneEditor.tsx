@@ -62,11 +62,17 @@ export interface ToneEditorProps {
   /** Syllables of the word as it currently stands, capitalization preserved. */
   syllables: string[];
   onChange: (syllables: string[]) => void;
-  /** Whether the letters boxes are revealed. Owned by the parent so the reset is
-   * visible next to the rest of the pending decision. */
+  /** Whether the letters boxes are revealed. Owned by the parent, along with the
+   * snapshot Cancel restores - the pending decision lives there, not here. */
   editingLetters: boolean;
   onEditLetters: () => void;
-  onStopEditingLetters: () => void;
+  /** Leave the letters editor, keeping what was typed. */
+  onKeepLetters: () => void;
+  /** Leave the letters editor, throwing away everything changed since it opened. */
+  onCancelLetters: () => void;
+  /** Whether anything has actually changed since the letters editor opened, so Cancel
+   * can say whether there is anything to cancel. */
+  lettersDirty: boolean;
 }
 
 export function ToneEditor({
@@ -74,7 +80,9 @@ export function ToneEditor({
   onChange,
   editingLetters,
   onEditLetters,
-  onStopEditingLetters,
+  onKeepLetters,
+  onCancelLetters,
+  lettersDirty,
 }: ToneEditorProps) {
   function setSyllable(index: number, value: string) {
     onChange(syllables.map((s, i) => (i === index ? value : s)));
@@ -193,9 +201,19 @@ export function ToneEditor({
 
       <div className="btn-row">
         {editingLetters ? (
-          <button type="button" className="btn btn-secondary" onClick={onStopEditingLetters}>
-            Done with letters
-          </button>
+          <>
+            <button type="button" className="btn btn-secondary" onClick={onKeepLetters}>
+              Done with letters
+            </button>
+            {/* The way out of a half-finished correction. Without it, someone who
+                opened the letters editor by mistake, or typed themselves into a mess,
+                had no route back to the word as it was - only "Done", which keeps
+                whatever is in the boxes. Disabled when nothing has changed, so it also
+                answers "have I actually altered anything?". */}
+            <button type="button" className="btn btn-danger" onClick={onCancelLetters} disabled={!lettersDirty}>
+              Discard changes
+            </button>
+          </>
         ) : (
           <button type="button" className="btn btn-secondary" onClick={onEditLetters}>
             The letters are wrong
@@ -205,7 +223,8 @@ export function ToneEditor({
       {editingLetters ? (
         <p className="field-note">
           Changing the letters says the word itself was wrong, which is rarer than a tone being wrong. The underdots in
-          ẹ ọ ṣ are letters, not tone marks.
+          ẹ ọ ṣ are letters, not tone marks. <strong>Discard changes</strong> puts the word back as it was when you
+          opened this.
         </p>
       ) : null}
     </div>

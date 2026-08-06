@@ -256,6 +256,24 @@ describe('the comparison line says WHICH kind of difference it is', () => {
     expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('the same.');
   });
 
+  it('says so when the reviewer has deviated from the record, and from what', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+
+    expect(screen.queryByLabelText('Changed from')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Syllable 2 high tone'));
+    expect(screen.getByLabelText('Changed from')).toHaveTextContent('changed from dùjẹ̀kù');
+  });
+
+  it('stops saying so once the reviewer puts it back', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+
+    await user.click(screen.getByLabelText('Syllable 2 high tone'));
+    await user.click(screen.getByLabelText('Syllable 2 low tone'));
+    expect(screen.queryByLabelText('Changed from')).not.toBeInTheDocument();
+  });
+
   it('says there is nothing to compare against for an uncited word', async () => {
     await loaded(entryUncitedFixture, false);
     expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('not linked to a Wiktionary etymology yet');
@@ -319,6 +337,75 @@ describe('correcting the letters', () => {
       // this is the client's half of that invariant.
       expect((body.newSyllables as string[]).join('')).toBe(body.newDisplayText);
     });
+  });
+
+  it('offers a way out: Discard puts the word back as it was when the editor opened', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'xyz');
+    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('xyz');
+
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    // Back to the normal flow, with the word restored.
+    expect(screen.queryByLabelText('Letters of syllable 1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('dùjẹ̀kù');
+
+    // And submitting now claims nothing was changed.
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
+  });
+
+  it('Discard is disabled until something has actually changed', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeDisabled();
+
+    const box = screen.getByLabelText('Letters of syllable 2');
+    await user.clear(box);
+    await user.type(box, 'ba');
+
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeEnabled();
+  });
+
+  it('keeps tone choices made BEFORE the letters editor was opened', async () => {
+    // The snapshot is taken on open, not on load, so a discard throws away only what
+    // happened inside the letters editor - not careful work done before it.
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.click(screen.getByLabelText('Syllable 3 high tone'));
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'xyz');
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({ action: 'respell', newDisplayText: 'dùjẹ̀kú' }),
+    );
+  });
+
+  it('Done with letters keeps what was typed', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+    const box = screen.getByLabelText('Letters of syllable 3');
+    await user.clear(box);
+    await user.type(box, 'ko');
+    await user.click(screen.getByRole('button', { name: 'Done with letters' }));
+
+    expect(screen.queryByLabelText('Letters of syllable 3')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
   });
 
   it('does not offer a tone control for a syllable that cannot carry tone', async () => {

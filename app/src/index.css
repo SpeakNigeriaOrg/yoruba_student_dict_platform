@@ -672,6 +672,10 @@ audio {
   padding: 2px 6px;
   white-space: nowrap;
 }
+.changed-note {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
 .syllable-letters {
   width: 100%;
   box-sizing: border-box;
