@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { AssignmentsList } from './AssignmentsList.js';
+import { AXIS_ORDER } from '../taskQueue.js';
 import assignmentsFixture from '../fixtures/assignments.json';
 
 afterEach(() => {
@@ -25,13 +26,25 @@ describe('AssignmentsList', () => {
     });
     expect(screen.getByText(/a made-up test word/)).toBeInTheDocument();
 
-    // Same per-axis status badges as the browse-all-words list (including
-    // audio, which this screen never showed at all before).
+    // Same per-axis status badges as the browse-all-words list, and ALL FOUR axes. The badge row
+    // has fallen behind the axis list twice - once for audio, then for example - and each time a
+    // word read as complete here while the task queue still counted a task outstanding on it.
     const row = screen.getByText('fixturegencompoundspelling').closest('li')!;
     expect(row).toHaveTextContent('entry: not yet decided');
     expect(row).toHaveTextContent('etymology: not yet decided');
-    expect(row).toHaveTextContent('etymology: not yet decided');
     expect(row).toHaveTextContent('audio: not yet recorded');
+    expect(row).toHaveTextContent('example: not yet given');
+  });
+
+  it('shows a badge for every axis in AXIS_ORDER, so the row cannot fall behind the queue again', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => assignmentsFixture }));
+    render(<AssignmentsList onSelect={() => {}} />);
+    await waitFor(() => expect(screen.getByText('fixturegencompoundspelling')).toBeInTheDocument());
+
+    const row = screen.getByText('fixturegencompoundspelling').closest('li')!;
+    for (const axis of AXIS_ORDER) {
+      expect(row.textContent, `no badge for the ${axis} axis`).toContain(`${axis}:`);
+    }
   });
 
   it('calls onSelect with the wordId when a row is clicked', async () => {

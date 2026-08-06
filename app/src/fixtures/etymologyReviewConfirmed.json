@@ -5,14 +5,13 @@
     "fixturegenconfirmed_compoundspelling"
   ],
   "definition": null,
+  "entryType": null,
   "axisDecided": {
     "entry": false,
     "etymology": false,
     "audio": false
   },
   "componentsProposal": [],
-  "usedInProposal": [],
-  "usedAsComponentOf": [],
   "components": [
     "fixturegenconfirmed_part_word"
   ],

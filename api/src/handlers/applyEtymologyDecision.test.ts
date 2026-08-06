@@ -103,6 +103,99 @@ describe('applyEtymologyDecision', () => {
     expect(decision.rowCount).toBe(0);
   });
 
+  describe('a phrase is respelled by its components, because that is where its spelling came from', () => {
+    // createPhrase derives display_text (parts joined by spaces) and syllables (parts' syllables
+    // concatenated) at authoring time. Nothing re-derived them afterwards, so editing a phrase's
+    // word list left the phrase spelled as its OLD parts. Not cosmetic: publish compares a
+    // recording's frozen recorded_display_text/recorded_syllables to these columns with exact
+    // equality, so a silent respell takes the phrase's audio out of the game.
+    // The file's shared insertWord fixes display_text to 'x', which cannot show a join.
+    async function insertSpelledWord(wordId: string, displayText: string, syllables: string[]) {
+      await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
+        wordId,
+        displayText,
+        syllables,
+      ]);
+    }
+
+    async function insertPhrase(wordId: string, displayText: string, syllables: string[], componentIds: string[]) {
+      await pool.query(
+        "insert into golden_record (word_id, display_text, syllables, entry_type) values ($1, $2, $3, 'phrase')",
+        [wordId, displayText, syllables],
+      );
+      for (const [position, componentWordId] of componentIds.entries()) {
+        await pool.query(
+          'insert into golden_record_components (word_id, component_position, component_word_id) values ($1, $2, $3)',
+          [wordId, position, componentWordId],
+        );
+      }
+    }
+
+    it('re-derives display_text and syllables from the new word list', async () => {
+      const one = `${NS}ph_one`;
+      const two = `${NS}ph_two`;
+      const three = `${NS}ph_three`;
+      const phrase = `${NS}ph_phrase`;
+      await insertSpelledWord(one, 'ẹ', ['ẹ']);
+      await insertSpelledWord(two, 'jọ̀ọ́', ['jọ̀', 'ọ́']);
+      await insertSpelledWord(three, 'gbà', ['gbà']);
+      await insertPhrase(phrase, 'ẹ jọ̀ọ́', ['ẹ', 'jọ̀', 'ọ́'], [one, two]);
+
+      await applyEtymologyDecision(
+        pool,
+        phrase,
+        { componentsAction: 'custom', components: [one, three] },
+        curatorUserId,
+      );
+
+      const row = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [phrase],
+      );
+      expect(row.rows[0].display_text).toBe('ẹ gbà');
+      expect(row.rows[0].syllables).toEqual(['ẹ', 'gbà']);
+    });
+
+    it('keeps the submitted ORDER, because the order is the phrase', async () => {
+      const one = `${NS}ord_one`;
+      const two = `${NS}ord_two`;
+      const phrase = `${NS}ord_phrase`;
+      await insertSpelledWord(one, 'abo', ['a', 'bo']);
+      await insertSpelledWord(two, 'adìyẹ', ['a', 'dì', 'yẹ']);
+      await insertPhrase(phrase, 'adìyẹ abo', ['a', 'dì', 'yẹ', 'a', 'bo'], [two, one]);
+
+      await applyEtymologyDecision(pool, phrase, { componentsAction: 'custom', components: [one, two] }, curatorUserId);
+
+      const row = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [phrase],
+      );
+      expect(row.rows[0].display_text).toBe('abo adìyẹ');
+      expect(row.rows[0].syllables).toEqual(['a', 'bo', 'a', 'dì', 'yẹ']);
+    });
+
+    it('leaves an ordinary word alone - its spelling is authored, not derived', async () => {
+      const part = `${NS}plain_part`;
+      const word = `${NS}plain_word`;
+      await insertSpelledWord(part, 'abo', ['a', 'bo']);
+      await insertSpelledWord(word, 'authored', ['aut', 'hored']);
+
+      await applyEtymologyDecision(
+        pool,
+        word,
+        { componentsAction: 'custom', components: [part] },
+        curatorUserId,
+      );
+
+      const row = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [word],
+      );
+      expect(row.rows[0].display_text).toBe('authored');
+      expect(row.rows[0].syllables).toEqual(['aut', 'hored']);
+    });
+  });
+
   it('rejects a word_id that does not exist', async () => {
     await expect(
       applyEtymologyDecision(pool, `${NS}nonexistent_word`, { componentsAction: 'confirm_atomic' }, curatorUserId),

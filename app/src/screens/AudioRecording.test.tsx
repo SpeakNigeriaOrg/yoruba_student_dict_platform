@@ -103,34 +103,72 @@ function installDefaultFetchMock() {
 }
 
 describe('AudioRecording', () => {
-  it('is not an agreement-only screen: the pronunciation being recorded can be corrected', async () => {
+  it('is not an agreement-only screen: the tones being recorded can be corrected', async () => {
     // The defect class this guards against is a review surface whose only action is
     // agreement - it does not merely annoy reviewers, it corrupts the evidence,
     // because every recorded vote says yes when yes is the only thing clickable.
     // The audio axis is inherently generative (the act is contributing a recording),
-    // and both fields describing what is being said are editable, so a speaker who
-    // disagrees with the spelling or the split records what they actually say.
+    // and the tone of every syllable is one tap away, so a speaker who disagrees with
+    // the tones on record says what they actually say.
     installDefaultFetchMock();
     render(<AudioRecording wordId="wòhun" isCurator={false} />);
 
-    await waitFor(() => expect(screen.getByLabelText('Spelling')).toBeInTheDocument());
-    expect(screen.getByLabelText('Spelling')).not.toBeDisabled();
-    expect(screen.getByLabelText('Syllables (comma-separated)')).not.toBeDisabled();
+    await waitFor(() => expect(screen.getByLabelText('Tone of syllable 1')).toBeInTheDocument());
+    for (const tone of ['high', 'mid', 'low']) {
+      expect(screen.getByRole('button', { name: `Syllable 1 ${tone} tone` })).toBeEnabled();
+    }
   });
 
   beforeEach(() => {
     installDefaultFetchMock();
   });
 
-  it('defaults the pronunciation fields from the word being reviewed', async () => {
+  it('shows the syllables as separate columns with their tone highlighted, not a comma-separated string', async () => {
+    // The screen this replaces asked for a spelling and a comma-separated syllable list, which made
+    // it the one place in the app where tone is a diacritic to squint at.
     installAudioMocks(TWO_SYLLABLE_SAMPLES);
     render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('wòhun')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Tone of syllable 1')).toBeInTheDocument());
+
+    // One column per syllable of `wòhun`, and each column's own tone is the pressed button.
+    expect(screen.getByLabelText('Tone of syllable 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Tone of syllable 3')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Syllable 1 low tone' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Syllable 2 mid tone' })).toHaveAttribute('aria-pressed', 'true');
+
+    // And no comma-separated field survives for a word that syllabifies.
+    expect(screen.queryByLabelText('Syllables (comma-separated)')).not.toBeInTheDocument();
+  });
+
+  it('sends the grid\'s syllables, and a spelling that is exactly their join', async () => {
+    // One source of truth. The old pair of text fields let a speaker submit a split that disagreed
+    // with the spelling they had just typed - and recorded_syllables then froze that disagreement.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
     });
-    expect(screen.getByLabelText('Spelling')).toHaveValue('wòhun');
-    expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('wò,hun');
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Tone of syllable 1'));
+
+    // Change one tone, so what is submitted is demonstrably the grid's state and not the fixture's.
+    await user.click(screen.getByRole('button', { name: 'Syllable 1 high tone' }));
+    await recordBothTakes(user);
+    await waitFor(() => screen.getByText(/matching the expected count/));
+    await user.click(screen.getByRole('button', { name: 'Submit recording' }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
+      const body = JSON.parse((post![1] as RequestInit).body as string);
+      expect(body.recordedSyllables).toEqual(['wó', 'hun']);
+      expect(body.recordedDisplayText).toBe('wóhun');
+      expect((body.recordedSyllables as string[]).join('')).toBe(body.recordedDisplayText);
+    });
   });
 
   it('records recording 1, then recording 2, segments it, and reports a matching syllable count', async () => {
@@ -163,27 +201,58 @@ describe('AudioRecording', () => {
     expect(screen.getByRole('button', { name: 'Submit recording' })).toBeDisabled();
   });
 
-  it('re-checks the count against an edited syllables field, not the word\'s original syllabification', async () => {
-    // A speaker recording a pronunciation that legitimately differs from
-    // golden_record's current syllable split (e.g. before a later
-    // spelling decision converges on something else) edits the syllables
-    // field down to 1 - the 1-syllable synthetic audio should now match.
+  it('falls back to plain fields for a word that cannot be syllabified, which must stay recordable', async () => {
+    // syllabifySpans returns null for Ajami, hyphenated forms and interjections - 805 of 5,580
+    // corpus forms. There is no grid to draw for those, and rewriting them into one would mangle
+    // the spelling, so they keep the text fields. Same branch EntryReview takes.
+    //
+    // This also replaces the old "edit the syllables field down to 1 syllable" route: for a word
+    // that DOES syllabify, the count is now a function of the spelling.
     installAudioMocks(ONE_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
+    const hyphenated = { ...entryFixture, displayText: 'gan-an', syllables: ['gan', 'an'] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => hyphenated });
+        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
 
-    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
-    await waitFor(() => screen.getByText('wòhun'));
+    render(<AudioRecording wordId="ganan" isCurator={false} />);
+    await waitFor(() => expect(screen.getByLabelText('Cannot show a tone grid')).toBeInTheDocument());
 
+    expect(screen.getByLabelText('Spelling')).toHaveValue('gan-an');
+    expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('gan,an');
+    expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
+
+    // And the count check still works off that field, so the word remains recordable.
     const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
     await user.clear(syllablesField);
-    await user.type(syllablesField, 'kasu');
-
+    await user.type(syllablesField, 'ganan');
     await recordBothTakes(user);
 
     await waitFor(() => {
       expect(screen.getByText(/Detected 1 syllables, matching the expected count\./)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Submit recording' })).toBeEnabled();
+  });
+
+  it('names the syllable and its tone against each detected clip, not the timings', async () => {
+    // Start/end seconds and VAD confidence are our diagnostics. The question the speaker is
+    // answering is "is this the right syllable, said the right way", which neither number helps with.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const user = userEvent.setup();
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Tone of syllable 1'));
+    await recordBothTakes(user);
+
+    const segments = await waitFor(() => screen.getByLabelText('Detected segments'));
+    expect(segments).toHaveTextContent('wò');
+    expect(segments).toHaveTextContent('low');
+    expect(segments).toHaveTextContent('hun');
+    expect(segments).not.toHaveTextContent('confidence');
   });
 
   it('submits both takes (and every segment clip) inline as base64 audio, with the recorded pronunciation, to the register endpoint', async () => {

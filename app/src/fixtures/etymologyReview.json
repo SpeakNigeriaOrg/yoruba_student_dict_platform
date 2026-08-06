@@ -5,6 +5,7 @@
     "fixturegen2_compoundspelling"
   ],
   "definition": "a made-up compound word for fixture generation",
+  "entryType": null,
   "axisDecided": {
     "entry": false,
     "etymology": false,
@@ -32,19 +33,6 @@
       "previewGlossesAreExactMatches": false
     }
   ],
-  "usedInProposal": [
-    {
-      "kaikkiForm": "fixturegen2_usedintargetspelling",
-      "wordId": "fixturegen2_usedintarget_otherword",
-      "targetSpellingConfirmed": false,
-      "ambiguous": false,
-      "possibleMatches": [],
-      "provenance": "synthesized_from_etymology",
-      "previewGlosses": [],
-      "previewGlossesAreExactMatches": false
-    }
-  ],
-  "usedAsComponentOf": [],
   "components": [
     "fixturegen2_compound_madeupword"
   ],

@@ -833,3 +833,11 @@ audio {
   font-size: 0.85rem;
   color: var(--ink-soft);
 }
+
+/* The syllable a detected clip belongs to, in the segment review. Bigger than the surrounding
+   text because it is the thing being checked - the clip is verified against this syllable and its
+   tone, not against a timing. */
+.segment-syllable {
+  font-size: 1.25rem;
+  margin-right: 6px;
+}

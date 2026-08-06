@@ -75,7 +75,7 @@ describe('getEtymologyReview', () => {
     await expect(getEtymologyReview(pool, `${NS}nonexistent`, userId)).rejects.toThrow(WordNotFoundError);
   });
 
-  it('surfaces both componentsProposal (forward) and usedInProposal (reverse), resolved against real golden_record entries', async () => {
+  it('surfaces componentsProposal, resolved against real golden_record entries', async () => {
     const compoundId = `${NS}compound_word`;
     const partOneId = `${NS}part_one`;
     const partTwoId = `${NS}part_two`;
@@ -104,11 +104,14 @@ describe('getEtymologyReview', () => {
     expect(result.componentsProposal.map((p) => p.wordId)).toEqual(
       expect.arrayContaining([partOneId, partTwoId]),
     );
-    expect(result.usedInProposal).toHaveLength(1);
-    expect(result.usedInProposal[0]).toMatchObject({
-      wordId: usedInTargetId,
-      provenance: 'synthesized_from_etymology',
-    });
+    // The reverse direction is NOT returned, even though this fixture has a real used-in candidate
+    // (usedInTargetId) that resolves. Nothing on the etymology screen could ever act on it -
+    // applyEtymologyDecision only writes component rows for the word under review - so it was
+    // decoration on 47 of 80 cited words, and after the request flow landed the shared row
+    // component told a reader to add it as a PART of this word, which is the inverse relationship.
+    // Derived terms are the example axis's subject.
+    expect('usedInProposal' in result).toBe(false);
+    expect('usedAsComponentOf' in result).toBe(false);
   });
 
   it('surfaces plaintext etymologyText even when there are no structured component candidates to propose', async () => {
@@ -138,8 +141,27 @@ describe('getEtymologyReview', () => {
 
     expect(result.components).toEqual([wordId]);
     expect(result.componentsProposal).toEqual([]);
-    expect(result.usedInProposal).toEqual([]);
-    expect(result.usedAsComponentOf).toEqual([]);
+    expect(result.entryType).toBeNull();
+  });
+
+  it('reports entryType so the screen can ask a phrase the right question', async () => {
+    // A phrase's identity IS its constituent words, so "does this break into parts?" and "it has
+    // no parts" are not available answers about one - and the screen was offering both, because the
+    // response carried no way to tell a phrase from a word.
+    const partId = `${NS}phrase_part`;
+    const phraseId = `${NS}phrase_entry`;
+    await insertWord(partId, `${NS}phrasepart`);
+    await pool.query(
+      "insert into golden_record (word_id, display_text, syllables, entry_type) values ($1, $2, $3, 'phrase')",
+      [phraseId, `${NS}phrasepart ${NS}phrasepart`, [`${NS}phrasepart`]],
+    );
+    await pool.query(
+      'insert into golden_record_components (word_id, component_word_id, component_position) values ($1, $2, 0)',
+      [phraseId, partId],
+    );
+
+    expect((await getEtymologyReview(pool, phraseId, userId)).entryType).toBe('phrase');
+    expect((await getEtymologyReview(pool, partId, userId)).entryType).toBeNull();
   });
 
   it('surfaces syllables, definition, and per-axis decided status as read-only context', async () => {

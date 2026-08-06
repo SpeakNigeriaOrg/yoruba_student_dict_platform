@@ -358,8 +358,14 @@ function PhraseTab() {
         <ul aria-label="Phrase components" className="plain-list">
           {components.map((c) => (
             <li key={c.wordId} className="search-result-row">
+              {/* The word and its meaning, not the word_id. Picking a word_id IS picking one
+                  etymology - that is the point - but the id is a key, and leading with it made the
+                  list unreadable to anyone who does not already know our naming scheme. The meaning
+                  is what tells two etymologies of one spelling apart, which is the actual choice
+                  being made here. */}
               <span className="result-text">
-                {c.wordId} ({c.displayText})
+                <strong>{c.displayText}</strong>
+                {c.definition ? ` — ${c.definition}` : ''}
               </span>
               <button type="button" className="btn btn-danger" onClick={() => removeComponent(c.wordId)}>
                 Remove
@@ -372,7 +378,8 @@ function PhraseTab() {
         search={searchVocab}
         renderResult={(r) => (
           <>
-            <strong>{r.wordId}</strong> - {r.displayText}
+            <strong>{r.displayText}</strong>
+            {r.definition ? ` — ${r.definition}` : ''}
           </>
         )}
         onSelect={addComponent}

@@ -238,11 +238,15 @@ describe('AddWord - Phrase tab', () => {
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
 
     await user.click(screen.getByRole('button', { name: 'Search' }));
-    await waitFor(() => screen.getByText('existing_component', { exact: false }));
+    // Found and listed by its SPELLING, not its word_id. Picking a word_id is still picking one
+    // etymology - that is the point of the phrase tab - but the id is a key, and leading with it
+    // made the list unreadable to anyone who did not already know our naming scheme.
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
     const componentsList = screen.getByLabelText('Phrase components');
-    expect(componentsList).toHaveTextContent('existing_component');
+    expect(componentsList).toHaveTextContent('existingspelling');
+    expect(componentsList).not.toHaveTextContent('existing_component');
 
     await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
@@ -282,10 +286,10 @@ describe('AddWord - Phrase tab', () => {
     render(<AddWord />);
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
     await user.click(screen.getByRole('button', { name: 'Search' }));
-    await waitFor(() => screen.getByText('existing_component', { exact: false }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    expect(screen.getByLabelText('Phrase components')).toHaveTextContent('existing_component');
+    expect(screen.getByLabelText('Phrase components')).toHaveTextContent('existingspelling');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
     expect(screen.getByText('No components picked yet.')).toBeInTheDocument();

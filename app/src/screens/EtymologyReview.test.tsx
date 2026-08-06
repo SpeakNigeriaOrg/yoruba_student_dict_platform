@@ -21,7 +21,7 @@ async function openCuratorTools(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('EtymologyReview', () => {
-  it('renders real componentsProposal and usedInProposal data (fixture generated via the real getEtymologyReview handler against real Postgres)', async () => {
+  it('renders the real componentsProposal, and says what a decomposition IS before asking', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
@@ -30,20 +30,20 @@ describe('EtymologyReview', () => {
       expect(screen.getByText('fixturegen2_compoundspelling')).toBeInTheDocument();
     });
 
-    // Forward: both real proposed components resolve to real word_ids.
+    // Both real proposed components resolve, and are named by their SPELLING - never by the
+    // word_id, which is a key and which this screen's own rule says not to show.
     expect(screen.getByText('fixturegen2_partonespelling')).toBeInTheDocument();
-    expect(screen.getByText(/fixturegen2_partone_madeuppart/)).toBeInTheDocument();
     expect(screen.getByText('fixturegen2_parttwospelling')).toBeInTheDocument();
+    expect(screen.queryByText(/fixturegen2_partone_madeuppart/)).not.toBeInTheDocument();
 
-    // Reverse: the newly-surfaced usedInProposal.
-    expect(screen.getByText('fixturegen2_usedintargetspelling')).toBeInTheDocument();
-    expect(screen.getByText(/fixturegen2_usedintarget_otherword/)).toBeInTheDocument();
-
-    // No confirmed usedAsComponentOf relationships yet in this fixture - now
-    // curator-only, since it is provenance about OTHER words and rendered
-    // "No confirmed relationships yet." on essentially every word.
-    await openCuratorTools(userEvent.setup());
-    expect(screen.getByText('No confirmed relationships yet.')).toBeInTheDocument();
+    // The task explains itself with a real example, rather than leaving a reader to infer the genre
+    // from a heading. This is the one thing the axis had only in a code comment.
+    const explanation = screen.getByLabelText('What this task is');
+    expect(explanation).toHaveTextContent('ibùsùn');
+    expect(explanation).toHaveTextContent('place');
+    expect(explanation).toHaveTextContent('sleep');
+    // And it makes the etymology-not-spelling point, which is the whole reason for the axis.
+    expect(explanation).toHaveTextContent('placenta');
 
     // Read-only entry context, and the axis status chip row.
     expect(screen.getByText(/a made-up compound word for fixture generation/)).toBeInTheDocument();
@@ -371,29 +371,24 @@ describe('EtymologyReview', () => {
     expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
   });
 
-  it('flags a plaintext-only etymology note as "no structured breakdown" when there is no proposal at all', async () => {
-    const fixture = { ...etymologyConfirmedFixture, componentsProposal: [], etymologyText: 'Clipping of an older form.' };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+  it("shows Wiktionary's prose etymology, in one wording whether or not there is a breakdown", async () => {
+    // Two variants used to exist - one framed as a warning ("No structured breakdown exists for
+    // this word"), one as a supplement. The warning was scolding the reader about our data: most
+    // words have no structured breakdown, and that is not a problem with the word.
+    for (const [fixture, wordId, spelling] of [
+      [{ ...etymologyConfirmedFixture, componentsProposal: [], etymologyText: 'Clipping of an older form.' }, 'fixturegenconfirmed_compound_word', 'fixturegenconfirmed_compoundspelling'],
+      [{ ...etymologyFixture, etymologyText: 'Clipping of an older form.' }, 'fixturegen2_compound_madeupword', 'fixturegen2_compoundspelling'],
+    ] as const) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+      render(<EtymologyReview wordId={wordId} isCurator={true} />);
+      await waitFor(() => screen.getByText(spelling));
 
-    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
-    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
-
-    const note = screen.getByLabelText('Kaikki etymology note');
-    expect(note).toHaveTextContent('No structured breakdown exists for this word');
-    expect(note).toHaveTextContent('Clipping of an older form.');
-  });
-
-  it('shows a plaintext etymology note as a supplement, not a warning, when a structured proposal also exists', async () => {
-    const fixture = { ...etymologyFixture, etymologyText: 'Also cognate with a related form.' };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
-
-    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
-    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
-
-    const note = screen.getByLabelText('Kaikki etymology note');
-    expect(note).toHaveTextContent('Kaikki also has this plaintext etymology note, alongside the structured breakdown above');
-    expect(note).toHaveTextContent('Also cognate with a related form.');
-    expect(note.className).not.toContain('warning-banner');
+      const note = screen.getByLabelText('Kaikki etymology note');
+      expect(note).toHaveTextContent('Wiktionary also describes where this word comes from');
+      expect(note).toHaveTextContent('Clipping of an older form.');
+      expect(note.className).not.toContain('warning-banner');
+      cleanup();
+    }
   });
 
   it('does not render a Kaikki etymology note section when there is none', async () => {
@@ -403,6 +398,167 @@ describe('EtymologyReview', () => {
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
     expect(screen.queryByLabelText('Kaikki etymology note')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // A phrase decomposes into its words, each one a specific etymology
+  // -------------------------------------------------------------------------
+  // A phrase used to get the word screen, which is nonsense: diagnoseEntry short-circuits phrases so
+  // every proposal is empty, which made the heading read "Does this word break into parts?" and
+  // offered "It has no parts" - about an object whose identity IS its parts. Our one real phrase,
+  // `ẹ jọ̀ọ́`, has zero component rows while its own citation reason says its identity comes from
+  // them.
+
+  const phraseFixture = {
+    ...etymologyFixture,
+    displayText: 'ẹ jọ̀ọ́',
+    syllables: ['ẹ', 'jọ̀', 'ọ́'],
+    entryType: 'phrase' as const,
+    componentsProposal: [],
+    components: [],
+  };
+
+  it('asks a phrase which words it is made of, and never whether it has parts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => phraseFixture }));
+    render(<EtymologyReview wordId="e_joo_please" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('What this task is'));
+
+    expect(screen.getByRole('heading', { name: 'Which words is this phrase made of?' })).toBeInTheDocument();
+    // Neither is an available answer about a phrase.
+    expect(screen.queryByRole('button', { name: /has no parts/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reject this etymology/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/single indivisible word/)).not.toBeInTheDocument();
+  });
+
+  it('opens the picker for a phrase without being asked, because linking the words IS the task', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => phraseFixture }));
+    render(<EtymologyReview wordId="e_joo_please" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('What this task is'));
+
+    // A word hides the picker until the reviewer says there are parts; a phrase has no such question.
+    expect(screen.getByLabelText('Component picker')).toBeInTheDocument();
+    expect(screen.getByLabelText('Phrase with no words linked')).toHaveTextContent('ẹ jọ̀ọ́');
+  });
+
+  it('explains a phrase in terms of its words, and still makes the etymology-not-spelling point', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => phraseFixture }));
+    render(<EtymologyReview wordId="e_joo_please" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('What this task is'));
+
+    const explanation = screen.getByLabelText('What this task is');
+    expect(explanation).toHaveTextContent('A phrase is made of words');
+    expect(explanation).toHaveTextContent('placenta');
+  });
+
+  it("names a requested word as pending but does NOT block saving - the locked 'prompt, don't gate' decision", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/etymology')) return Promise.resolve({ ok: true, json: async () => phraseFixture });
+      if (url.includes('/vocab-search')) return Promise.resolve({ ok: true, json: async () => ({ results: [] }) });
+      if (url.includes('/kaikki-search')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                form: 'jọ̀ọ́',
+                pos: 'particle',
+                glosses: ['please'],
+                matchedVia: 'yoruba_exact',
+                altOfTargets: [],
+                standardForms: ['jọ̀ọ́'],
+                entryId: 'en-joo-yo-particle-ABC1',
+                etymologyNumber: '1',
+              },
+            ],
+          }),
+        });
+      }
+      if (url === '/api/component-requests') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ wordId: 'joo_please', outcome: 'requested', displayText: 'jọ̀ọ́', contributionId: 'c1' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<EtymologyReview wordId="e_joo_please" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('What this task is'));
+
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByLabelText('Component search results'));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Words awaiting approval')).toBeInTheDocument());
+    expect(screen.getByLabelText('Words awaiting approval')).toHaveTextContent('You can still save');
+
+    // And saving genuinely works with a word still pending.
+    await user.click(screen.getByRole('button', { name: 'Propose: Save these parts' }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
+      expect(JSON.parse((post![1] as RequestInit).body as string)).toMatchObject({
+        axis: 'etymology',
+        componentsAction: 'custom',
+        components: ['joo_please'],
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A single root is not a decomposition
+  // -------------------------------------------------------------------------
+
+  it('offers nothing to accept when Wiktionary derives the word from one root', async () => {
+    // 9 of the 21 words with any proposal have exactly one candidate (`ọba → ba`, `ẹwà → wà`).
+    // Accepting one would assert a word is composed of ONE word.
+    const fixture = {
+      ...etymologyFixture,
+      components: [],
+      componentsProposal: [
+        { kaikkiForm: 'ba', wordId: 'ba_word', ambiguous: false, possibleMatches: [], previewGlosses: ['to hide'] },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+    render(<EtymologyReview wordId="oba_king" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByRole('button', { name: /Accept proposed components/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Single root note')).toHaveTextContent('not a breakdown into parts');
+    // The honest answers remain available.
+    expect(screen.getByRole('button', { name: 'Propose: It has no parts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'It does have parts' })).toBeInTheDocument();
+  });
+
+  it('still offers accept when there are two or more parts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.getByRole('button', { name: 'Propose: Accept proposed components' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Single root note')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // The reverse direction is gone
+  // -------------------------------------------------------------------------
+
+  it('renders no "Used in" section at all, for any fixture', async () => {
+    // It was never actionable here - applyEtymologyDecision writes component rows only for the word
+    // under review - and once the request flow landed, the shared row component told the reader to
+    // add such a word as a PART of this one, recording the inverse relationship.
+    for (const fixture of [etymologyFixture, etymologyConfirmedFixture, phraseFixture]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+      render(<EtymologyReview wordId="w" isCurator={true} />);
+      await waitFor(() => screen.getByLabelText('Etymology review'));
+
+      expect(screen.queryByText(/Used in/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Used in proposals')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Already confirmed as used in/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No confirmed relationships yet/)).not.toBeInTheDocument();
+      cleanup();
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -780,7 +936,8 @@ describe('EtymologyReview', () => {
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
-    expect(screen.getByText(/not in golden_record yet/)).toBeInTheDocument();
+    // The reader's words, not the table's - `not in golden_record yet` named a database table.
+    expect(screen.getByText(/not in the dictionary yet/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Add "fixturegen2_missingpart" to vocabulary' }));
     await waitFor(() => screen.getByRole('button', { name: 'Select' }));
@@ -805,7 +962,8 @@ describe('EtymologyReview', () => {
     // Refetches the whole review after creating the word - the proposal
     // now resolves to the freshly-created word_id.
     await waitFor(() => {
-      expect(screen.getByText(/→ resolves to fixturegen2_missingpart_newword/)).toBeInTheDocument();
+      // Resolved is now stated in the reader's terms, not as an arrow to a word_id.
+      expect(screen.getByText(/already in the dictionary/)).toBeInTheDocument();
     });
     expect(etymologyCallCount).toBe(2);
   });

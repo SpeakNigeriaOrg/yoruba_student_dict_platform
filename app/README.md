@@ -65,6 +65,15 @@ punctuation so a *sentence* example still gets a grid on its last word). Its tex
 holds the composed phrase and is the only state - what the contributor reads is exactly
 what gets stored.
 
+**Every screen that describes a pronunciation uses the grid**, including the audio axis. That one
+used to ask for a spelling plus a *comma-separated* syllable list, which made it the single place
+where tone was a diacritic to squint at, and let a contributor submit a split that disagreed with the
+spelling they had just typed — which `recorded_syllables` then froze forever. Now the syllables are
+the state and the spelling is their join, so the two cannot disagree, and the segment review names
+each clip's syllable and tone instead of its start/end seconds and VAD confidence (our diagnostics,
+not the speaker's business). A word `syllabifySpans` refuses keeps the plain fields, because those
+805-of-5,580 forms must stay recordable.
+
 ### One thing tone buttons alone could not say
 
 A nasal after a vowel is either a **coda** nasalising that vowel or a **syllable of its own**,
@@ -141,6 +150,34 @@ Enforced in the API, not just here — `listUtterances` never sends a volunteer 
 this is not a hidden section with the audio still sitting in the page. The empty-state text is gone
 too, for a volunteer: "no other speakers have recorded this word yet" is itself information about
 other people.
+
+## The etymology axis says what it is asking
+
+It never did. It led with `Proposed components (this word's own decomposition)`, told a volunteer a
+part was `not in golden_record yet`, and left the reason the axis exists in a code comment. It now
+opens with a real example from this dictionary:
+
+> **ibùsùn** (bed) is **ibi** (place) + **sùn** (sleep). Note that **ibi** also means "placenta" and
+> "evil": a part is one *specific* meaning, not just a spelling.
+
+That example is chosen because both parts are ambiguous in the corpus — `ibi` has three etymologies,
+`sùn` has three — so it teaches the concept *and* the etymology-not-spelling rule at once.
+
+**Measuring the axis first changed what got built.** It has never produced a single confirmed
+decomposition: 21 of 80 cited words have any proposal, **9 of those are a single root** (`ọba → ba`),
+and **none of the parts of the remaining 12 are in the dictionary**. So every proposal was always
+unacceptable, and the request flow is what unblocks it. Three consequences:
+
+- **A one-root proposal is no longer offered as a breakdown.** A word is not composed *of one word* —
+  that is a derivation, and Wiktionary's prose says it better. Same defect class as an "accept" with
+  nothing to accept.
+- **"Used in" is gone.** It was never actionable here: decisions only ever write component rows for
+  the word under review, so nothing on the screen could act on the reverse direction. Derived terms
+  are the example axis's subject, and it teaches them properly. The response no longer carries the
+  field either.
+- **A phrase is asked which words it is made of**, one per word, each resolved to a specific
+  etymology. It used to get the word screen and be offered "It has no parts" — about an object whose
+  identity *is* its parts. Unresolved words are named but do not block saving.
 
 ## A review screen must never be answerable only one way
 

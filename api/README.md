@@ -245,6 +245,22 @@ Every `golden_record` row has an `upstream_citations` row - cited, or explicitly
 exempt with a reason. Phrases are recorded exempt by `createPhrase.ts` rather than
 left blank, so "no citation row" means exactly one thing: not done.
 
+### A phrase's spelling is derived, so its components own it
+
+That exemption says a phrase's *"identity comes from its components, each of which cites its own
+etymology"* - and `createPhrase` builds `display_text` (the parts' spellings joined) and `syllables`
+(their syllables concatenated) from them at authoring time. Nothing re-derived either afterwards, so
+editing a phrase's word list on the etymology axis left the phrase spelled as its **old** parts. Not
+cosmetic: publish compares a recording's frozen `recorded_display_text`/`recorded_syllables` to those
+columns with exact equality, so a silent respell takes the phrase's audio out of the game.
+`resyncPhraseFromComponents` now runs on both write paths - the action path and the consensus one -
+and is a no-op for ordinary words, whose spelling is authored rather than derived.
+
+`getEtymologyReview` also reports `entryType`, because the screen has to ask a phrase a different
+question, and it no longer returns `usedInProposal`/`usedAsComponentOf` - nothing on that screen could
+ever act on the reverse direction, since decisions only write component rows for the word under
+review.
+
 ### A requested word carries its citation from the moment it is asked for
 
 A volunteer building an etymology can name a part we do not hold.

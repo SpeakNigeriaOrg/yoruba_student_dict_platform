@@ -1,20 +1,29 @@
 // handlers/getEtymologyReview.ts
 //
-// Backs GET /words/{wordId}/etymology - surfaces both directions of
-// Kaikki-suggested etymology data for a curator to reconcile, neither of
-// which was surfaced anywhere before this:
-//   - componentsProposal: this word's own proposed decomposition (forward -
-//     already computed and written to Postgres, but nothing read it into
-//     an API response until now).
-//   - usedInProposal: kaikki-yoruba's own etymology-driven "which other
-//     words use this one as a component" (reverse) - confirmed real and
-//     substantial (mọ̀ "to know" has 33 distinct real entries), but never
-//     even reached Postgres before this session's ingest/ extension.
-// Both are proposals, not facts - applying a curator's decision on either
-// (accepting a forward component, or accepting that this word IS a
-// component of some other word) already goes through
-// applyEtymologyDecision.ts's existing accept_proposed/custom actions
-// unchanged; this endpoint only needs to show what there is to reconcile.
+// Backs GET /words/{wordId}/etymology - what this word is made of.
+//
+// ---------------------------------------------------------------------------
+// ONE direction, on purpose
+// ---------------------------------------------------------------------------
+// This used to return the reverse direction too - usedInProposal ("which other words use this
+// one") and usedAsComponentOf (the confirmed version of the same). Both are gone, because
+// neither was ever actionable HERE: applyEtymologyDecision only ever writes component rows for
+// the word under review (see its delete/insert, scoped to `word_id = $1`), so nothing on this
+// screen could move an item from usedInProposal into usedAsComponentOf. That transition happens
+// when the OTHER word's own etymology axis is decided.
+//
+// This endpoint's old header claimed otherwise - that "accepting that this word IS a component of
+// some other word" went through accept_proposed unchanged. It never did: accept_proposed submits
+// componentsProposal only. So the reverse direction was decoration on 47 of 80 cited words, and
+// after the request flow landed it became worse than decoration - the shared row component told a
+// reader to "add it from the picker below", which would have recorded the inverse relationship.
+//
+// Derived terms are the example axis's subject, and it teaches them properly ("A phrase built
+// from this one: adìyẹ → abo adìyẹ"). They do not belong here.
+//
+// componentsAxisFields still computes both - it is verified against the Python engine's own
+// output and that parity is worth more than deleting two fields from it. They stop at this
+// boundary rather than being carried into a response nobody should render.
 
 import {
   buildComponentOwnersIndex,
@@ -22,7 +31,7 @@ import {
   componentsAxisFields,
   diagnoseEntry,
   orthographyInsensitiveForm,
-  type ComponentsAxisFieldsResult,
+  type ComponentsProposalItem,
   type DiagnosticsOverrides,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
@@ -30,11 +39,23 @@ import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { loadAxisDecided, loadDefinition, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
-export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
+/** Deliberately NOT `extends ComponentsAxisFieldsResult`: that type carries the reverse-direction
+ * fields, and spreading it is how they reached this response in the first place. Listing what the
+ * screen actually uses means a field added there cannot silently arrive here. */
+export interface EtymologyReviewResult {
   wordId: string;
   displayText: string;
   syllables: string[];
   definition: string | null;
+  /** 'phrase' for a composed multi-word entry, null for a single word.
+   *
+   * The screen needs this because the two ask genuinely different questions. A phrase's identity
+   * IS its constituent words - that is literally what its citation exemption says - so "does this
+   * break into parts?" and "it has no parts" are not available answers about one, and it was being
+   * offered both. */
+  entryType: 'phrase' | null;
+  componentsProposal: ComponentsProposalItem[];
+  components: string[];
   /** Whether each of the platform's review axes already has a
    * word_decisions row for this word - shown as read-only context so a
    * curator reviewing etymology (the only axis this screen has an
@@ -104,8 +125,12 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     displayText: entry.displayText,
     syllables: entry.syllables,
     definition,
+    entryType: entry.type === 'phrase' ? 'phrase' : null,
     axisDecided,
     etymologyText: diagnosis.matchedEtymologyText ?? null,
-    ...fields,
+    // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
+    // usedAsComponentOf stop here.
+    componentsProposal: fields.componentsProposal,
+    components: fields.components,
   };
 }

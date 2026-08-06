@@ -11,7 +11,7 @@
 import type {
   CheckDefinitionResult,
   CheckSyllableSplitResult,
-  ComponentsAxisFieldsResult,
+  ComponentsProposalItem,
   ConsensusBucket,
   ConsensusSummary,
   DiagnoseEntryResult,
@@ -199,13 +199,22 @@ export function getAxisStatus(wordId: string): Promise<AxisDecided> {
 }
 
 // Mirrors api/src/handlers/getEtymologyReview.ts's EtymologyReviewResult.
-export interface EtymologyReviewResult extends ComponentsAxisFieldsResult {
+//
+// Listed field by field rather than extending ComponentsAxisFieldsResult, which is how the
+// reverse-direction fields (usedInProposal, usedAsComponentOf) reached this screen in the first
+// place. The server no longer sends them - see that handler for why they were never actionable here.
+export interface EtymologyReviewResult {
   wordId: string;
   displayText: string;
   syllables: string[];
   definition: string | null;
+  /** 'phrase' for a composed multi-word entry. A phrase's identity IS its constituent words, so it
+   * is asked which words it is made of rather than whether it has parts. */
+  entryType: 'phrase' | null;
+  componentsProposal: ComponentsProposalItem[];
+  components: string[];
   axisDecided: AxisDecided;
-  // Kaikki's free-text etymology prose, distinct from componentsProposal
+  // Wiktionary's free-text etymology prose, distinct from componentsProposal
   // (the structured decomposition) - present even for entries with no
   // structured breakdown at all.
   etymologyText: string | null;

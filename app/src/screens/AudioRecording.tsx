@@ -38,7 +38,9 @@
 // rather than any speaker's.
 
 import { useEffect, useState } from 'react';
+import { syllabifySpans, toneOf } from '@yoruba-student-dict-platform/shared';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
+import { ToneGrid } from './ToneGrid.js';
 import { sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
@@ -121,17 +123,34 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const [pronunciationText, setPronunciationText] = useState('');
+  // ---------------------------------------------------------------------------
+  // The pronunciation is composed on a tone grid, not typed
+  // ---------------------------------------------------------------------------
+  // This screen used to ask for a spelling plus a COMMA-SEPARATED syllables string. That made it
+  // the one place in the app where tone is a diacritic to squint at, and every other screen makes
+  // tone central and unavoidable - a contributor never types an accent, they choose a tone and the
+  // mark is generated. It also let someone produce a split that disagreed with the spelling they
+  // had just typed, which is precisely what recorded_syllables freezing then preserved forever.
+  //
+  // So the syllables ARE the state, and the spelling is their join - one source of truth, and the
+  // two can no longer disagree. 0006's freeze semantics are unchanged: this is still what the
+  // speaker says, captured at recording time, and still allowed to differ from golden_record.
+  //
+  // Consequence worth knowing: the syllable COUNT is now a function of the spelling. Changing it
+  // means editing the spelling or using the nasal control on the grid, not retyping a list.
+  const [recordedSyllables, setRecordedSyllables] = useState<string[]>([]);
+  /** Set when syllabifySpans refuses the word - Ajami, hyphenated forms, interjections (805 of
+   * 5,580 corpus forms). Those must stay recordable, so they fall back to plain text fields, the
+   * same branch and the same reason EntryReview already has. */
+  const [unsplittableText, setUnsplittableText] = useState<string | null>(null);
+  const pronunciationText = unsplittableText ?? recordedSyllables.join('');
   // The word's spelling as golden_record currently holds it. Kept separate from
   // pronunciationText, which the speaker may edit before recording - the
   // divergence warning is about the RECORD, so quoting the editable field would
   // make the message change as they type.
   const [goldenDisplayText, setGoldenDisplayText] = useState('');
-  const [pronunciationSyllablesText, setPronunciationSyllablesText] = useState('');
-  const recordedSyllables = pronunciationSyllablesText
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  /** Only used on the unsplittable fallback path, where the split cannot be derived. */
+  const [fallbackSyllablesText, setFallbackSyllablesText] = useState('');
 
   const recorder = useAudioRecorder();
   const [take1Blob, setTake1Blob] = useState<Blob | null>(null);
@@ -161,12 +180,23 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
     setStatus(null);
     setPreviousRecordings(null);
     setPreviousRecordingsError(null);
+    setUnsplittableText(null);
     getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
-        setPronunciationText(result.displayText);
         setGoldenDisplayText(result.displayText);
-        setPronunciationSyllablesText(result.syllables.join(','));
+        // Seeded from the SPELLING, so the grid's syllables and the spelling agree from the first
+        // render. golden_record.syllables can disagree with its own display_text (one production
+        // word does), and seeding from the stored split would carry that disagreement into a
+        // recording that then freezes it.
+        const spans = syllabifySpans(result.displayText);
+        if (spans === null) {
+          setUnsplittableText(result.displayText);
+          setFallbackSyllablesText(result.syllables.join(','));
+          setRecordedSyllables(result.syllables);
+        } else {
+          setRecordedSyllables(spans);
+        }
         setLoaded(true);
       })
       .catch((err: unknown) => {
@@ -285,29 +315,50 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
       <h2>{pronunciationText}</h2>
 
       <div className="take-step" aria-label="Pronunciation">
-        <h3>Pronunciation you're recording</h3>
+        <h3>The tones you're about to say</h3>
         <p>
-          Edit these if you're recording a different spelling or tone than what's shown - the recording is tied to
-          the pronunciation you actually say, not necessarily this word's current spelling.
+          One column per syllable, and the highlighted row is its tone — high, mid or low. Change one if you are about to
+          say it differently: the recording is tied to the pronunciation you actually produce, not to this word's current
+          spelling.
         </p>
-        <div className="field">
-          <label htmlFor="pronunciation-text-field">Spelling</label>
-          <input
-            id="pronunciation-text-field"
-            type="text"
-            value={pronunciationText}
-            onChange={(e) => setPronunciationText(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="pronunciation-syllables-field">Syllables (comma-separated)</label>
-          <input
-            id="pronunciation-syllables-field"
-            type="text"
-            value={pronunciationSyllablesText}
-            onChange={(e) => setPronunciationSyllablesText(e.target.value)}
-          />
-        </div>
+        {unsplittableText === null ? (
+          <ToneGrid syllables={recordedSyllables} onChange={setRecordedSyllables} />
+        ) : (
+          // syllabifySpans refused this word, so there is no grid to draw and it must not be
+          // silently rewritten into one. Same branch EntryReview takes, for the same reason.
+          <>
+            <p className="field-note" aria-label="Cannot show a tone grid">
+              This word can't be broken into syllables automatically — hyphens and unusual spellings do that — so its
+              tones can't be shown as a grid. Type what you are going to say instead.
+            </p>
+            <div className="field">
+              <label htmlFor="pronunciation-text-field">Spelling</label>
+              <input
+                id="pronunciation-text-field"
+                type="text"
+                value={unsplittableText}
+                onChange={(e) => setUnsplittableText(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="pronunciation-syllables-field">Syllables (comma-separated)</label>
+              <input
+                id="pronunciation-syllables-field"
+                type="text"
+                value={fallbackSyllablesText}
+                onChange={(e) => {
+                  setFallbackSyllablesText(e.target.value);
+                  setRecordedSyllables(
+                    e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  );
+                }}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="take-step">
@@ -369,15 +420,30 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
               recording 2 with a clearer pause between each syllable, or correct the syllables field above.
             </p>
           )}
+          {/* The syllable and its tone, not the timings. Start/end seconds and VAD confidence are
+              our diagnostics; the question the speaker is answering is "is this the right syllable,
+              said the right way", and neither number helps them answer it. When the counts do not
+              match there is no syllable to name for the extra clips, so those fall back to a
+              position - saying nothing would be worse than saying which one is unaccounted for. */}
           <ul aria-label="Detected segments">
-            {segmentReviews.map((review, i) => (
-              <li key={i}>
-                Syllable {i + 1} ({review.segment.startTimeSeconds.toFixed(2)}s - {review.segment.endTimeSeconds.toFixed(2)}s,
-                confidence {review.segment.confidence.toFixed(2)})
-                <br />
-                <audio controls src={URL.createObjectURL(review.clip)} />
-              </li>
-            ))}
+            {segmentReviews.map((review, i) => {
+              const syllable = recordedSyllables[i];
+              const tone = syllable ? toneOf(syllable) : null;
+              return (
+                <li key={i}>
+                  {syllable ? (
+                    <>
+                      <strong className="segment-syllable">{syllable}</strong>
+                      {tone ? <span className="badge">{tone}</span> : null}
+                    </>
+                  ) : (
+                    <span>Clip {i + 1} — more clips than syllables</span>
+                  )}
+                  <br />
+                  <audio controls src={URL.createObjectURL(review.clip)} />
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

@@ -67,7 +67,10 @@ export function AllWordsList({ onSelect }: AllWordsListProps) {
       ) : (
         <ul aria-label="All words" className="card-list">
           {filtered.map((w) => {
-            const allDecided = w.axisDecided.entry && w.axisDecided.etymology && w.axisDecided.audio;
+            // All four, including example - otherwise a word with three axes done renders as
+            // complete while the task queue still counts a task outstanding on it.
+            const allDecided =
+              w.axisDecided.entry && w.axisDecided.etymology && w.axisDecided.audio && w.axisDecided.example;
             return (
               <li key={w.wordId} className={`card-row${allDecided ? ' decided' : ''}`}>
                 <button type="button" className="row-title" onClick={() => onSelect(w.wordId)}>

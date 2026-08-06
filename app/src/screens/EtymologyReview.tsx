@@ -329,14 +329,17 @@ function ProposalItemRow({
   return (
     <li>
       <strong>{item.kaikkiForm}</strong>
+      {/* Said in the reader's terms. `→ resolves to <word_id>` and `not in golden_record yet` were
+          both written for whoever was debugging the resolver: one shows a key this screen's own
+          rule says never to show, the other names a database table. */}
       {item.wordId ? (
-        <span> → resolves to {item.wordId}</span>
+        <span> — already in the dictionary</span>
       ) : item.ambiguous ? (
-        <span> — ambiguous: more than one existing word shares this exact spelling</span>
+        <span> — more than one word in the dictionary is spelled this way, so which one is meant is unclear</span>
       ) : item.possibleMatches.length > 0 ? (
-        <span> — possibly the same as: {item.possibleMatches.join(', ')} (tone differs, not auto-resolved)</span>
+        <span> — the dictionary has this spelling with different tone marks, which may or may not be the same word</span>
       ) : (
-        <span> — not in golden_record yet</span>
+        <span> — not in the dictionary yet</span>
       )}
       {item.previewGlosses.length > 0 ? <span> ({item.previewGlosses.join('; ')})</span> : null}
       {/* Adding the missing word posts to POST /api/words, which is curator-only
@@ -505,9 +508,20 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setDraftComponents((prev) => prev.filter((id) => id !== componentWordId));
   }
 
+  const isPhrase = review?.entryType === 'phrase';
   const hasRealExistingComponents =
     review !== null && review.components.length > 0 && !(review.components.length === 1 && review.components[0] === wordId);
-  const hasProposal = (review?.componentsProposal.length ?? 0) > 0;
+  /** A one-part "breakdown" is not a breakdown.
+   *
+   * 9 of the 21 words in the dictionary that have any proposal at all have exactly one candidate -
+   * `ọba → ba`, `ẹwà → wà`, `ọgbọ́n → gbọ́n`. Accepting one asserts that a word is composed of ONE
+   * word, which is a morphological derivation (a prefix on a verb root), not a decomposition into
+   * dictionary entries. Wiktionary's own prose says that better, and it is already on screen below.
+   *
+   * So it is not offered as a breakdown to accept - the same rule this screen already applies to
+   * "accept" with nothing to accept and "reject" with nothing to reject. */
+  const hasProposal = (review?.componentsProposal.length ?? 0) > 1;
+  const singleRootProposal = review?.componentsProposal.length === 1 ? review.componentsProposal[0] : null;
   /** Parts Wiktionary names that we hold no word for. `abo adìyẹ` is the live example: `adìyẹ`
    * was not in the dictionary, so "Accept proposed components" could only ever answer "Can't
    * accept yet" - the accept path submits word_ids, and one of them did not exist. Offering an
@@ -515,6 +529,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
    * this file already fixed once, so the unresolvable case gets the picker instead. */
   const unresolvedProposalForms = (review?.componentsProposal ?? []).filter((p) => !p.wordId).map((p) => p.kaikkiForm);
   const proposalFullyResolves = hasProposal && unresolvedProposalForms.length === 0;
+  /** Drafted words that a curator still has to approve. Reported, never blocking. */
+  const pendingPhraseWordCount = draftComponents.filter((id) => draftLabels[id]?.pending).length;
 
   if (error) return <p role="alert" className="error-banner">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
@@ -532,41 +548,77 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         showAxisChips={showAxisChips}
       />
 
-      <h3>Proposed components (this word's own decomposition)</h3>
-      {review.componentsProposal.length === 0 ? (
-        <p>No Kaikki-proposed decomposition for this word.</p>
-      ) : (
-        <ul aria-label="Proposed components">
-          {review.componentsProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
-          ))}
-        </ul>
+      {/* What the reader is here to do, said once, with a real example from this dictionary.
+        *
+        * `ibùsùn` is the right example precisely because both of its parts are ambiguous: `ibi` is
+        * also "placenta" and "evil", `sùn` is also "to aim" and "to complain". So it teaches the
+        * concept AND the rule that a part is one specific meaning rather than a spelling - which is
+        * the whole reason this axis exists and was previously argued only in a code comment.
+        *
+        * AddWord has the equivalent sentence for its own act ("A word enters the dictionary as one
+        * Wiktionary etymology..."); this axis had none. */}
+      <div className="field-note" aria-label="What this task is">
+        {isPhrase ? (
+          <p>
+            A phrase is made of words, and each word is one <em>specific</em> meaning. In{' '}
+            <strong>ibùsùn</strong> (bed) the parts are <strong>ibi</strong> (place) and <strong>sùn</strong> (sleep) —
+            but <strong>ibi</strong> can also mean "placenta" or "evil", so naming the part means naming <em>which</em>{' '}
+            one. Link each word of this phrase to the meaning it has here.
+          </p>
+        ) : (
+          <p>
+            Some Yoruba words are built from other words. <strong>ibùsùn</strong> (bed) is{' '}
+            <strong>ibi</strong> (place) + <strong>sùn</strong> (sleep) — recording that lets a learner find words they
+            already know inside a longer one. Note that <strong>ibi</strong> also means "placenta" and "evil": a part is
+            one <em>specific</em> meaning, not just a spelling.
+          </p>
+        )}
+      </div>
+
+      {isPhrase ? null : (
+        <>
+          <h3>What Wiktionary suggests this is built from</h3>
+          {review.componentsProposal.length === 0 ? (
+            <p>Wiktionary suggests no breakdown for this word.</p>
+          ) : (
+            <ul aria-label="Proposed components">
+              {review.componentsProposal.map((item, i) => (
+                <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
+              ))}
+            </ul>
+          )}
+          {/* Shown, but not as something to accept - see hasProposal. */}
+          {singleRootProposal ? (
+            <p className="field-note" aria-label="Single root note">
+              Wiktionary derives this word from <strong>{singleRootProposal.kaikkiForm}</strong> alone. That is where it
+              comes from historically, not a breakdown into parts — a word is not made <em>of</em> one word — so there is
+              nothing to accept here. If it really does break into two or more words, say so below.
+            </p>
+          ) : null}
+        </>
       )}
 
-      {review.etymologyText ? (
-        <div aria-label="Kaikki etymology note" className={review.componentsProposal.length === 0 ? 'warning-banner' : undefined}>
-          {review.componentsProposal.length === 0 ? (
-            <p>
-              <strong>No structured breakdown exists for this word</strong> - Kaikki only has this plaintext
-              etymology note:
-            </p>
-          ) : (
-            <p>Kaikki also has this plaintext etymology note, alongside the structured breakdown above:</p>
-          )}
+      {review.etymologyText && !isPhrase ? (
+        <div aria-label="Kaikki etymology note">
+          <p>Wiktionary also describes where this word comes from, in prose:</p>
           <p><em>{review.etymologyText}</em></p>
         </div>
       ) : null}
 
-      <h3>Used in (other words that use this one as a component)</h3>
-      {review.usedInProposal.length === 0 ? (
-        <p>No other words are proposed as using this one.</p>
-      ) : (
-        <ul aria-label="Used in proposals">
-          {review.usedInProposal.map((item, i) => (
-            <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
-          ))}
-        </ul>
-      )}
+      {/* The "Used in (other words that use this one as a component)" section stood here, with the
+          curator-only "Already confirmed as used in" below it. Both are gone.
+
+          Nothing on this screen could ever act on them: applyEtymologyDecision writes component
+          rows only for the word under review, so no button here could move an item from
+          usedInProposal into usedAsComponentOf - that happens when the OTHER word's etymology axis
+          is decided. It was decoration on 47 of 80 cited words, and once the request flow landed it
+          became actively wrong, because ProposalItemRow is shared: a "Used in" row told the reader
+          to "add it from the picker below", and that picker adds parts OF this word. Following it
+          recorded the inverse relationship.
+
+          Derived terms are the example axis's subject, and it teaches them properly there ("A
+          phrase built from this one: adìyẹ → abo adìyẹ"). The response no longer carries either
+          field - see getEtymologyReview.ts. */}
 
       {/* Assembling a component list out of word_ids, and the free-text note, are
         * curator instruments - the same judgement as EntryReview's curator tools,
@@ -574,9 +626,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         * break into parts?" does not need a vocabulary search, and "No components
         * picked yet." above an empty picker was pure noise on a phone.
         *
-        * "Already confirmed as used in" lives here too: it is provenance about
-        * other words, and it rendered "No confirmed relationships yet." on
-        * essentially every word. */}
+        * "Already confirmed as used in" used to live here too and is gone with the rest of the
+        * reverse direction - see the note above. */}
       {isCurator ? (
         <div className="curator-tools">
           <button type="button" className="btn btn-secondary" aria-expanded={showTools} onClick={() => setShowTools((v) => !v)}>
@@ -584,17 +635,6 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           </button>
           {!showTools ? null : (
             <div aria-label="Etymology curator tools">
-              <h4>Already confirmed as used in</h4>
-              {review.usedAsComponentOf.length === 0 ? (
-                <p>No confirmed relationships yet.</p>
-              ) : (
-                <ul aria-label="Confirmed used in">
-                  {review.usedAsComponentOf.map((id) => (
-                    <li key={id}>{id}</li>
-                  ))}
-                </ul>
-              )}
-
               <div className="field">
                 <label htmlFor="etymology-note-field">Note</label>
                 <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
@@ -616,8 +656,22 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         * Confirming atomic is the one answer that always applies, because it is a
         * positive claim about the word ("it has no parts") rather than a response
         * to a proposal. */}
-      <h3>{hasProposal ? 'Is this breakdown right?' : 'Does this word break into parts?'}</h3>
-      {!hasProposal && !hasRealExistingComponents ? (
+      <h3>
+        {isPhrase
+          ? 'Which words is this phrase made of?'
+          : hasProposal
+            ? 'Is this breakdown right?'
+            : 'Does this word break into parts?'}
+      </h3>
+      {/* A phrase is never asked whether it has parts. Its identity IS its constituent words - that
+          is literally what its citation exemption says - so "It has no parts" and "Reject this
+          etymology" are not available answers about one, and it was being offered both. */}
+      {isPhrase && !hasRealExistingComponents ? (
+        <p className="field-note" aria-label="Phrase with no words linked">
+          No words are linked to this phrase yet. Add one for each word of <strong>{review.displayText}</strong>.
+        </p>
+      ) : null}
+      {!isPhrase && !hasProposal && !hasRealExistingComponents ? (
         <p className="field-note">
           Wiktionary proposes no breakdown for this word, and none is on record. If it is a single indivisible word, say
           so - that is a real answer, not a fallback.
@@ -647,33 +701,57 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
             {label('Confirm components')}
           </button>
         ) : null}
-        <button
-          type="button"
-          className={`btn ${hasProposal || hasRealExistingComponents ? 'btn-secondary' : 'btn-primary'}`}
-          onClick={confirmAtomic}
-        >
-          {label(hasProposal ? 'No, it has no parts' : 'It has no parts')}
-        </button>
+        {isPhrase ? null : (
+          <button
+            type="button"
+            className={`btn ${hasProposal || hasRealExistingComponents ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={confirmAtomic}
+          >
+            {label(hasProposal ? 'No, it has no parts' : 'It has no parts')}
+          </button>
+        )}
         {/* The other half of the question. Without this the screen could only ever
-            record agreement, whatever the reviewer actually thought. */}
-        {!hasProposal && !claimsHasParts ? (
+            record agreement, whatever the reviewer actually thought.
+            For a phrase the picker is the task itself, so it opens without being asked for. */}
+        {!isPhrase && !hasProposal && !claimsHasParts ? (
           <button type="button" className="btn btn-secondary" onClick={() => setClaimsHasParts(true)}>
             It does have parts
           </button>
         ) : null}
-        {hasProposal ? (
+        {hasProposal && !isPhrase ? (
           <button type="button" className="btn btn-danger" onClick={rejectProposed}>
             {label('Reject this etymology')}
           </button>
         ) : null}
       </div>
-      {claimsHasParts || (isCurator && showTools) ? (
+      {isPhrase || claimsHasParts || (isCurator && showTools) ? (
         <div aria-label="Component picker">
-          <h4>Which words is it made of?</h4>
+          <h4>{isPhrase ? 'The words of this phrase, in order' : 'Which words is it made of?'}</h4>
           <p className="field-note">
-            Search for each part. Words already in the dictionary come first; anything below them comes from Wiktionary,
-            and picking it asks a curator to add it. Either way you can finish here now.
+            {isPhrase ? (
+              <>
+                One entry per word of <strong>{review.displayText}</strong>, in the order they are said. Words already in
+                the dictionary come first; anything below them comes from Wiktionary, and picking it asks a curator to add
+                it. Either way you can finish here now.
+              </>
+            ) : (
+              <>
+                Search for each part. Words already in the dictionary come first; anything below them comes from
+                Wiktionary, and picking it asks a curator to add it. Either way you can finish here now.
+              </>
+            )}
           </p>
+          {/* Named and counted, but NOT a gate - the locked decision. A phrase whose words are only
+              requested is still a better record than one with nothing linked, and the volunteer who
+              knew the words should not be held until a curator acts. */}
+          {isPhrase && pendingPhraseWordCount > 0 ? (
+            <p className="field-note" aria-label="Words awaiting approval">
+              {pendingPhraseWordCount === 1
+                ? '1 of these words is not in the dictionary yet and has been requested.'
+                : `${pendingPhraseWordCount} of these words are not in the dictionary yet and have been requested.`}{' '}
+              You can still save — the links complete when a curator adds them.
+            </p>
+          ) : null}
           {draftComponents.length === 0 ? null : (
             <ul aria-label="Draft components" className="plain-list">
               {draftComponents.map((componentWordId) => {
