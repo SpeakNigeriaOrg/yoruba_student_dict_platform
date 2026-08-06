@@ -37,9 +37,16 @@ export interface PhraseComposerProps {
   onChange: (value: string) => void;
   label: string;
   placeholder?: string;
+  /** Distinguishes this composer's field and per-word controls from another's.
+   *
+   * Required rather than defaulted: the id was hardcoded when there was one composer in the
+   * app, and a second one (the word-request flow) would have produced duplicate DOM ids and
+   * an ambiguous getByLabelText - which surfaces as a baffling test failure rather than as
+   * the real bug. Making it required means a new caller cannot reintroduce that. */
+  id: string;
 }
 
-export function PhraseComposer({ value, onChange, label, placeholder }: PhraseComposerProps) {
+export function PhraseComposer({ value, onChange, label, placeholder, id }: PhraseComposerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   /** Where to put the caret after a programmatic edit. Null when the browser should keep
    * whatever it had - i.e. on ordinary typing. */
@@ -75,9 +82,9 @@ export function PhraseComposer({ value, onChange, label, placeholder }: PhraseCo
   return (
     <div aria-label="Phrase composer">
       <div className="field">
-        <label htmlFor="phrase-field">{label}</label>
+        <label htmlFor={`${id}-field`}>{label}</label>
         <input
-          id="phrase-field"
+          id={`${id}-field`}
           ref={inputRef}
           type="text"
           value={value}

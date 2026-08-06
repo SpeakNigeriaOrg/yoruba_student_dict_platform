@@ -172,6 +172,7 @@ async function approveNewEntry(client: Queryable, proposedValue: NewEntryPropose
         wordId: proposedValue.proposedWordId,
         displayText: proposedValue.displayText,
         syllables: proposedValue.syllables,
+        definition: proposedValue.definition ?? null,
         citation: proposedValue.citation,
       },
       approvedBy,

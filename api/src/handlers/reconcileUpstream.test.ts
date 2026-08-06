@@ -159,6 +159,28 @@ describe('reconcileUpstream', () => {
     expect(result.exempt).toBeGreaterThanOrEqual(1);
   });
 
+  it('NAMES the exempt words, not just how many there are', async () => {
+    // An exempt citation is the durable record that a word awaits a Wiktionary entry - which the
+    // volunteer word-request path depends on. A record nobody can find is not a record: this was
+    // counted and never listed, so on the day Wiktionary gained the entry there was nothing to
+    // act on.
+    await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
+      `${NS}exemptnamed`,
+      'kọ̀mpútà',
+      ['kọ̀m', 'pú', 'tà'],
+    ]);
+    await writeCitationInTransaction(pool, `${NS}exemptnamed`, { exemptReason: 'no Wiktionary entry yet' }, curatorUserId);
+
+    const result = await reconcileUpstream(pool);
+    expect(result.exemptItems).toContainEqual({
+      wordId: `${NS}exemptnamed`,
+      displayText: 'kọ̀mpútà',
+      exemptReason: 'no Wiktionary entry yet',
+    });
+    // And the count stays the length of that list, so the two can never disagree.
+    expect(result.exempt).toBe(result.exemptItems.length);
+  });
+
   it('counts uncited words separately, so a clean report is never mistaken for full coverage', async () => {
     await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
       `${NS}uncited`,

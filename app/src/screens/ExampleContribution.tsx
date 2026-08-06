@@ -164,6 +164,7 @@ export function ExampleContribution({ wordId, onDecided }: ExampleContributionPr
         <>
           <h3>Write it</h3>
           <PhraseComposer
+            id="example-phrase"
             value={phrase}
             onChange={setPhrase}
             label={`The ${KIND_LABEL[kind]}, in Yoruba`}

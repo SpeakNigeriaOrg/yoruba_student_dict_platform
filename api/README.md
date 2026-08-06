@@ -245,6 +245,61 @@ Every `golden_record` row has an `upstream_citations` row - cited, or explicitly
 exempt with a reason. Phrases are recorded exempt by `createPhrase.ts` rather than
 left blank, so "no citation row" means exactly one thing: not done.
 
+### A requested word carries its citation from the moment it is asked for
+
+A volunteer building an etymology can name a part we do not hold.
+`resolveOrRequestComponent.ts` turns "the part I mean is this etymology" into a
+`word_id`, with three outcomes decided **server-side**, because only the server sees
+production and the corpus at once:
+
+| The picked etymology | Outcome |
+|---|---|
+| already cited by a word | **resolve** to that word - no request. The common case: all 80 cited words resolve this way |
+| its derived id is free | **request** it - a `new_entry` contribution carrying `citation: {entryId}`, the gloss as its definition, and syllables |
+| its derived id is *claimed* - by a word, or by another etymology's pending request | a genuine collision. Discriminate, then request |
+
+Two things about that last row were learned by running the derivation over real production data
+rather than assumed:
+
+- **Checking `golden_record` alone is not enough.** 262 corpus entries (4.2%) share a derived id
+  with another entry. Two volunteers requesting two of those *before either is approved* would
+  both find the base id absent from `golden_record` and both be given it - two etymologies queued
+  under one `word_id`, and component references that no longer say which was meant. So
+  `isWordIdClaimed` checks pending `new_entry` requests too.
+- **The entry-id token is not always distinguishing.** For 63 of those entries it is identical as
+  well: they are case pairs like `a`/`A` ("the first letter of the Yoruba alphabet") whose ids
+  differ only in a character `discriminateWordId` lowercases away. Hence a third rung,
+  `hashDiscriminateWordId` (FNV-1a over the whole entry id - deterministic, dependency-free
+  because `shared` is browser-bundled, and case-sensitive, which is the distinction being lost).
+
+Against production today the collision branch fires for **zero** of the 6,272 entries, because
+every id that coincides with a production `word_id` belongs to a word already citing that
+etymology - i.e. it resolves. The ladder is insurance for what gets requested next, not a
+workaround for current data.
+
+The derived id (`shared/src/deriveWordId.ts`) reproduces production's existing
+convention - `orthographyInsensitiveForm` plus a slug of the first gloss, which is
+exactly how `ewa_beans` / `ewa_beauty` and `oba_king` already disambiguate. It must be
+a pure function of the etymology: a volunteer's etymology submission references the id
+the request *will* create, and two volunteers who pick the same etymology have to derive
+the same one or the consensus tally scores agreement as conflict.
+
+Nothing new was needed to apply one. `new_entry` was already the queue and
+`approveContribution` already creates the word; what was missing was a curator surface
+(now in `ReviewQueue`) and `NewEntryProposedValue.definition`, without which an approved
+request arrived meaningless. Approving creates the word at exactly the planned id, so
+every submission referencing it resolves with no rewriting and no reconciliation pass -
+tested end to end in `resolveOrRequestComponent.test.ts`, including that the same
+etymology decision raises `ComponentsNotFoundError` before approval and confirms after.
+
+A word Wiktionary lacks too takes the same endpoint with `{displayText, definition}` and
+is stored with an **exempt** citation. That is not a degraded record - per `0014` it is
+*the* record that this word awaits an upstream entry, which is why `reconcileUpstream`
+now returns `exemptItems` and not only a count. A collision on that path is **refused**
+(`WordAlreadyInDictionaryError`, 409) rather than discriminated: with no etymology to
+tell two entries apart, a same-spelling same-meaning collision means it is the word we
+already hold, and guessing either way would be silent.
+
 Two scripts, both safe to run read-only first:
 
 ```

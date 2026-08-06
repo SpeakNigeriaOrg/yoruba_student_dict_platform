@@ -51,13 +51,24 @@ function group(wordId: string, bucket: ConsensusBucket, tally: ConsensusTallyEnt
   };
 }
 
-const NO_DRIFT = { items: [], counts: { unchanged: 3, content_changed: 0, re_identified: 0, disappeared: 0 }, exempt: 1, uncited: 0 };
+const NO_DRIFT = {
+  items: [],
+  counts: { unchanged: 3, content_changed: 0, re_identified: 0, disappeared: 0 },
+  exempt: 0,
+  exemptItems: [],
+  uncited: 0,
+};
 
 function pin(glosses: string[], etymologyNumber = '1') {
   return { etymologyNumber, pos: 'noun', canonicalForm: 'ikun', glosses, etymologyText: null };
 }
 
-function mockFetch(groups: ConsensusGroup[], confirmResult?: unknown, drift: unknown = NO_DRIFT) {
+function mockFetch(
+  groups: ConsensusGroup[],
+  confirmResult?: unknown,
+  drift: unknown = NO_DRIFT,
+  contributions: unknown[] = [],
+) {
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
       return Promise.resolve({
@@ -66,10 +77,35 @@ function mockFetch(groups: ConsensusGroup[], confirmResult?: unknown, drift: unk
       });
     }
     if (url.includes('/upstream-drift')) return Promise.resolve({ ok: true, json: async () => drift });
+    if (url.includes('/contributions')) return Promise.resolve({ ok: true, json: async () => ({ contributions }) });
     return Promise.resolve({ ok: true, json: async () => ({ groups }) });
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+/** A requested word addition, as listContributions returns one. */
+function request(over: Record<string, unknown> = {}) {
+  return {
+    contributionId: 'req-1',
+    wordId: null,
+    wordDisplayText: null,
+    axis: 'new_entry',
+    proposedValue: {
+      proposedWordId: 'adiye_chicken',
+      displayText: 'adìyẹ',
+      syllables: ['a', 'dì', 'yẹ'],
+      type: 'word',
+      definition: 'chicken',
+      citation: { entryId: 'en-adiye-yo-noun-ABC1' },
+    },
+    note: 'Requested from the etymology axis as a missing component.',
+    submittedBy: 'ada@example.com',
+    submittedAt: '2026-08-01T00:00:00.000Z',
+    status: 'active',
+    waitingWords: [],
+    ...over,
+  };
 }
 
 const READY = group('ready1', 'ready', [claim('fp-a', 2, ['ada', 'ben'])]);
@@ -401,5 +437,132 @@ describe('ReviewQueue', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: 'curator role required' }) }));
     render(<ReviewQueue onOpenWord={() => {}} />);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('curator role required'));
+  });
+
+  // -------------------------------------------------------------------------
+  // Requested words - the queue that existed with no surface
+  // -------------------------------------------------------------------------
+  describe('words volunteers have asked for', () => {
+    it('lists the word, its meaning, the cited etymology and who asked', async () => {
+      mockFetch([], undefined, NO_DRIFT, [request()]);
+      render(<ReviewQueue onOpenWord={() => {}} />);
+
+      const list = await waitFor(() => screen.getByLabelText('Requested words list'));
+      expect(list).toHaveTextContent('adìyẹ');
+      expect(list).toHaveTextContent('chicken');
+      // WHICH etymology, so the created word cites one meaning rather than a spelling.
+      expect(list).toHaveTextContent('en-adiye-yo-noun-ABC1');
+      expect(list).toHaveTextContent('ada@example.com');
+    });
+
+    it('names the words waiting on it, so approve-then-confirm is visible before it bites', async () => {
+      mockFetch([], undefined, NO_DRIFT, [
+        request({ waitingWords: [{ wordId: 'abo_adiye_hen', displayText: 'abo adìyẹ' }] }),
+      ]);
+      render(<ReviewQueue onOpenWord={() => {}} />);
+
+      await waitFor(() => screen.getByLabelText('Requested words list'));
+      expect(screen.getByLabelText('Waiting on adìyẹ')).toHaveTextContent('abo adìyẹ');
+    });
+
+    it('shows the reason in place of an etymology when Wiktionary has none', async () => {
+      mockFetch([], undefined, NO_DRIFT, [
+        request({
+          proposedValue: {
+            proposedWordId: 'kompyuta_computer',
+            displayText: 'kọ̀mpútà',
+            syllables: ['kọ̀m', 'pú', 'tà'],
+            type: 'word',
+            definition: 'computer',
+            citation: { exemptReason: 'Requested by a volunteer; no Wiktionary entry found for it yet' },
+          },
+        }),
+      ]);
+      render(<ReviewQueue onOpenWord={() => {}} />);
+
+      const list = await waitFor(() => screen.getByLabelText('Requested words list'));
+      expect(list).toHaveTextContent('no Wiktionary entry');
+      expect(list).toHaveTextContent('Requested by a volunteer');
+    });
+
+    it('approving posts to the approve endpoint and reloads both queues', async () => {
+      const fetchMock = mockFetch([], undefined, NO_DRIFT, [request()]);
+      const user = userEvent.setup();
+      render(<ReviewQueue onOpenWord={() => {}} />);
+      await waitFor(() => screen.getByLabelText('Requested words list'));
+
+      await user.click(screen.getByRole('button', { name: 'Add this word' }));
+
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.some((c) => c[0] === '/api/contributions/req-1/approve')).toBe(true);
+      });
+      // The consensus queue is reloaded too: creating the word is exactly what unblocks the
+      // etymology submissions naming it.
+      const reloads = fetchMock.mock.calls.filter((c) => c[0] === '/api/consensus' && c[1]?.method !== 'POST');
+      expect(reloads.length).toBeGreaterThan(1);
+    });
+
+    it('declining excludes the request rather than deleting it', async () => {
+      const fetchMock = mockFetch([], undefined, NO_DRIFT, [request()]);
+      const user = userEvent.setup();
+      render(<ReviewQueue onOpenWord={() => {}} />);
+      await waitFor(() => screen.getByLabelText('Requested words list'));
+
+      await user.click(screen.getByRole('button', { name: 'Decline' }));
+
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.some((c) => c[0] === '/api/contributions/req-1/exclude')).toBe(true);
+      });
+    });
+
+    it('renders nothing at all when nobody has asked for a word', async () => {
+      mockFetch([], undefined, NO_DRIFT, []);
+      render(<ReviewQueue onOpenWord={() => {}} />);
+      await waitFor(() => screen.getByLabelText('Review queue'));
+      expect(screen.queryByLabelText('Requested words')).not.toBeInTheDocument();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Exempt words, findable
+  // -------------------------------------------------------------------------
+  describe('words with no Wiktionary entry', () => {
+    const DRIFT_WITH_EXEMPT = {
+      ...NO_DRIFT,
+      exempt: 1,
+      exemptItems: [
+        { wordId: 'kompyuta_computer', displayText: 'kọ̀mpútà', exemptReason: 'no Wiktionary entry found for it yet' },
+      ],
+    };
+
+    it('names them and their reason, rather than only counting them', async () => {
+      mockFetch([], undefined, DRIFT_WITH_EXEMPT);
+      render(<ReviewQueue onOpenWord={() => {}} />);
+
+      const list = await waitFor(() => screen.getByLabelText('Exempt words list'));
+      expect(list).toHaveTextContent('kọ̀mpútà');
+      expect(list).toHaveTextContent('no Wiktionary entry found for it yet');
+    });
+
+    it('opens the word, which is where the one-click re-link already lives', async () => {
+      const opened: string[] = [];
+      mockFetch([], undefined, DRIFT_WITH_EXEMPT);
+      const user = userEvent.setup();
+      render(<ReviewQueue onOpenWord={(wordId) => opened.push(wordId)} />);
+      await waitFor(() => screen.getByLabelText('Exempt words list'));
+
+      await user.click(screen.getByRole('button', { name: 'kọ̀mpútà' }));
+      expect(opened).toEqual(['kompyuta_computer']);
+    });
+
+    it('renders without throwing on a payload from before the field existed', async () => {
+      // The drift section promises to fail quietly rather than take the curator's work queue
+      // down with it, and that promise is worth nothing if a missing field throws during render.
+      mockFetch([], undefined, { ...NO_DRIFT, exemptItems: undefined });
+      render(<ReviewQueue onOpenWord={() => {}} />);
+
+      await waitFor(() => screen.getByLabelText('Upstream drift status'));
+      expect(screen.queryByLabelText('Words with no Wiktionary entry')).not.toBeInTheDocument();
+    });
   });
 });

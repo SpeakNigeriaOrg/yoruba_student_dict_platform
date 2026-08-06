@@ -47,6 +47,7 @@ function parseNewEntryInput(b: Record<string, unknown>): NewEntryProposedValue {
     type: b.type,
     components: b.components as string[] | undefined,
     ...(b.type === 'word' ? { citation: parseCitationInput(b.citation) } : {}),
+    ...(typeof b.definition === 'string' && b.definition.trim() ? { definition: b.definition.trim() } : {}),
   };
 }
 

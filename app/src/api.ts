@@ -390,6 +390,39 @@ export function submitEtymologyContribution(wordId: string, input: ApplyEtymolog
   });
 }
 
+// Mirrors api/src/handlers/resolveOrRequestComponent.ts's ResolveOrRequestResult.
+export interface ComponentRequestResult {
+  /** The word_id to use as a component. Already exists when `outcome` is 'resolved';
+   * will exist once a curator approves otherwise. Never shown to a volunteer - it is a
+   * key, and `displayText` is the word. */
+  wordId: string;
+  outcome: 'resolved' | 'requested' | 'already_requested';
+  displayText: string;
+  contributionId?: string;
+}
+
+/** "The part I mean is this Wiktionary etymology." Resolves to a word we already hold, or
+ * queues a request for the curators - either way the caller gets a word_id it can submit
+ * immediately, which is what lets a volunteer finish the task now. */
+export function requestComponent(entryId: string): Promise<ComponentRequestResult> {
+  return fetchJson('/api/component-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entryId }),
+  });
+}
+
+/** The rare path: a word Wiktionary does not have either. Same endpoint and same result shape,
+ * so the caller treats it identically - the difference is stored as an exempt citation rather
+ * than an entry id, which is also the durable record that it awaits an upstream entry. */
+export function requestUnlistedWord(displayText: string, definition: string): Promise<ComponentRequestResult> {
+  return fetchJson('/api/component-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayText, definition }),
+  });
+}
+
 // Mirrors api/src/handlers/listContributions.ts's ContributionListItem.
 export interface ContributionListItem {
   contributionId: string;
@@ -403,6 +436,21 @@ export interface ContributionListItem {
   submittedBy: string;
   submittedAt: string;
   status: string;
+  /** For 'new_entry' rows: the words whose etymology submissions already name the word this
+   * request would create. Empty on every other axis. */
+  waitingWords: Array<{ wordId: string | null; displayText: string | null }>;
+}
+
+/** The shape of a 'new_entry' contribution's proposedValue, as
+ * api/src/handlers/submitContribution.ts writes it. */
+export interface NewEntryProposal {
+  proposedWordId: string;
+  displayText: string;
+  syllables: string[];
+  type: 'word' | 'phrase';
+  definition?: string;
+  components?: string[];
+  citation?: { entryId: string } | { exemptReason: string };
 }
 
 /** Defaults to 'active' - 0013 replaced the pending/approved/rejected verdict
@@ -445,11 +493,20 @@ export interface DriftItem {
   proposedEntryId?: string;
 }
 
+export interface ExemptItem {
+  wordId: string;
+  displayText: string;
+  exemptReason: string;
+}
+
 export interface UpstreamDriftResult {
   items: DriftItem[];
   counts: Record<DriftKind, number>;
   exempt: number;
   uncited: number;
+  /** The exempt words themselves. A word with no upstream entry is recorded, not omitted - and
+   * this is what makes that record findable when Wiktionary finally gains the entry. */
+  exemptItems: ExemptItem[];
 }
 
 export function getUpstreamDrift(): Promise<UpstreamDriftResult> {

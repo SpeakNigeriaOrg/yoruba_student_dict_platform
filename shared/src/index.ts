@@ -14,3 +14,4 @@ export * from './consensus.js';
 export * from './textFingerprint.js';
 export * from './tone.js';
 export * from './upstreamPin.js';
+export * from './deriveWordId.js';

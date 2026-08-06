@@ -20,11 +20,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  approveContribution,
   confirmConsensus,
+  excludeContribution,
   getConsensus,
+  getContributions,
   getUpstreamDrift,
   repinUpstream,
+  type ContributionListItem,
   type DriftItem,
+  type ExemptItem,
+  type NewEntryProposal,
   type UpstreamDriftResult,
   type ConfirmConsensusResult,
   type ConsensusGroup,
@@ -123,6 +129,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ConfirmConsensusResult | null>(null);
   const [drift, setDrift] = useState<UpstreamDriftResult | null>(null);
+  const [requests, setRequests] = useState<ContributionListItem[]>([]);
 
   const key = (g: ConsensusGroup) => `${g.wordId}:${g.axis}`;
 
@@ -149,10 +156,22 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
     }
   }, []);
 
+  /** Requested word additions - 'new_entry' contributions. Loaded separately and non-fatally for
+   * the same reason as drift: this is a queue alongside the curator's main work, not a
+   * precondition for seeing it. */
+  const loadRequests = useCallback(async () => {
+    try {
+      setRequests((await getContributions('active')).filter((c) => c.axis === 'new_entry'));
+    } catch {
+      setRequests([]);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
     void loadDrift();
-  }, [load, loadDrift]);
+    void loadRequests();
+  }, [load, loadDrift, loadRequests]);
 
   async function confirm(items: Array<{ group: ConsensusGroup; fingerprint: string }>) {
     if (items.length === 0) return;
@@ -316,6 +335,24 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
         ),
       )}
 
+      <RequestedWordsSection
+        requests={requests}
+        busy={busy}
+        onAct={async (action) => {
+          setBusy(true);
+          try {
+            await action();
+            // Both queues move: approving a request creates a word, which is what unblocks the
+            // etymology submissions naming it.
+            await Promise.all([loadRequests(), load(), loadDrift()]);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
       <UpstreamDriftSection
         drift={drift}
         busy={busy}
@@ -333,6 +370,123 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
         }}
       />
     </section>
+  );
+}
+
+/** Words volunteers have asked for, and what is waiting on each.
+ *
+ * The 'new_entry' contribution axis has always been the queue for this, and approveContribution
+ * has always been able to apply one - but no screen listed them, so a request went somewhere
+ * nobody could see. That is what this is: the missing surface, not new machinery.
+ *
+ * The waiting words are the part that matters. Approve-then-confirm is already enforced by
+ * ComponentsNotFoundError, but a curator met it as a failure at confirmation time. Naming what is
+ * blocked turns the same constraint into a reason to approve. */
+function RequestedWordsSection({
+  requests,
+  busy,
+  onAct,
+}: {
+  requests: ContributionListItem[];
+  busy: boolean;
+  onAct: (action: () => Promise<void>) => void;
+}) {
+  if (requests.length === 0) return null;
+
+  return (
+    <div className="review-section" aria-label="Requested words">
+      <h3>Words volunteers have asked for ({requests.length})</h3>
+      <p className="field-note">
+        Each was requested while someone was working on another word's parts. Approving it creates the word - every
+        submission already pointing at it then resolves with no further action.
+      </p>
+      <ul aria-label="Requested words list" className="card-list">
+        {requests.map((request) => {
+          const proposal = request.proposedValue as NewEntryProposal | null;
+          const citation = proposal?.citation;
+          const exemptReason = citation && 'exemptReason' in citation ? citation.exemptReason : null;
+          return (
+            <li key={request.contributionId} className="card-row">
+              <div className="review-head">
+                <span className="row-title">{proposal?.displayText ?? '(no spelling)'}</span>
+                {/* Cited or exempt, always one of the two - 0014 makes "neither" unrepresentable,
+                    and which it is decides whether this word can ever be checked upstream. */}
+                <span className="badge">
+                  {citation && 'entryId' in citation ? citation.entryId : exemptReason ? 'no Wiktionary entry' : 'no citation'}
+                </span>
+              </div>
+
+              <p>{proposal?.definition ?? <em>(no definition)</em>}</p>
+              {exemptReason ? <p className="field-note">{exemptReason}</p> : null}
+              <p className="field-note">
+                Asked for by {request.submittedBy} on {new Date(request.submittedAt).toLocaleDateString()}
+                {proposal?.syllables?.length ? ` · ${proposal.syllables.join(' · ')}` : ''}
+              </p>
+
+              {request.waitingWords.length > 0 ? (
+                <p className="field-note" aria-label={`Waiting on ${proposal?.displayText}`}>
+                  Waiting on this: {request.waitingWords.map((w) => w.displayText ?? w.wordId).join(', ')}
+                </p>
+              ) : null}
+
+              <div className="btn-row">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() => onAct(() => approveContribution(request.contributionId))}
+                >
+                  Add this word
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={busy}
+                  onClick={() => onAct(() => excludeContribution(request.contributionId, 'not a word we should add'))}
+                >
+                  Decline
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Words with no Wiktionary entry, which is a recorded state rather than a gap.
+ *
+ * This is the other half of the volunteer word-request path: a word requested because Wiktionary
+ * lacks it is stored with an exempt citation, and per 0014 that IS the durable record that it
+ * awaits an upstream entry. reconcileUpstream counted these and never named them, so on the day
+ * Wiktionary gained the entry there was nothing to act on. Re-linking was already one click; this
+ * is the list in front of it. */
+function ExemptWordsSection({ items, onOpenWord }: { items: ExemptItem[]; onOpenWord: (wordId: string) => void }) {
+  // Same defensive shape guard as the drift section it sits inside: a payload from before this
+  // field existed must render, not throw.
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  return (
+    <div aria-label="Words with no Wiktionary entry">
+      <h3>Words with no Wiktionary entry ({items.length})</h3>
+      <p className="field-note">
+        Recorded as having none, so they are outside the upstream check by construction - not missed by it. If Wiktionary
+        gains an entry for one, open the word and cite it.
+      </p>
+      <ul aria-label="Exempt words list" className="card-list">
+        {items.map((item) => (
+          <li key={item.wordId} className="card-row">
+            <div className="review-head">
+              <button type="button" className="row-title" onClick={() => onOpenWord(item.wordId)}>
+                {item.displayText}
+              </button>
+            </div>
+            <p className="field-note">{item.exemptReason}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -381,16 +535,20 @@ function UpstreamDriftSection({
 
   if (drift.items.length === 0) {
     return (
-      <p className="field-note" aria-label="Upstream drift status">
-        Every cited etymology still matches Wiktionary ({drift.counts.unchanged} checked
-        {drift.exempt > 0 ? `, ${drift.exempt} exempt` : ''}
-        {drift.uncited > 0 ? `, ${drift.uncited} not linked yet` : ''}).
-      </p>
+      <>
+        <p className="field-note" aria-label="Upstream drift status">
+          Every cited etymology still matches Wiktionary ({drift.counts.unchanged} checked
+          {drift.exempt > 0 ? `, ${drift.exempt} exempt` : ''}
+          {drift.uncited > 0 ? `, ${drift.uncited} not linked yet` : ''}).
+        </p>
+        <ExemptWordsSection items={drift.exemptItems} onOpenWord={onOpenWord} />
+      </>
     );
   }
 
   return (
     <div className="review-section" aria-label="Upstream drift">
+      <ExemptWordsSection items={drift.exemptItems} onOpenWord={onOpenWord} />
       {DRIFT_ORDER.map((kind) => {
         const items = drift.items.filter((i) => i.kind === kind);
         if (items.length === 0) return null;

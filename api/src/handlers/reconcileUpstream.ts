@@ -61,6 +61,13 @@ export interface DriftItem {
   proposedEntryId?: string;
 }
 
+/** A word recorded as having no upstream entry. */
+export interface ExemptItem {
+  wordId: string;
+  displayText: string;
+  exemptReason: string;
+}
+
 export interface ReconcileResult {
   /** Only the items needing attention. 'unchanged' is counted, never listed -
    * a queue of things that are fine is a queue nobody reads. */
@@ -71,6 +78,14 @@ export interface ReconcileResult {
    * "every word was verified against upstream". */
   exempt: number;
   uncited: number;
+  /** The exempt words themselves, not just the count.
+   *
+   * An exempt citation is not a gap - it IS the durable record that a word awaits a Wiktionary
+   * entry, which is what the volunteer word-request path relies on. But a record nobody can find
+   * is not a record: this was counted and never named, so the day Wiktionary gains the entry
+   * there was nothing to act on. Re-linking is already one click (repinUpstream); this is what
+   * was missing in front of it. */
+  exemptItems: ExemptItem[];
 }
 
 interface CitationRow {
@@ -96,7 +111,7 @@ export async function reconcileUpstream(client: Queryable): Promise<ReconcileRes
 
   const counts: Record<DriftKind, number> = { unchanged: 0, content_changed: 0, re_identified: 0, disappeared: 0 };
   const items: DriftItem[] = [];
-  let exempt = 0;
+  const exemptItems: ExemptItem[] = [];
 
   /** Built once and only if something actually needs re-finding. Scanning the
    * whole corpus is the accepted small-corpus tradeoff this codebase already
@@ -119,7 +134,13 @@ export async function reconcileUpstream(client: Queryable): Promise<ReconcileRes
 
   for (const row of rows) {
     if (!row.entry_id) {
-      exempt += 1;
+      exemptItems.push({
+        wordId: row.word_id,
+        displayText: row.display_text,
+        // 0014's check constraint makes this non-null whenever entry_id is null, so the fallback
+        // is unreachable rather than a real case - it exists so a hand-edited row renders.
+        exemptReason: row.exempt_reason ?? 'no reason recorded',
+      });
       continue;
     }
 
@@ -170,5 +191,5 @@ export async function reconcileUpstream(client: Queryable): Promise<ReconcileRes
     });
   }
 
-  return { items, counts, exempt, uncited: uncitedResult.rows[0].n };
+  return { items, counts, exempt: exemptItems.length, exemptItems, uncited: uncitedResult.rows[0].n };
 }

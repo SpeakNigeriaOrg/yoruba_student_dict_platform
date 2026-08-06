@@ -49,6 +49,8 @@
     { "route": "/api/utterances/*", "allowedRoles": ["member"] },
     { "route": "/api/syllables/*", "allowedRoles": ["member"] },
 
+    { "route": "/api/component-requests", "allowedRoles": ["member"] },
+
     { "route": "/api/kaikki-search", "allowedRoles": ["member"] },
     { "route": "/api/vocab-search", "allowedRoles": ["member"] },
     { "route": "/api/duplicate-check", "allowedRoles": ["curator"] },

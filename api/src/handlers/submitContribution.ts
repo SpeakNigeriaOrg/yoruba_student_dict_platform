@@ -53,6 +53,13 @@ export interface NewEntryProposedValue {
    * edge that accepts it (parseNewEntryInput) and the approval that consumes it
    * (approveNewEntry). Absent for type 'phrase', which is exempt by nature. */
   citation?: UpstreamCitationInput;
+  /** The word's meaning in English.
+   *
+   * Without this, approveNewEntry created the word with definition null - a requested word
+   * arriving meaningless, which for a word nobody in the dictionary has seen before is the
+   * one thing a curator most needs. Populated from the cited etymology's first gloss when the
+   * request came from a Kaikki pick, or from what the requester typed when it did not. */
+  definition?: string;
   /** Only meaningful (and required) for type: 'phrase' - must reference
    * already-approved golden_record word_ids, never another still-pending
    * draft, exactly like createPhrase.ts (checked at approval time, not

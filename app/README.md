@@ -65,6 +65,39 @@ punctuation so a *sentence* example still gets a grid on its last word). Its tex
 holds the composed phrase and is the only state - what the contributor reads is exactly
 what gets stored.
 
+## A missing part is not a dead end
+
+The etymology axis asks "what is this word made of?", and its component picker used to
+search only `vocab-search` — our own ~90-word dictionary. A volunteer who knew `adìyẹ` is
+part of `abo adìyẹ` was told to ask a curator, and **could not finish the task**. The
+knowledge they had went nowhere.
+
+The picker now searches the whole kaikki-yoruba corpus alongside the dictionary, words we
+hold first and labelled. Picking one we do not hold does not add it — it queues a request
+and returns the `word_id` that request will create, so the etymology submission proceeds
+immediately. Three things make that safe:
+
+- **The `word_id` is derived, not chosen** (`shared/src/deriveWordId.ts`). Two volunteers
+  who pick the same etymology derive the same id, which is what lets the consensus tally
+  score them as agreeing. A renameable id would fingerprint as a conflict.
+- **It is never shown.** Chips read the word, plus "will be added once a curator approves".
+  Showing the id would invite asking for a different one.
+- **The server decides resolve-vs-request**, because only it sees production and the corpus
+  together (`api/src/handlers/resolveOrRequestComponent.ts`). Picking an etymology a word
+  already cites *resolves to that word* rather than queuing a duplicate — which is how all 80
+  cited words behave, since the derivation reproduces the convention they were named by.
+
+An etymology naming a not-yet-approved part is refused at confirmation by
+`ComponentsNotFoundError`, which names it. That ordering constraint already existed; what
+was missing was seeing it coming, so `ReviewQueue` lists each request with **which words are
+waiting on it**.
+
+Behind an explicit "it isn't in Wiktionary either" is the rare path: write the word with
+`PhraseComposer`, give an English definition, no audio (this requests a dictionary entry,
+not a pronunciation). It is stored with an **exempt** citation, which per `0014` is not a
+gap but the durable record that the word awaits an upstream entry — and `ReviewQueue` now
+lists exempt words so that record is findable when Wiktionary gains one.
+
 ## A review screen must never be answerable only one way
 
 Every review surface has to offer a way to DISAGREE, not just a way to confirm. This
