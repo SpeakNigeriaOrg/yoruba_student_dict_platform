@@ -622,23 +622,28 @@ audio {
 }
 
 /* ---- Tone editor ----
-   One column per syllable, scrolling horizontally rather than wrapping: a syllable's
-   letters and its three tone buttons must stay visually together, because they are one
-   question about one syllable. Tone buttons are large enough to be a comfortable phone
-   target, since tapping them is the single most frequent action in the whole app. */
+   One ROW per syllable, read top to bottom, with that syllable's three tone options
+   side by side.
+   
+   Columns-per-syllable was tried first and does not survive contact with a phone: each
+   button holds a whole syllable (they render `dì di dí`, not a generic `à a á`), so
+   three or four syllable-wide columns overflow the viewport and the word has to be
+   scrolled sideways to be reviewed. Stacking keeps every option for every syllable on
+   screen at once, which matters because the reviewer is comparing them.
+   
+   Buttons stay at least 44px tall - tapping one is the single most frequent action in
+   the app. */
 .syllable-row {
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 6px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 10px;
 }
 .syllable-cell {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  min-width: 74px;
 }
 .syllable-face {
   font-size: 1.45rem;
@@ -659,10 +664,17 @@ audio {
   gap: 4px;
 }
 .tone-btn {
-  min-width: 34px;
+  flex: 1 1 0;
+  min-width: 56px;
   padding: 8px 6px;
-  font-size: 1.1rem;
-  line-height: 1;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+/* The three options share the row evenly, so they are the same size regardless of how
+   wide the syllable is - a reviewer aiming for "high" should not have to hit a smaller
+   target on `gbẹ̀` than on `a`. */
+.tone-choices {
+  flex: 1 1 auto;
 }
 .palette-btn {
   min-width: 30px;

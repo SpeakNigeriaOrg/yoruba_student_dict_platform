@@ -70,6 +70,45 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     expect(screen.queryByLabelText('Tone of syllable 4')).not.toBeInTheDocument();
   });
 
+  it('labels each button with THIS syllable carrying that tone, not a generic à/a/á', async () => {
+    // The first version showed static `à a á` on every button of every syllable, so
+    // the choices for `dì` read "à a á" - three letters not present in the syllable
+    // being edited, which is simply unreadable as a choice about `dì`.
+    await loaded(entryFixture);
+
+    // Syllable 2 of dùjẹ̀kù is `jẹ̀`.
+    const buttons = [...screen.getByLabelText('Tone of syllable 2').querySelectorAll('button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['jẹ̀', 'jẹ', 'jẹ́']);
+  });
+
+  it('previews the mid-tone form correctly per bearer, since mid is not a mark on a vowel', async () => {
+    await loaded(entryFixture);
+    // Syllable 1 is `dù`; mid on a vowel is unmarked, so the middle button reads `du`.
+    expect(screen.getByLabelText('Syllable 1 mid tone')).toHaveTextContent('du');
+  });
+
+  it('drops the separate syllable label when a tone IS selected - the buttons already show it', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByLabelText('Syllable 1')).not.toBeInTheDocument();
+  });
+
+  it('keeps a label on a syllable with no tone selected, so the row is still identifiable', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    // A bare syllabic nasal: mid on a nasal is a macron, so an unmarked `n` is
+    // under-marked and toneOf refuses to call it mid - no button is highlighted.
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'n');
+
+    expect(screen.getByLabelText('Syllable 1')).toHaveTextContent('n');
+    for (const hint of ['low', 'mid', 'high']) {
+      expect(screen.getByLabelText(`Syllable 1 ${hint} tone`)).toHaveAttribute('aria-pressed', 'false');
+    }
+  });
+
   it('pre-selects each syllable\'s current tone, so leaving it alone is agreement', async () => {
     await loaded(entryFixture);
     // dù is low, jẹ̀ is low, kù is low in this fixture.

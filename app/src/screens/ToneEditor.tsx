@@ -37,10 +37,17 @@
 
 import { applyTone, lettersOf, toneBearerKind, toneOf, type Tone } from '@yoruba-student-dict-platform/shared';
 
-const TONE_CHOICES: Array<{ tone: Tone; label: string; hint: string }> = [
-  { tone: 'low', label: 'à', hint: 'low' },
-  { tone: 'mid', label: 'a', hint: 'mid' },
-  { tone: 'high', label: 'á', hint: 'high' },
+/** The three tones, in the order they are spoken about. No fixed labels: each button
+ * is rendered as THIS syllable carrying that tone, so the reviewer reads the actual
+ * result rather than a generic exemplar.
+ *
+ * The first version used static `à a á`, which showed the letter "a" on every button
+ * of every syllable - so the choices for `dì` read "à a á", three letters that are not
+ * in the syllable being edited. */
+const TONES: Array<{ tone: Tone; hint: string }> = [
+  { tone: 'low', hint: 'low' },
+  { tone: 'mid', hint: 'mid' },
+  { tone: 'high', hint: 'high' },
 ];
 
 /** The three characters a Yoruba keyboard would be needed for. Tone is handled by
@@ -98,9 +105,17 @@ export function ToneEditor({
 
           return (
             <div key={index} className="syllable-cell">
-              <div className="syllable-face" aria-label={`Syllable ${index + 1}`}>
-                {syllable}
-              </div>
+              {/* Shown only when no button is highlighted, which is when the row would
+                  otherwise have nothing identifying it. Two cases: a syllable that
+                  cannot carry tone at all (Wiktionary's bare letter entries), and an
+                  under-marked syllabic nasal, where the source never said which tone it
+                  is and toneOf refuses to guess. When a tone IS selected the highlighted
+                  button already shows the syllable, so a face would just repeat it. */}
+              {bearerTone === null ? (
+                <div className="syllable-face" aria-label={`Syllable ${index + 1}`}>
+                  {syllable}
+                </div>
+              ) : null}
 
               {editingLetters ? (
                 <>
@@ -132,16 +147,20 @@ export function ToneEditor({
 
               {toneable ? (
                 <div className="tone-choices" role="group" aria-label={`Tone of syllable ${index + 1}`}>
-                  {TONE_CHOICES.map((choice) => (
+                  {TONES.map(({ tone, hint }) => (
                     <button
-                      key={choice.tone}
+                      key={tone}
                       type="button"
-                      className={`btn tone-btn ${bearerTone === choice.tone ? 'btn-primary' : 'btn-secondary'}`}
-                      aria-pressed={bearerTone === choice.tone}
-                      aria-label={`Syllable ${index + 1} ${choice.hint} tone`}
-                      onClick={() => setTone(index, choice.tone)}
+                      className={`btn tone-btn ${bearerTone === tone ? 'btn-primary' : 'btn-secondary'}`}
+                      aria-pressed={bearerTone === tone}
+                      // The visible text is the syllable itself, so the aria-label
+                      // carries the tone NAME - otherwise a screen reader would
+                      // announce three near-identical Yoruba syllables with no way to
+                      // tell which button is which.
+                      aria-label={`Syllable ${index + 1} ${hint} tone`}
+                      onClick={() => setTone(index, tone)}
                     >
-                      {choice.label}
+                      {applyTone(syllable, tone)}
                     </button>
                   ))}
                 </div>
