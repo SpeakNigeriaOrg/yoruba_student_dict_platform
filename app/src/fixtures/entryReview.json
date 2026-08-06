@@ -1,11 +1,11 @@
 {
   "wordId": "fixturegenentry_adiye_chicken",
-  "displayText": "fixturegenentry_adìyẹ",
-  "englishHint": "chicken",
+  "displayText": "dùjẹ̀kù",
+  "englishHint": "adiye chicken",
   "status": "match",
-  "matchedForm": "fixturegenentry_adìyẹ",
-  "canonicalForm": "fixturegenentry_adìyẹ",
-  "adoptionTarget": "fixturegenentry_adìyẹ",
+  "matchedForm": "dùjẹ̀kù",
+  "canonicalForm": "dùjẹ̀kù",
+  "adoptionTarget": "dùjẹ̀kù",
   "matchedEntryId": "fixturegenentry-etym-adiye",
   "matchedEtymologyNumber": "1",
   "matchedPos": "noun",
@@ -17,36 +17,21 @@
   "matchedComponentCandidates": [],
   "matchedUsedInCandidates": [],
   "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
-  "syllableSplitStatus": "mismatch",
-  "syllableSplitManual": [
-    "a",
-    "dì",
-    "yẹ"
-  ],
-  "syllableSplitProgrammatic": [
-    "fi",
-    "tu",
-    "re",
-    "ge",
-    "nen",
-    "trya",
-    "dì",
-    "yẹ"
-  ],
+  "syllableSplitStatus": "match",
   "definitionCandidateGlosses": [
     "chicken",
     "fowl"
   ],
-  "definitionSourceForm": "fixturegenentry_adìyẹ",
+  "definitionSourceForm": "dùjẹ̀kù",
   "definitionSourceIsCrossReference": false,
   "definitionLinkedSameAsSpelling": true,
   "definitionStatus": "proposed",
   "definitionCurrent": "chicken",
   "definitionProposed": "chicken",
   "syllables": [
-    "a",
-    "dì",
-    "yẹ"
+    "dù",
+    "jẹ̀",
+    "kù"
   ],
   "axisDecided": {
     "entry": false,
@@ -62,7 +47,7 @@
         "chicken",
         "fowl"
       ],
-      "canonicalForm": "fixturegenentry_adìyẹ",
+      "canonicalForm": "dùjẹ̀kù",
       "etymologyText": "Inherited from Proto-Yoruboid.",
       "etymologyNumber": "1"
     }

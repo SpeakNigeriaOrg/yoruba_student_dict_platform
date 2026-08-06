@@ -26,7 +26,15 @@ export function resolveEffectiveDisplayText(
   kaikkiResult: DiagnoseEntryResult,
   override?: DiagnoseOverride | null,
 ): ResolvedEffectiveDisplayText {
-  if ((override ?? {}).action === 'adopt_kaikki') {
+  const ov = override ?? {};
+  // A respelling is the reviewer's own text, so it needs no Kaikki lookup to resolve -
+  // unlike adopt_kaikki below, which resolves through the diagnosis. In practice the
+  // record already holds this spelling by the time an override is replayed; handled
+  // explicitly so the syllable check can never be run against the superseded form.
+  if (ov.action === 'respell' && ov.newDisplayText && ov.newDisplayText !== entry.displayText) {
+    return { displayText: ov.newDisplayText, wasSubstituted: true };
+  }
+  if (ov.action === 'adopt_kaikki') {
     const target = kaikkiResult.adoptionTarget;
     if (target && target !== entry.displayText) {
       return { displayText: target, wasSubstituted: true };

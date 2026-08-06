@@ -1,11 +1,11 @@
 {
   "wordId": "fixturegenentry_ilu_drum",
-  "displayText": "fixturegenentry_ilu",
-  "englishHint": "drum",
+  "displayText": "tẹruko",
+  "englishHint": "ilu drum",
   "status": "tone_mismatch",
-  "matchedForm": "fixturegenentry_ìlù",
-  "canonicalForm": "fixturegenentry_ìlù",
-  "adoptionTarget": "fixturegenentry_ìlù",
+  "matchedForm": "tẹ̀rùkó",
+  "canonicalForm": "tẹ̀rùkó",
+  "adoptionTarget": "tẹ̀rùkó",
   "matchedEntryId": "fixturegenentry-etym-legacy",
   "matchedEtymologyNumber": "1",
   "matchedPos": "noun",
@@ -16,32 +16,20 @@
   "matchedComponentCandidates": [],
   "matchedUsedInCandidates": [],
   "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
-  "syllableSplitStatus": "mismatch",
-  "syllableSplitManual": [
-    "i",
-    "lu"
-  ],
-  "syllableSplitProgrammatic": [
-    "fi",
-    "tu",
-    "re",
-    "ge",
-    "nen",
-    "tryi",
-    "lu"
-  ],
+  "syllableSplitStatus": "match",
   "definitionCandidateGlosses": [
     "drum"
   ],
-  "definitionSourceForm": "fixturegenentry_ìlù",
+  "definitionSourceForm": "tẹ̀rùkó",
   "definitionSourceIsCrossReference": false,
   "definitionLinkedSameAsSpelling": true,
   "definitionStatus": "proposed",
   "definitionCurrent": "drum",
   "definitionProposed": "drum",
   "syllables": [
-    "i",
-    "lu"
+    "tẹ",
+    "ru",
+    "ko"
   ],
   "axisDecided": {
     "entry": false,

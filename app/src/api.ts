@@ -259,9 +259,13 @@ export function getEntryReview(wordId: string): Promise<EntryReviewResult> {
 // optional here only so the screen can hold a partly-filled draft before the
 // user commits it.
 export interface ApplyEntryDecisionInput {
-  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki';
+  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki' | 'respell';
   candidateForm?: string;
   newDisplayText?: string;
+  /** Required with 'respell': the syllables as the reviewer edited them. Authored,
+   * not re-derived - re-syllabifying would discard the boundaries they chose, and for
+   * a syllabic nasal that changes the word. */
+  newSyllables?: string[];
   syllableAction?: 'keep_manual' | 'accept_programmatic';
   syllableNote?: string;
   definitionAction?: 'confirm' | 'custom';

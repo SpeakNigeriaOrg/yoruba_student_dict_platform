@@ -16,8 +16,20 @@ import type { ApplyEtymologyDecisionInput } from './handlers/applyEtymologyDecis
  * too, not just direct POSTs. */
 export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionInput {
   const action = b.action;
-  if (action !== undefined && action !== 'keep_ours' && action !== 'select_candidate' && action !== 'adopt_kaikki') {
-    throw new Error("action must be one of 'keep_ours', 'select_candidate', 'adopt_kaikki' if provided");
+  if (
+    action !== undefined &&
+    action !== 'keep_ours' &&
+    action !== 'select_candidate' &&
+    action !== 'adopt_kaikki' &&
+    action !== 'respell'
+  ) {
+    throw new Error("action must be one of 'keep_ours', 'select_candidate', 'adopt_kaikki', 'respell' if provided");
+  }
+  if (
+    b.newSyllables !== undefined &&
+    (!Array.isArray(b.newSyllables) || !b.newSyllables.every((x) => typeof x === 'string' && x.length > 0))
+  ) {
+    throw new Error('newSyllables must be an array of non-empty strings if provided');
   }
   const syllableAction = b.syllableAction;
   if (syllableAction !== undefined && syllableAction !== 'keep_manual' && syllableAction !== 'accept_programmatic') {
@@ -31,6 +43,7 @@ export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionI
     action,
     candidateForm: typeof b.candidateForm === 'string' ? b.candidateForm : undefined,
     newDisplayText: typeof b.newDisplayText === 'string' ? b.newDisplayText : undefined,
+    newSyllables: b.newSyllables as string[] | undefined,
     syllableAction,
     syllableNote: typeof b.syllableNote === 'string' ? b.syllableNote : undefined,
     definitionAction,

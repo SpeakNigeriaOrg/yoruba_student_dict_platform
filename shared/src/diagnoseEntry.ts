@@ -102,7 +102,11 @@ export type DiagnoseStatus =
   | ToneMatchStatus
   | 'matched_alternative_form'
   | 'verified_keep_ours'
-  | 'decided_adopt_kaikki';
+  | 'decided_adopt_kaikki'
+  /** A reviewer wrote the spelling themselves - in practice, corrected the tone.
+   * Distinct from decided_adopt_kaikki (which accepts upstream's suggestion) and
+   * from verified_keep_ours (which asserts the record was already right). */
+  | 'decided_respell';
 
 export interface CandidateConsidered {
   form: string;
@@ -143,7 +147,7 @@ export interface DiagnoseEntryResult {
    * distinct from matchedComponentCandidates (the structured
    * decomposition); see KaikkiSense.etymologyText's own comment. */
   matchedEtymologyText?: string | null;
-  resolvedBy?: 'manual_selection_via_search' | 'manual_selection' | 'keep_ours' | 'adopt_kaikki_pending';
+  resolvedBy?: 'manual_selection_via_search' | 'manual_selection' | 'keep_ours' | 'adopt_kaikki_pending' | 'respell';
   candidatesConsidered?: CandidateConsidered[];
   discoveredViaRelaxedMatch?: true;
   note?: string;
@@ -332,6 +336,9 @@ export function applyOverride(result: DiagnoseEntryResult, override?: DiagnoseOv
   if (action === 'keep_ours') {
     result.status = 'verified_keep_ours';
     result.resolvedBy = 'keep_ours';
+  } else if (action === 'respell') {
+    result.status = 'decided_respell';
+    result.resolvedBy = 'respell';
   } else if (action === 'adopt_kaikki') {
     if (result.status === 'match') {
       // vocab.json was already edited to match - the override is now stale

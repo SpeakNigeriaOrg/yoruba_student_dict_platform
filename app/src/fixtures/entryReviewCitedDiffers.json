@@ -1,11 +1,11 @@
 {
   "wordId": "fixturegenentry_kasu_fail",
-  "displayText": "fixturegenentry_kasu",
-  "englishHint": "fail",
+  "displayText": "wòhun",
+  "englishHint": "kasu fail",
   "status": "tone_mismatch",
-  "matchedForm": "fixturegenentry_kásù",
-  "canonicalForm": "fixturegenentry_kásù",
-  "adoptionTarget": "fixturegenentry_kásù",
+  "matchedForm": "wòhún",
+  "canonicalForm": "wòhún",
+  "adoptionTarget": "wòhún",
   "matchedEntryId": "fixturegenentry-etym-kasu",
   "matchedEtymologyNumber": "2",
   "matchedPos": "verb",
@@ -17,33 +17,20 @@
   "matchedComponentCandidates": [],
   "matchedUsedInCandidates": [],
   "matchedEtymologyText": "Inherited from Proto-Yoruboid.",
-  "syllableSplitStatus": "mismatch",
-  "syllableSplitManual": [
-    "ka",
-    "su"
-  ],
-  "syllableSplitProgrammatic": [
-    "fi",
-    "tu",
-    "re",
-    "ge",
-    "nen",
-    "tryka",
-    "su"
-  ],
+  "syllableSplitStatus": "match",
   "definitionCandidateGlosses": [
     "to fail",
     "to fall short"
   ],
-  "definitionSourceForm": "fixturegenentry_kásù",
+  "definitionSourceForm": "wòhún",
   "definitionSourceIsCrossReference": false,
   "definitionLinkedSameAsSpelling": true,
   "definitionStatus": "proposed",
   "definitionCurrent": "to fail",
   "definitionProposed": "to fail",
   "syllables": [
-    "ka",
-    "su"
+    "wò",
+    "hun"
   ],
   "axisDecided": {
     "entry": false,
@@ -59,7 +46,7 @@
         "to fail",
         "to fall short"
       ],
-      "canonicalForm": "fixturegenentry_kásù",
+      "canonicalForm": "wòhún",
       "etymologyText": "Inherited from Proto-Yoruboid.",
       "etymologyNumber": "2"
     }

@@ -621,6 +621,56 @@ audio {
   margin-top: 4px;
 }
 
+/* ---- Tone editor ----
+   One column per syllable, scrolling horizontally rather than wrapping: a syllable's
+   letters and its three tone buttons must stay visually together, because they are one
+   question about one syllable. Tone buttons are large enough to be a comfortable phone
+   target, since tapping them is the single most frequent action in the whole app. */
+.syllable-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+.syllable-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 74px;
+}
+.syllable-face {
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+.syllable-letters {
+  width: 68px;
+  text-align: center;
+  font-size: 1.05rem;
+  padding: 6px 4px;
+}
+.tone-choices,
+.letter-palette {
+  display: flex;
+  gap: 4px;
+}
+.tone-btn {
+  min-width: 34px;
+  padding: 8px 6px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.palette-btn {
+  min-width: 30px;
+  padding: 6px 4px;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
 /* ---- Task queue ---- */
 
 .queue-header {

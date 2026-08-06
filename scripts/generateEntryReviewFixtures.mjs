@@ -19,6 +19,14 @@
 //
 // Everything it creates is namespaced and removed afterwards, so it is safe to
 // run against a dev database. Requires DATABASE_URL and `npm run build:api`.
+//
+// The display texts are invented but ORTHOGRAPHICALLY REAL Yoruba - only letters the
+// syllabifier models, and verified absent from the corpus so they cannot collide with
+// a genuine entry. They cannot be namespaced like the word_ids are: `fixturegen_adìyẹ`
+// contains an underscore, the syllabifier drops characters it does not model, and
+// syllabifySpans then refuses the word entirely - so every fixture would exercise the
+// cannot-be-edited fallback instead of the tone editor. Isolation comes from the
+// word_id and entry_id prefixes, which is what cleanup keys on anyway.
 
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -105,15 +113,15 @@ try {
   // --- cited, our spelling agrees with upstream ---------------------------
   await addSense({
     entryId: `${ENTRY_NS}adiye`,
-    form: 'fixturegenentry_adìyẹ',
+    form: 'dùjẹ̀kù',
     pos: 'noun',
     etymologyNumber: '1',
     glosses: ['chicken', 'fowl'],
   });
   await addWord({
     wordId: `${NS}adiye_chicken`,
-    displayText: 'fixturegenentry_adìyẹ',
-    syllables: ['a', 'dì', 'yẹ'],
+    displayText: 'dùjẹ̀kù',
+    syllables: ['dù', 'jẹ̀', 'kù'],
     definition: 'chicken',
     citeEntryId: `${ENTRY_NS}adiye`,
   });
@@ -121,15 +129,15 @@ try {
   // --- cited, upstream spells it differently ------------------------------
   await addSense({
     entryId: `${ENTRY_NS}kasu`,
-    form: 'fixturegenentry_kásù',
+    form: 'wòhún',
     pos: 'verb',
     etymologyNumber: '2',
     glosses: ['to fail', 'to fall short'],
   });
   await addWord({
     wordId: `${NS}kasu_fail`,
-    displayText: 'fixturegenentry_kasu',
-    syllables: ['ka', 'su'],
+    displayText: 'wòhun',
+    syllables: ['wò', 'hun'],
     definition: 'to fail',
     citeEntryId: `${ENTRY_NS}kasu`,
   });
@@ -137,15 +145,15 @@ try {
   // --- uncited, and its spelling differs from the only candidate ----------
   await addSense({
     entryId: `${ENTRY_NS}legacy`,
-    form: 'fixturegenentry_ìlù',
+    form: 'tẹ̀rùkó',
     pos: 'noun',
     etymologyNumber: '1',
     glosses: ['drum'],
   });
   await addWord({
     wordId: `${NS}ilu_drum`,
-    displayText: 'fixturegenentry_ilu',
-    syllables: ['i', 'lu'],
+    displayText: 'tẹruko',
+    syllables: ['tẹ', 'ru', 'ko'],
     definition: 'drum',
   });
 
@@ -157,7 +165,7 @@ try {
   ]) {
     await addSense({
       entryId: `${ENTRY_NS}ko${n}`,
-      form: 'fixturegenentry_kọ́',
+      form: 'gbẹ̀dùjó',
       pos,
       etymologyNumber: n,
       glosses: [gloss],
@@ -165,8 +173,8 @@ try {
   }
   await addWord({
     wordId: `${NS}ko_something`,
-    displayText: 'fixturegenentry_kọ́',
-    syllables: ['kọ́'],
+    displayText: 'gbẹ̀dùjó',
+    syllables: ['gbẹ̀', 'dù', 'jó'],
     definition: null,
   });
 

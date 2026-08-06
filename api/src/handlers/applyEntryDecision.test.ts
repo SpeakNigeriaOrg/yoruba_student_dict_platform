@@ -12,6 +12,8 @@ import {
   KaikkiVerificationMismatchError,
   MissingDefinitionTextError,
   NewDisplayTextRequiredError,
+  RespellMismatchError,
+  RespellSyllablesRequiredError,
 } from './applyEntryDecision.js';
 import { WordNotFoundError } from './errors.js';
 
@@ -204,6 +206,138 @@ describe('applyEntryDecision', () => {
       // Recomputed from the spelling this word BECAME, not the one on record.
       expect(word.rows[0].syllables).toEqual(['ká', 'sù']);
       expect(word.rows[0].definition).toBe('to fail');
+    });
+  });
+
+  describe("respell: a spelling the reviewer wrote themselves", () => {
+    // The common real case is a TONE correction, which is usually neither our
+    // current spelling nor Kaikki's - so adopt_kaikki cannot express it (that action
+    // re-verifies against Kaikki's suggestion) and keep_ours cannot either (it never
+    // touches display_text).
+    it('writes display_text and syllables together, with no Kaikki verification', async () => {
+      const wordId = `${NS}respell_tone`;
+      await insertWord(wordId, 'adiye', ['a', 'di', 'ye'], 'chicken');
+
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'adìyẹ',
+          newSyllables: ['a', 'dì', 'yẹ'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+
+      const { rows } = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('adìyẹ');
+      // Authored, not re-derived: re-syllabifying would discard the boundaries the
+      // reviewer chose, which for a syllabic nasal changes the word.
+      expect(rows[0].syllables).toEqual(['a', 'dì', 'yẹ']);
+    });
+
+    it('preserves a syllabic-nasal boundary that re-deriving would destroy', async () => {
+      const wordId = `${NS}respell_nasal`;
+      await insertWord(wordId, 'gbangba', ['gban', 'gba'], 'clearly');
+
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'gban̄gba',
+          newSyllables: ['gba', 'n̄', 'gba'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+
+      const { rows } = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('gban̄gba');
+      expect(rows[0].syllables).toEqual(['gba', 'n̄', 'gba']);
+    });
+
+    it('records the respelling in the decision so a settled word replays as settled', async () => {
+      const wordId = `${NS}respell_replay`;
+      await insertWord(wordId, 'adiye', ['a', 'di', 'ye'], 'chicken');
+      await applyEntryDecision(
+        pool,
+        wordId,
+        { action: 'respell', newDisplayText: 'adìyẹ', newSyllables: ['a', 'dì', 'yẹ'], definitionAction: 'confirm' },
+        curatorUserId,
+      );
+      const { rows } = await readDecision(wordId);
+      expect(rows[0].decision).toMatchObject({ action: 'respell', newDisplayText: 'adìyẹ' });
+    });
+
+    it('refuses a respelling whose syllables do not join to the spelling', async () => {
+      // Production already contains one word whose display_text and syllables
+      // disagree (agunfon_giraffe). Nothing should be able to create another.
+      const wordId = `${NS}respell_mismatch`;
+      await insertWord(wordId, 'adiye', ['a', 'di', 'ye'], 'chicken');
+      await expect(
+        applyEntryDecision(
+          pool,
+          wordId,
+          { action: 'respell', newDisplayText: 'adìyẹ', newSyllables: ['a', 'dì', 'ye'], definitionAction: 'confirm' },
+          curatorUserId,
+        ),
+      ).rejects.toThrow(RespellMismatchError);
+
+      const { rows } = await pool.query<{ display_text: string }>(
+        'select display_text from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('adiye');
+    });
+
+    it('accepts a capitalised respelling, since the syllabifier lowercases', async () => {
+      const wordId = `${NS}respell_proper`;
+      await insertWord(wordId, 'agemo', ['a', 'ge', 'mo'], 'July');
+      await applyEntryDecision(
+        pool,
+        wordId,
+        { action: 'respell', newDisplayText: 'Agẹmọ', newSyllables: ['A', 'gẹ', 'mọ'], definitionAction: 'confirm' },
+        curatorUserId,
+      );
+      const { rows } = await pool.query<{ display_text: string }>(
+        'select display_text from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('Agẹmọ');
+    });
+
+    it('requires the syllables', async () => {
+      const wordId = `${NS}respell_nosyl`;
+      await insertWord(wordId, 'adiye', ['a', 'di', 'ye'], 'chicken');
+      await expect(
+        applyEntryDecision(
+          pool,
+          wordId,
+          { action: 'respell', newDisplayText: 'adìyẹ', definitionAction: 'confirm' },
+          curatorUserId,
+        ),
+      ).rejects.toThrow(RespellSyllablesRequiredError);
+    });
+
+    it('requires the spelling', async () => {
+      const wordId = `${NS}respell_notext`;
+      await insertWord(wordId, 'adiye', ['a', 'di', 'ye'], 'chicken');
+      await expect(
+        applyEntryDecision(
+          pool,
+          wordId,
+          { action: 'respell', newSyllables: ['a', 'dì', 'yẹ'], definitionAction: 'confirm' },
+          curatorUserId,
+        ),
+      ).rejects.toThrow(NewDisplayTextRequiredError);
     });
   });
 

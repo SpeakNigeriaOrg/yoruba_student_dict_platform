@@ -75,8 +75,13 @@ export type KaikkiLexicon = Record<string, KaikkiSense[]>;
 
 export interface DiagnoseOverride {
   note?: string;
-  action?: 'keep_ours' | 'adopt_kaikki' | 'select_candidate';
+  action?: 'keep_ours' | 'adopt_kaikki' | 'select_candidate' | 'respell';
   candidateForm?: string;
+  /** Set with action 'respell': the spelling a reviewer wrote themselves, and the
+   * syllables they wrote it in. Replayed by getEntryReview so a settled word reports
+   * what was settled rather than re-proposing from scratch. */
+  newDisplayText?: string;
+  newSyllables?: string[];
   definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
   definitionSourceForm?: string;

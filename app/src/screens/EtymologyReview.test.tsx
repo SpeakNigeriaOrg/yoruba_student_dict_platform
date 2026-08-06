@@ -160,7 +160,69 @@ describe('EtymologyReview', () => {
     expect(screen.getByRole('button', { name: /Add "abo adìyẹ" to vocabulary/ })).toBeInTheDocument();
   });
 
-  it('hides the manual builder and the note from a volunteer entirely', async () => {
+  it('lets a volunteer say the word DOES have parts, and name them', async () => {
+    // The reported defect: with no proposal the only clickable answer was "It has no
+    // parts", so a volunteer who disagreed had no way to record it - and every vote
+    // said yes because yes was all there was.
+    const fixture = { ...etymologyFixture, componentsProposal: [], components: [] };
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/etymology')) return Promise.resolve({ ok: true, json: async () => fixture });
+      if (url.includes('/vocab-search')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            results: [
+              { wordId: 'part_one_word', displayText: 'partone', syllables: ['part'], definition: null, baseSpelling: 'partone', matchedVia: 'yoruba_exact' },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    await user.click(screen.getByRole('button', { name: 'It does have parts' }));
+    expect(screen.getByLabelText('Component picker')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('part_one_word'));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Propose: Save these parts' }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
+      const body = JSON.parse((post![1] as RequestInit).body as string);
+      // Structured, so consensus can tally it - not a free-text note.
+      expect(body).toMatchObject({ componentsAction: 'custom', components: ['part_one_word'] });
+    });
+  });
+
+  it('offers both answers, so neither axis can only record agreement', async () => {
+    const fixture = { ...etymologyFixture, componentsProposal: [], components: [] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.getByRole('button', { name: 'Propose: It has no parts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'It does have parts' })).toBeInTheDocument();
+  });
+
+  it('does not reveal the picker until the reviewer says there ARE parts', async () => {
+    const fixture = { ...etymologyFixture, componentsProposal: [], components: [] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByLabelText('Component picker')).not.toBeInTheDocument();
+  });
+
+  it('hides the note from a volunteer entirely', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
 
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
@@ -168,6 +230,8 @@ describe('EtymologyReview', () => {
 
     expect(screen.queryByRole('button', { name: 'Curator tools' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Note')).not.toBeInTheDocument();
+    // The vocabulary search is no longer curator-only: it is how a volunteer says what
+    // the parts ARE. It is just not shown until they say there are any.
     expect(screen.queryByPlaceholderText('Search existing vocabulary...')).not.toBeInTheDocument();
   });
 
@@ -239,7 +303,7 @@ describe('EtymologyReview', () => {
     // and no Save button until something is actually picked - saving an empty
     // custom list asserted "these are the parts" about nothing.
     expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save custom components' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save these parts' })).not.toBeInTheDocument();
   });
 
   it('adding a manual search result and saving submits componentsAction: custom with the draft list', async () => {
@@ -271,7 +335,7 @@ describe('EtymologyReview', () => {
     const draft = screen.getByLabelText('Draft components');
     expect(draft).toHaveTextContent('manual_component_word');
 
-    await user.click(screen.getByRole('button', { name: 'Save custom components' }));
+    await user.click(screen.getByRole('button', { name: 'Save these parts' }));
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('Saved custom components: manual_component_word');

@@ -46,7 +46,11 @@
 // spellings actually differ.
 
 import { useEffect, useState } from 'react';
-import type { KaikkiSearchResult } from '@yoruba-student-dict-platform/shared';
+import {
+  classifyToneMatch,
+  syllabifySpans,
+  type KaikkiSearchResult,
+} from '@yoruba-student-dict-platform/shared';
 import {
   getEntryReview,
   postEntryDecision,
@@ -57,6 +61,7 @@ import {
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
 import { SearchBox } from './SearchBox.js';
+import { ToneEditor } from './ToneEditor.js';
 
 export interface EntryReviewProps {
   wordId: string;
@@ -80,7 +85,28 @@ export interface EntryReviewProps {
 type SpellingChoice =
   | { action: 'keep_ours' }
   | { action: 'adopt_kaikki'; newDisplayText: string }
+  | { action: 'respell'; newDisplayText: string; newSyllables: string[] }
   | { action: 'select_candidate'; candidateForm: string; senseEntryId?: string };
+
+/** The written-form half, derived from the syllable row.
+ *
+ * Unchanged syllables mean the reviewer left the word as it stands - keep_ours, the
+ * same claim as before. Changed syllables mean they wrote this spelling themselves,
+ * which is 'respell': adopt_kaikki cannot express it (that action re-verifies against
+ * Kaikki's own suggestion, and a tone correction is usually neither our spelling nor
+ * Kaikki's) and keep_ours cannot either (it never touches display_text).
+ *
+ * Compared NFC-normalized, so a difference of Unicode composition alone is not
+ * mistaken for an edit.
+ *
+ * Null when there are no syllables to work from, which forces the caller to fall back
+ * to an explicit choice rather than submitting an empty spelling. */
+function writtenFormFromSyllables(currentDisplayText: string, syllables: string[] | null): SpellingChoice | null {
+  if (!syllables || syllables.length === 0) return null;
+  const proposed = syllables.join('');
+  if (proposed.normalize('NFC') === currentDisplayText.normalize('NFC')) return { action: 'keep_ours' };
+  return { action: 'respell', newDisplayText: proposed, newSyllables: syllables };
+}
 
 export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true }: EntryReviewProps) {
   const [review, setReview] = useState<EntryReviewResult | null>(null);
@@ -89,6 +115,14 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const [submitting, setSubmitting] = useState(false);
 
   // Pending decision, both halves.
+  //
+  // `syllables` is the written-form half: the word as the reviewer currently has it,
+  // one entry per syllable, tone included. Null until the review loads, or when the
+  // word cannot be represented as syllables at all (see syllabifySpans - Ajami
+  // spellings, hyphenated forms). Editing it IS disagreeing; there is no separate
+  // yes/no, which is what stops the screen from only being able to record agreement.
+  const [syllables, setSyllables] = useState<string[] | null>(null);
+  const [editingLetters, setEditingLetters] = useState(false);
   const [spelling, setSpelling] = useState<SpellingChoice | null>(null);
   const [syllableAction, setSyllableAction] = useState<'keep_manual' | 'accept_programmatic' | undefined>(undefined);
   const [definitionText, setDefinitionText] = useState('');
@@ -104,12 +138,19 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     setError(null);
     setStatus(null);
     setSpelling(null);
+    setSyllables(null);
+    setEditingLetters(false);
     setSyllableAction(undefined);
     setShowTools(false);
     getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
         setReview(result);
+        // Derived from display_text, NOT from the stored syllables column: production
+        // contains a word whose two disagree (agunfon_giraffe, 'àgùnfon' vs
+        // ['à','gùn','fọn']), and seeding from the column would silently apply that
+        // discrepancy to whatever the reviewer submitted.
+        setSyllables(syllabifySpans(result.displayText));
         setDefinitionText(result.definitionCurrent ?? result.definitionProposed ?? '');
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);
         setNote(result.note ?? '');
@@ -142,7 +183,12 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
 
   async function submit() {
     if (!review) return;
-    if (!spelling) {
+    // The written-form half. A curator-only candidate/search pick still wins, because
+    // that resolves WHICH etymology the word is - a different question from how it is
+    // spelled. Otherwise the syllable row decides it: unchanged means keep_ours,
+    // changed means the reviewer wrote this spelling themselves.
+    const written = spelling ?? writtenFormFromSyllables(review.displayText, syllables);
+    if (!written) {
       setStatus('Answer the spelling question first - an entry is decided as a whole.');
       return;
     }
@@ -155,7 +201,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     // already on record; any edit is a custom definition.
     const unchanged = definitionText.trim() === (review.definitionCurrent ?? '').trim();
     const input: ApplyEntryDecisionInput = {
-      ...spelling,
+      ...written,
       ...(syllableAction ? { syllableAction } : {}),
       ...(unchanged
         ? { definitionAction: 'confirm' as const }
@@ -195,7 +241,13 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const upstreamForm = pin?.canonicalForm ?? null;
   const upstreamGlosses = pin?.glosses ?? [];
   const isExempt = Boolean(review.citation?.exemptReason);
-  const readyToSubmit = Boolean(spelling) && definitionText.trim().length > 0;
+  const written = spelling ?? writtenFormFromSyllables(review.displayText, syllables);
+  const readyToSubmit = Boolean(written) && definitionText.trim().length > 0;
+  const proposed = syllables ? syllables.join('') : review.displayText;
+  // The specific kind of difference, not a bare "differs". classifyToneMatch already
+  // separates a tone disagreement from a letters one, and that distinction is the
+  // whole point of this screen - it was previously computed and thrown away.
+  const vsUpstream = upstreamForm ? classifyToneMatch(proposed, upstreamForm) : null;
 
   return (
     <section aria-label="Entry review" className={`card${review.axisDecided.entry ? ' decided' : ''}`}>
@@ -208,68 +260,50 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         showAxisChips={showAxisChips}
       />
 
-      <h3>Spelling</h3>
-      {review.spellingVsUpstream === 'matches' && upstreamForm ? (
+      <h3>Spelling and tone</h3>
+      {syllables ? (
         <>
-          <p aria-label="Spelling question">
-            Wiktionary spells this <strong>{upstreamForm}</strong> - the same as ours.
-          </p>
-          <div className="btn-row" role="group" aria-label="Spelling choice">
-            <button
-              type="button"
-              className={`btn ${spelling?.action === 'keep_ours' ? 'btn-primary' : 'btn-secondary'}`}
-              aria-pressed={spelling?.action === 'keep_ours'}
-              onClick={() => setSpelling({ action: 'keep_ours' })}
-            >
-              Yes, that's right
-            </button>
-          </div>
-        </>
-      ) : null}
+          <ToneEditor
+            syllables={syllables}
+            onChange={setSyllables}
+            editingLetters={editingLetters}
+            onEditLetters={() => setEditingLetters(true)}
+            onStopEditingLetters={() => setEditingLetters(false)}
+          />
 
-      {review.spellingVsUpstream === 'differs' && upstreamForm ? (
-        <>
-          <p aria-label="Spelling question">
-            We spell this <strong>{review.displayText}</strong>. Wiktionary spells it <strong>{upstreamForm}</strong>.
-          </p>
-          <div className="btn-row" role="group" aria-label="Spelling choice">
-            <button
-              type="button"
-              className={`btn ${spelling?.action === 'adopt_kaikki' ? 'btn-primary' : 'btn-secondary'}`}
-              aria-pressed={spelling?.action === 'adopt_kaikki'}
-              disabled={!review.adoptionTarget}
-              onClick={() =>
-                review.adoptionTarget && setSpelling({ action: 'adopt_kaikki', newDisplayText: review.adoptionTarget })
-              }
-            >
-              Wiktionary's is right ({upstreamForm})
-            </button>
-            <button
-              type="button"
-              className={`btn ${spelling?.action === 'keep_ours' ? 'btn-primary' : 'btn-secondary'}`}
-              aria-pressed={spelling?.action === 'keep_ours'}
-              onClick={() => setSpelling({ action: 'keep_ours' })}
-            >
-              Ours is right ({review.displayText})
-            </button>
-          </div>
-          <p className="field-note">A spelling change is a correction - it says the other one is wrong.</p>
-        </>
-      ) : null}
-
-      {review.spellingVsUpstream === 'not_cited' ? (
-        <>
-          <p aria-label="Spelling question">
-            {isExempt ? (
+          <p aria-label="Spelling comparison">
+            Reads: <strong>{proposed}</strong>
+            {upstreamForm ? (
               <>
-                This word has no Wiktionary entry, so there is nothing to compare against. We spell it{' '}
-                <strong>{review.displayText}</strong>.
+                <br />
+                {vsUpstream === 'match'
+                  ? `Wiktionary has ${upstreamForm} - the same.`
+                  : vsUpstream === 'tone_mismatch'
+                    ? `Wiktionary has ${upstreamForm} - same letters, different tone.`
+                    : `Wiktionary has ${upstreamForm} - the letters differ, not just the tone.`}
+              </>
+            ) : isExempt ? (
+              <>
+                <br />
+                This word has no Wiktionary entry, so there is nothing to compare against.
               </>
             ) : (
               <>
-                This word is not linked to a Wiktionary etymology yet. We spell it <strong>{review.displayText}</strong>.
+                <br />
+                This word is not linked to a Wiktionary etymology yet.
               </>
             )}
+          </p>
+        </>
+      ) : (
+        // syllabifySpans could not represent this word - an Ajami spelling, a
+        // hyphenated or multi-word form. Editing it here would silently drop the
+        // characters the syllabifier does not model, so it is left alone and the
+        // reviewer can only confirm or skip.
+        <>
+          <p aria-label="Spelling question">
+            We have <strong>{review.displayText}</strong>. This word cannot be broken into syllables here, so its
+            spelling can only be changed by a curator.
           </p>
           <div className="btn-row" role="group" aria-label="Spelling choice">
             <button
@@ -278,11 +312,11 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
               aria-pressed={spelling?.action === 'keep_ours'}
               onClick={() => setSpelling({ action: 'keep_ours' })}
             >
-              Yes, that's right
+              The spelling is right
             </button>
           </div>
         </>
-      ) : null}
+      )}
 
       {review.syllableSplitStatus === 'mismatch' ? (
         <>

@@ -12,4 +12,5 @@ export * from './vocabSearch.js';
 export * from './duplicateCheck.js';
 export * from './consensus.js';
 export * from './textFingerprint.js';
+export * from './tone.js';
 export * from './upstreamPin.js';

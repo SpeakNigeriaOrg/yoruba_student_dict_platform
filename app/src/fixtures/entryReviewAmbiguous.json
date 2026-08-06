@@ -1,11 +1,11 @@
 {
   "wordId": "fixturegenentry_ko_something",
-  "displayText": "fixturegenentry_kọ́",
-  "englishHint": "something",
+  "displayText": "gbẹ̀dùjó",
+  "englishHint": "ko something",
   "status": "ambiguous_match",
   "candidatesConsidered": [
     {
-      "form": "fixturegenentry_kọ́",
+      "form": "gbẹ̀dùjó",
       "pos": "verb",
       "glosses": [
         "to build, construct"
@@ -14,7 +14,7 @@
       "etymologyNumber": "2"
     },
     {
-      "form": "fixturegenentry_kọ́",
+      "form": "gbẹ̀dùjó",
       "pos": "particle",
       "glosses": [
         "a negation particle"
@@ -23,7 +23,7 @@
       "etymologyNumber": "3"
     },
     {
-      "form": "fixturegenentry_kọ́",
+      "form": "gbẹ̀dùjó",
       "pos": "verb",
       "glosses": [
         "to hang, suspend"
@@ -32,18 +32,7 @@
       "etymologyNumber": "4"
     }
   ],
-  "syllableSplitStatus": "mismatch",
-  "syllableSplitManual": [
-    "kọ́"
-  ],
-  "syllableSplitProgrammatic": [
-    "fi",
-    "tu",
-    "re",
-    "ge",
-    "nen",
-    "trykọ́"
-  ],
+  "syllableSplitStatus": "match",
   "definitionCandidateGlosses": [],
   "definitionSourceForm": null,
   "definitionSourceIsCrossReference": false,
@@ -52,7 +41,9 @@
   "definitionCurrent": null,
   "definitionProposed": null,
   "syllables": [
-    "kọ́"
+    "gbẹ̀",
+    "dù",
+    "jó"
   ],
   "axisDecided": {
     "entry": false,

@@ -36,10 +36,17 @@ import { writeCitationInTransaction } from './upstreamCitations.js';
 
 export interface ApplyEntryDecisionInput {
   /** The written-form half. Required - see the module comment. */
-  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki';
+  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki' | 'respell';
   candidateForm?: string;
-  /** Required when action is 'adopt_kaikki'. */
+  /** Required when action is 'adopt_kaikki' or 'respell'. */
   newDisplayText?: string;
+  /** Required when action is 'respell': the syllables as the reviewer edited them,
+   * one box per syllable.
+   *
+   * Authored, not re-derived. Re-syllabifying newDisplayText would discard the
+   * boundaries they chose, and for a syllabic nasal that changes what the word IS -
+   * `gban̄gba` is three syllables, `gbangba` is two (see shared/src/tone.ts). */
+  newSyllables?: string[];
   /** Optional sub-check: only meaningful on a manual/programmatic mismatch. */
   syllableAction?: 'keep_manual' | 'accept_programmatic';
   syllableNote?: string;
@@ -84,6 +91,13 @@ export class NewDisplayTextRequiredError extends Error {
   }
 }
 
+export class RespellSyllablesRequiredError extends Error {
+  constructor() {
+    super("newSyllables is required when action is 'respell' - the reviewer edits the word one syllable at a time");
+    this.name = 'RespellSyllablesRequiredError';
+  }
+}
+
 export class MissingDefinitionTextError extends Error {
   constructor() {
     super("definitionText is required when definitionAction is 'custom'");
@@ -102,10 +116,32 @@ export class KaikkiVerificationMismatchError extends Error {
   }
 }
 
+export class RespellMismatchError extends Error {
+  constructor(displayText: string, joined: string) {
+    super(
+      `newSyllables join to '${joined}' but newDisplayText is '${displayText}' - a respelling's syllables and its ` +
+        `spelling must be the same text, or the record would hold two different answers about one word`,
+    );
+    this.name = 'RespellMismatchError';
+  }
+}
+
 export function validateEntryDecisionInput(input: ApplyEntryDecisionInput): void {
   if (!input.action) throw new IncompleteEntryDecisionError('action');
   if (!input.definitionAction) throw new IncompleteEntryDecisionError('definitionAction');
   if (input.action === 'adopt_kaikki' && !input.newDisplayText) throw new NewDisplayTextRequiredError();
+  if (input.action === 'respell') {
+    if (!input.newDisplayText) throw new NewDisplayTextRequiredError();
+    if (!input.newSyllables || input.newSyllables.length === 0) throw new RespellSyllablesRequiredError();
+    // The one consistency check that matters, and the reason it is enforced server-side:
+    // production already contains a word whose display_text and syllables disagree
+    // (agunfon_giraffe: 'àgùnfon' vs ['à','gùn','fọn']). Nothing should be able to
+    // create another. Compared NFC-normalized and case-insensitively, since the
+    // syllabifier lowercases and a proper noun keeps its capital in display_text.
+    const joined = input.newSyllables.join('').normalize('NFC').toLowerCase();
+    const whole = input.newDisplayText.normalize('NFC').toLowerCase();
+    if (joined !== whole) throw new RespellMismatchError(input.newDisplayText, input.newSyllables.join(''));
+  }
   if (input.definitionAction === 'custom' && !input.definitionText) throw new MissingDefinitionTextError();
 }
 
@@ -179,6 +215,25 @@ export async function applyEntryDecisionInTransaction(
     ]);
   }
 
+  // A human-authored respelling. Deliberately NOT routed through the adopt_kaikki
+  // branch above, and deliberately NOT Kaikki-verified: that check exists so a client
+  // cannot invent a spelling and pass it off as upstream's suggestion, and this is the
+  // opposite case - a reviewer correcting the tone, which is usually neither our
+  // current spelling nor Kaikki's. Same reasoning already recorded for
+  // applyEntryOutcomeInTransaction, which writes a consensus spelling directly.
+  //
+  // display_text and syllables are written TOGETHER, from the same submission, so
+  // they cannot disagree with each other.
+  if (input.action === 'respell' && input.newDisplayText && input.newSyllables) {
+    effectiveDisplayText = input.newDisplayText;
+    await client.query(
+      `update golden_record
+       set display_text = $1, syllables = $2, updated_at = now(), updated_by = $3
+       where word_id = $4`,
+      [input.newDisplayText, input.newSyllables, decidedBy, wordId],
+    );
+  }
+
   if (input.syllableAction === 'accept_programmatic') {
     const programmatic = syllabifyWord(effectiveDisplayText);
     await client.query('update golden_record set syllables = $1, updated_at = now(), updated_by = $2 where word_id = $3', [
@@ -210,6 +265,10 @@ export async function applyEntryDecisionInTransaction(
     definitionText: input.definitionText,
     definitionSourceForm: input.definitionSourceForm,
     senseEntryId: input.senseEntryId,
+    // Replayed by getEntryReview's loadAxisOverride, so a decided word reports the
+    // spelling that was actually settled rather than re-proposing from scratch.
+    newDisplayText: input.action === 'respell' ? input.newDisplayText : undefined,
+    newSyllables: input.action === 'respell' ? input.newSyllables : undefined,
   };
   // Fingerprinted with the same function contributions use, so a later
   // contribution that disagrees with this decision can be detected by equality

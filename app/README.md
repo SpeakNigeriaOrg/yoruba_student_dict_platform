@@ -43,6 +43,33 @@ time (confirmed: `npm run build` puts it in `dist/staticwebapp.config.json`).
 It used to live at the platform repo root, where Azure's build would never
 have actually picked it up.
 
+## A review screen must never be answerable only one way
+
+Every review surface has to offer a way to DISAGREE, not just a way to confirm. This
+is a correctness rule, not a UX preference: a screen whose only action is agreement
+does not merely irritate reviewers, it **corrupts the evidence**, because every
+recorded vote says yes when yes is the only thing clickable. The consensus model
+(`shared/src/consensus.ts`) exists to tally independent judgements, and it cannot do
+that if the interface can only record one of them.
+
+This has been got wrong once, by over-correcting in the other direction: an earlier
+pass removed options that were inapplicable - "accept proposed components" offered on
+a word with no proposal, "adopt Kaikki's spelling" showing the same word as "keep our
+spelling" - and left screens with a single button. Hiding a meaningless option is
+right; leaving only agreement behind is not.
+
+How each axis satisfies it now:
+
+| Axis | How a reviewer disagrees |
+|---|---|
+| entry | The tone row is an **editor**, not a confirmation - every syllable's tone is one tap away on every word, and the letters sit behind "the letters are wrong" |
+| etymology | Both "it has no parts" and "it does have parts" (which reveals the component picker, available to volunteers) |
+| audio | Inherently generative - the act is contributing a recording, and the spelling and syllables being recorded against are both editable |
+
+Each of those is covered by a named test in the corresponding `*.test.tsx`; search for
+"agreement" to find them. Abstention is separate and already handled: the queue's
+**Skip for now** records nothing, which is the honest way to say "I don't know".
+
 ## Status
 
 A minimal but real curator flow is built and tested: identity

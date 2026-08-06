@@ -102,6 +102,70 @@ describe('the cited etymology is part of the claim, not provenance', () => {
   });
 });
 
+describe("respell: a reviewer's own spelling, which is usually a tone correction", () => {
+  it('asserts the submitted spelling AND the submitted syllables', () => {
+    const out = resolveEntryOutcome(OBSERVED, {
+      action: 'respell',
+      newDisplayText: 'ikùn',
+      newSyllables: ['i', 'kùn'],
+      definitionAction: 'confirm',
+    });
+    expect(out.displayText).toBe('ikùn');
+    // Authored, not re-derived - re-syllabifying would discard the boundaries the
+    // reviewer chose, which for a syllabic nasal changes the word.
+    expect(out.syllables).toEqual(['i', 'kùn']);
+  });
+
+  it('keeps a syllabic-nasal split that re-deriving from the spelling would lose', () => {
+    const out = resolveEntryOutcome(
+      { displayText: 'gbangba', syllables: ['gban', 'gba'], definition: 'clearly' },
+      { action: 'respell', newDisplayText: 'gban̄gba', newSyllables: ['gba', 'n̄', 'gba'], definitionAction: 'confirm' },
+    );
+    expect(out.syllables).toEqual(['gba', 'n̄', 'gba']);
+  });
+
+  it('two reviewers who pick the same tones agree', () => {
+    const input = {
+      action: 'respell' as const,
+      newDisplayText: 'ikùn',
+      newSyllables: ['i', 'kùn'],
+      definitionAction: 'confirm' as const,
+    };
+    expect(fingerprintOutcome(resolveEntryOutcome(OBSERVED, input))).toBe(
+      fingerprintOutcome(resolveEntryOutcome(OBSERVED, input)),
+    );
+  });
+
+  it('two reviewers who pick DIFFERENT tones do not agree', () => {
+    const low = resolveEntryOutcome(OBSERVED, {
+      action: 'respell',
+      newDisplayText: 'ikùn',
+      newSyllables: ['i', 'kùn'],
+      definitionAction: 'confirm',
+    });
+    const high = resolveEntryOutcome(OBSERVED, {
+      action: 'respell',
+      newDisplayText: 'ikún',
+      newSyllables: ['i', 'kún'],
+      definitionAction: 'confirm',
+    });
+    expect(fingerprintOutcome(low)).not.toBe(fingerprintOutcome(high));
+  });
+
+  it('a respelling that lands back on the current spelling agrees with keep_ours', () => {
+    // Two people can reach the same claim by different routes - one leaves the tone
+    // alone, one sets each syllable to what it already was. Same assertion.
+    const viaKeep = resolveEntryOutcome(OBSERVED, { action: 'keep_ours', definitionAction: 'confirm' });
+    const viaRespell = resolveEntryOutcome(OBSERVED, {
+      action: 'respell',
+      newDisplayText: OBSERVED.displayText,
+      newSyllables: OBSERVED.syllables,
+      definitionAction: 'confirm',
+    });
+    expect(fingerprintOutcome(viaRespell)).toBe(fingerprintOutcome(viaKeep));
+  });
+});
+
 describe('resolveEntryOutcome', () => {
   it('keep_ours asserts the state as observed', () => {
     expect(resolveEntryOutcome(OBSERVED, { action: 'keep_ours', definitionAction: 'confirm' })).toEqual({

@@ -15,7 +15,7 @@
 // re-deciding which etymology the word is.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { EntryReview } from './EntryReview.js';
@@ -51,88 +51,233 @@ function mockFetch(fixture: unknown, kaikkiResults?: unknown[]) {
 async function loaded(fixture: unknown, isCurator = true, kaikkiResults?: unknown[]) {
   const fetchMock = mockFetch(fixture, kaikkiResults);
   render(<EntryReview wordId="w" isCurator={isCurator} />);
-  await waitFor(() => expect(screen.getByLabelText('Spelling question')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
   return fetchMock;
 }
 
-describe('spelling: a cited word whose spelling already agrees with upstream', () => {
-  it('states the agreement and offers ONE affirmation, not a choice between identical options', async () => {
-    // The regression this replaces: adoptionTarget is populated even on a clean
-    // match (it equals displayText in this very fixture), so the old screen showed
-    // "Keep our spelling (adìyẹ)" beside "Adopt Kaikki's spelling (adìyẹ)".
+describe('the tone row is an EDITOR, not a Yes button', () => {
+  // The regression this replaces: when our spelling matched upstream the screen
+  // showed a single "Yes, that's right" button. That did not merely irritate -
+  // every recorded vote said yes because yes was the only thing clickable, so the
+  // consensus tally could not mean anything.
+  it('gives every syllable a live tone control, even when the spelling already matches upstream', async () => {
     await loaded(entryFixture);
 
-    expect(screen.getByLabelText('Spelling question')).toHaveTextContent('the same as ours');
-    const buttons = screen.getByLabelText('Spelling choice').querySelectorAll('button');
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toHaveTextContent("Yes, that's right");
+    // dùjẹ̀kù -> dù | jẹ̀ | kù
+    for (const n of [1, 2, 3]) {
+      expect(screen.getByLabelText(`Tone of syllable ${n}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText('Tone of syllable 4')).not.toBeInTheDocument();
   });
 
-  it('never offers to adopt a spelling identical to the one on record', async () => {
+  it('pre-selects each syllable\'s current tone, so leaving it alone is agreement', async () => {
     await loaded(entryFixture);
-    expect(screen.queryByRole('button', { name: /Adopt/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Wiktionary's is right/ })).not.toBeInTheDocument();
+    // dù is low, jẹ̀ is low, kù is low in this fixture.
+    expect(screen.getByLabelText('Syllable 1 low tone')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Syllable 1 high tone')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('submits keep_ours plus the definition half in one request', async () => {
+  it('submits keep_ours when the reviewer changes nothing', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
-
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ action: 'keep_ours', definitionAction: 'confirm' }));
   });
-});
 
-describe('spelling: a cited word upstream spells differently', () => {
-  it('shows both spellings and frames the change as a correction', async () => {
-    await loaded(entryDiffersFixture);
-
-    const question = screen.getByLabelText('Spelling question');
-    expect(question).toHaveTextContent('fixturegenentry_kasu');
-    expect(question).toHaveTextContent('fixturegenentry_kásù');
-    expect(screen.getByText(/A spelling change is a correction/)).toBeInTheDocument();
-  });
-
-  it('offers two options whose labels are actually different from each other', async () => {
-    await loaded(entryDiffersFixture);
-    const labels = [...screen.getByLabelText('Spelling choice').querySelectorAll('button')].map((b) => b.textContent);
-    expect(labels).toHaveLength(2);
-    expect(new Set(labels).size).toBe(2);
-  });
-
-  it('submits adopt_kaikki with the diagnosed adoptionTarget', async () => {
+  it('changing ONE syllable\'s tone submits a respelling of the whole word', async () => {
     const user = userEvent.setup();
-    const fetchMock = await loaded(entryDiffersFixture);
+    const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: /Wiktionary's is right/ }));
+    await user.click(screen.getByLabelText('Syllable 2 high tone'));
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
-        action: 'adopt_kaikki',
-        newDisplayText: 'fixturegenentry_kásù',
+        action: 'respell',
+        newDisplayText: 'dùjẹ́kù',
+        // Authored, not re-derived: the boundaries are the ones on screen.
+        newSyllables: ['dù', 'jẹ́', 'kù'],
       }),
     );
   });
 
-  it('lets our spelling stand instead', async () => {
+  it('writes mid tone as no mark on a vowel', async () => {
     const user = userEvent.setup();
-    const fetchMock = await loaded(entryDiffersFixture);
+    const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: /Ours is right/ }));
+    await user.click(screen.getByLabelText('Syllable 1 mid tone'));
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
-    await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ action: 'keep_ours' }));
+    await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ newDisplayText: 'dujẹ̀kù' }));
+  });
+
+  it('keeps the underdot when the tone changes - it is a letter, not a tone mark', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.click(screen.getByLabelText('Syllable 2 high tone'));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => expect(postedBody(fetchMock).newDisplayText).toContain('ẹ'));
   });
 });
 
-describe('spelling: an uncited word', () => {
-  it('says so plainly rather than showing a tone-mismatch diagnosis to a volunteer', async () => {
+describe('normalization must never masquerade as an edit', () => {
+  // Five production words store display_text and syllables in NFD (oba_king,
+  // alubosa_onion, ose_soap, ibepe_papaya, olongbo_cat), and all five have
+  // recordings. The publish scripts drop any recording whose recorded_syllables does
+  // not EXACTLY equal golden_record.syllables, so a respell that changed nothing but
+  // Unicode composition would silently remove 12 real recordings from the game.
+  //
+  // A genuine tone change dropping them is correct - the recording is of the old
+  // pronunciation. A no-op confirm doing it is not.
+  const nfdFixture = {
+    ...entryFixture,
+    displayText: entryFixture.displayText.normalize('NFD'),
+  };
+
+  it('confirming a non-NFC word without changes submits keep_ours, not a respelling', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(nfdFixture);
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
+    expect(postedBody(fetchMock).newDisplayText).toBeUndefined();
+  });
+
+  it('setting a syllable to the tone it already has is still not an edit', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(nfdFixture);
+
+    // Syllable 1 is already low; tapping low must not manufacture a respelling out of
+    // the recomposition alone.
+    await user.click(screen.getByLabelText('Syllable 1 low tone'));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
+  });
+
+  it('but a real tone change on a non-NFC word IS a respelling', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(nfdFixture);
+
+    await user.click(screen.getByLabelText('Syllable 1 high tone'));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+  });
+});
+
+describe('the comparison line says WHICH kind of difference it is', () => {
+  it('reports agreement', async () => {
+    await loaded(entryFixture);
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('dùjẹ̀kù - the same.');
+  });
+
+  it('distinguishes a TONE difference from a letters one', async () => {
+    // The subtlety the old screen threw away: classifyToneMatch already separates
+    // these, and "differs" told a reviewer nothing about what to look at.
+    await loaded(entryDiffersFixture);
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('same letters, different tone');
+  });
+
+  it('reports a letters difference as such once the reviewer edits the letters', async () => {
+    const user = userEvent.setup();
+    await loaded(entryDiffersFixture);
+
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'ba');
+
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('the letters differ, not just the tone');
+  });
+
+  it('updates live as the tone changes', async () => {
+    const user = userEvent.setup();
+    await loaded(entryDiffersFixture);
+
+    // wòhunpẹ̀ vs upstream wòhúnpẹ̀ - setting syllable 2 high makes them agree.
+    await user.click(screen.getByLabelText('Syllable 2 high tone'));
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('the same.');
+  });
+
+  it('says there is nothing to compare against for an uncited word', async () => {
     await loaded(entryUncitedFixture, false);
-    expect(screen.getByLabelText('Spelling question')).toHaveTextContent('not linked to a Wiktionary etymology yet');
-    expect(screen.queryByText(/tone_mismatch/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('not linked to a Wiktionary etymology yet');
+  });
+});
+
+describe('correcting the letters', () => {
+  it('is behind an explicit choice, because it asserts the word itself was wrong', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByLabelText('Letters of syllable 1')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'The letters are wrong' })).toBeInTheDocument();
+  });
+
+  it('reveals one letters box per syllable, tone stripped', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('du');
+    expect(screen.getByLabelText('Letters of syllable 2')).toHaveValue('jẹ');
+  });
+
+  it('offers the ẹ ọ ṣ palette, which is the whole non-ASCII gap once tone is handled', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    const palette = screen.getByLabelText('Extra letters for syllable 1');
+    for (const letter of ['ẹ', 'ọ', 'ṣ']) {
+      expect(within(palette).getByRole('button', { name: letter })).toBeInTheDocument();
+    }
+  });
+
+  it('the palette appends without dropping the tone already chosen', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    // Syllable 1 is `dù` - low. Appending ọ must keep the low tone.
+    const palette = screen.getByLabelText('Extra letters for syllable 1');
+    await user.click(within(palette).getByRole('button', { name: 'ọ' }));
+
+    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('duọ');
+    expect(screen.getByLabelText('Syllable 1 low tone')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('submits the edited letters as a respelling with matching syllables', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    const box = screen.getByLabelText('Letters of syllable 3');
+    await user.clear(box);
+    await user.type(box, 'ko');
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.action).toBe('respell');
+      // The server rejects a syllable list that does not rejoin to the spelling, so
+      // this is the client's half of that invariant.
+      expect((body.newSyllables as string[]).join('')).toBe(body.newDisplayText);
+    });
+  });
+
+  it('does not offer a tone control for a syllable that cannot carry tone', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    const box = screen.getByLabelText('Letters of syllable 1');
+    await user.clear(box);
+    await user.type(box, 'gb');
+
+    expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
   });
 });
 
@@ -156,7 +301,6 @@ describe('the student definition is a simplification, not a correction', () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.clear(screen.getByLabelText('Student definition'));
     await user.type(screen.getByLabelText('Student definition'), 'a bird we keep for eggs');
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
@@ -173,7 +317,6 @@ describe('the student definition is a simplification, not a correction', () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ definitionAction: 'confirm' }));
@@ -181,20 +324,18 @@ describe('the student definition is a simplification, not a correction', () => {
 });
 
 describe('atomicity: an entry is decided as a whole', () => {
-  it('will not submit with no spelling answer', async () => {
-    const user = userEvent.setup();
-    const fetchMock = await loaded(entryFixture);
-
-    expect(screen.getByRole('button', { name: 'Confirm entry' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
-    expect(fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST')).toBeUndefined();
+  it('is answerable immediately, because the tone row IS the answer', async () => {
+    // Deliberately different from the old screen, which required arming a separate
+    // spelling choice first. A pre-filled editor means the reviewer can confirm
+    // straight away or change any syllable - both are real answers.
+    await loaded(entryFixture);
+    expect(screen.getByRole('button', { name: 'Confirm entry' })).toBeEnabled();
   });
 
   it('will not submit with an empty definition', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.clear(screen.getByLabelText('Student definition'));
 
     expect(screen.getByRole('button', { name: 'Confirm entry' })).toBeDisabled();
@@ -205,7 +346,6 @@ describe('atomicity: an entry is decided as a whole', () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.clear(screen.getByLabelText('Student definition'));
     await user.type(screen.getByLabelText('Student definition'), 'a hen');
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
@@ -222,7 +362,6 @@ describe('atomicity: an entry is decided as a whole', () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture, false);
 
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
@@ -371,11 +510,10 @@ describe('failures', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<EntryReview wordId="w" isCurator={true} />);
-    await waitFor(() => expect(screen.getByLabelText('Spelling question')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: "Yes, that's right" }));
+    await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('nope'));
-    expect(screen.getByLabelText('Spelling question')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tone editor')).toBeInTheDocument();
   });
 });

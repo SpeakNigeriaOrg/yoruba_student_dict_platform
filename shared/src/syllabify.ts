@@ -151,3 +151,45 @@ export function syllabifyWord(word: string): string[] {
   // hand-authored syllables are precomposed (NFC).
   return syllables.map((s) => s.normalize('NFC'));
 }
+
+/** Syllables as slices of the ORIGINAL text, preserving capitalization - or null when
+ * the text cannot be represented as syllables at all.
+ *
+ * Two reasons this exists rather than callers using syllabifyWord directly:
+ *
+ * CASE. syllabifyWord lowercases on purpose (capitalization is orthographic, not
+ * phonological), which is right for matching and for audio and wrong for an editor:
+ * a reviewer looking at the month name `Agẹmọ` must not be shown `agẹmọ`, and must
+ * certainly not save it back that way.
+ *
+ * LOSS. syllabifyWord silently drops any character it does not model - it only
+ * accumulates vowels, nasals, consonants, `gb` and apostrophes. The real lexicon
+ * contains Ajami (Arabic-script Yoruba) spellings, hyphenated forms like `gan-an`,
+ * and interjections like `hà!`, all of which come back missing characters. A tone
+ * editor built on that would rewrite `gan-an` to `ganan` the moment anyone touched
+ * it, so this returns **null** for such text and the caller must refuse to edit it
+ * rather than quietly mangling a word nobody was asked about.
+ *
+ * The slicing is sound because lowercasing Yoruba is length-preserving in NFC; the
+ * same null is returned if that ever stops holding, rather than slicing at wrong
+ * offsets. */
+export function syllabifySpans(text: string): string[] | null {
+  const source = text.normalize('NFC');
+  const lowered = syllabifyWord(source);
+  if (lowered.length === 0) return source.length === 0 ? [] : null;
+
+  const chars = [...source];
+  const totalFromSyllables = lowered.reduce((n, s) => n + [...s].length, 0);
+  if (totalFromSyllables !== chars.length) return null;
+
+  const spans: string[] = [];
+  let at = 0;
+  for (const syllable of lowered) {
+    const length = [...syllable].length;
+    spans.push(chars.slice(at, at + length).join(''));
+    at += length;
+  }
+  // Belt and braces: the slices must reconstitute the input exactly, or the caller
+  // gets null. This is the invariant every consumer depends on.
+  return spans.join('') === source ? spans : null;
+}

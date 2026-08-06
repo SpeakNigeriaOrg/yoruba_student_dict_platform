@@ -210,6 +210,11 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const [note, setNote] = useState('');
   const [draftComponents, setDraftComponents] = useState<string[]>([]);
   const [showTools, setShowTools] = useState(false);
+  /** The disagree branch. "It has no parts" is a complete answer on its own; saying it
+   * DOES have parts is only half an answer, so it reveals the picker rather than
+   * submitting. Available to volunteers - it was curator-only, which is precisely what
+   * left the screen with a single clickable answer. */
+  const [claimsHasParts, setClaimsHasParts] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +222,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setError(null);
     setDraftComponents([]);
     setShowTools(false);
+    setClaimsHasParts(false);
     getEtymologyReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -383,41 +389,6 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
                 </ul>
               )}
 
-              <h4>Build the component list by hand</h4>
-              {draftComponents.length === 0 ? null : (
-                <ul aria-label="Draft components" className="plain-list">
-                  {draftComponents.map((componentWordId) => (
-                    <li key={componentWordId} className="search-result-row">
-                      <span className="result-text">{componentWordId}</span>
-                      <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <SearchBox
-                search={searchVocab}
-                renderResult={(r) => (
-                  <>
-                    <strong>{r.wordId}</strong> - {r.displayText}
-                  </>
-                )}
-                onSelect={addManualComponent}
-                selectLabel="Add"
-                placeholder="Search existing vocabulary..."
-                resultsAriaLabel="Vocab search results"
-              />
-              {/* Only offered once something is actually picked - saving an empty
-                  custom list asserted "these are the parts" about nothing. */}
-              {draftComponents.length > 0 ? (
-                <div className="btn-row">
-                  <button type="button" className="btn btn-secondary" onClick={saveCustomComponents}>
-                    {label('Save custom components')}
-                  </button>
-                </div>
-              ) : null}
-
               <div className="field">
                 <label htmlFor="etymology-note-field">Note</label>
                 <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
@@ -464,12 +435,62 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         >
           {label(hasProposal ? 'No, it has no parts' : 'It has no parts')}
         </button>
+        {/* The other half of the question. Without this the screen could only ever
+            record agreement, whatever the reviewer actually thought. */}
+        {!hasProposal && !claimsHasParts ? (
+          <button type="button" className="btn btn-secondary" onClick={() => setClaimsHasParts(true)}>
+            It does have parts
+          </button>
+        ) : null}
         {hasProposal ? (
           <button type="button" className="btn btn-danger" onClick={rejectProposed}>
             {label('Reject this etymology')}
           </button>
         ) : null}
       </div>
+      {claimsHasParts || (isCurator && showTools) ? (
+        <div aria-label="Component picker">
+          <h4>Which words is it made of?</h4>
+          <p className="field-note">
+            Pick the existing dictionary words that make up this one. If a part is not in the dictionary yet, ask a
+            curator to add it first.
+          </p>
+          {draftComponents.length === 0 ? null : (
+            <ul aria-label="Draft components" className="plain-list">
+              {draftComponents.map((componentWordId) => (
+                <li key={componentWordId} className="search-result-row">
+                  <span className="result-text">{componentWordId}</span>
+                  <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <SearchBox
+            search={searchVocab}
+            renderResult={(r) => (
+              <>
+                <strong>{r.wordId}</strong> - {r.displayText}
+              </>
+            )}
+            onSelect={addManualComponent}
+            selectLabel="Add"
+            placeholder="Search existing vocabulary..."
+            resultsAriaLabel="Vocab search results"
+          />
+          {/* Only offered once something is actually picked - saving an empty custom
+              list asserted "these are the parts" about nothing. */}
+          {draftComponents.length > 0 ? (
+            <div className="btn-row">
+              <button type="button" className="btn btn-primary" onClick={saveCustomComponents}>
+                {label('Save these parts')}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {status ? <p role="status" className="status-banner">{status}</p> : null}
     </section>
   );

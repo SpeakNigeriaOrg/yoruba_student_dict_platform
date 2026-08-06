@@ -68,9 +68,12 @@ export interface EntryObservedState {
  * fields; note/definitionSourceForm are deliberately absent - see the note on
  * EntryOutcome. */
 export interface EntryContributionInput {
-  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki';
+  action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki' | 'respell';
   candidateForm?: string;
   newDisplayText?: string;
+  /** Required with 'respell'. The syllables the reviewer edited, authored rather than
+   * re-derived - see the note on 'respell' in resolveEntryOutcome. */
+  newSyllables?: string[];
   syllableAction?: 'keep_manual' | 'accept_programmatic';
   definitionAction?: 'confirm' | 'custom';
   definitionText?: string;
@@ -112,9 +115,17 @@ export interface EntryOutcome {
  * behaviour changes, this must change with it, or a contribution's recorded
  * outcome would stop describing what applying it actually does:
  *
- *   - display_text changes ONLY on adopt_kaikki. keep_ours and
+ *   - display_text changes on adopt_kaikki and on respell. keep_ours and
  *     select_candidate deliberately leave it alone; select_candidate resolves
  *     which Kaikki SENSE this word matches, it is not a rename.
+ *   - 'respell' is a human-authored spelling, which adopt_kaikki cannot express:
+ *     that action re-verifies newDisplayText against what Kaikki suggests, so it
+ *     can only ever accept upstream's answer. Correcting a TONE is the common case
+ *     in this dictionary and is usually neither our current spelling nor Kaikki's.
+ *     Its syllables come from the submission because the reviewer edited them
+ *     directly, one box per syllable - re-deriving them would discard the syllable
+ *     boundaries they chose, which for a syllabic nasal changes the word (see
+ *     shared/src/tone.ts).
  *   - syllables are recomputed only on accept_programmatic, and from the
  *     spelling the word is BECOMING (post-adoption), not the one on record.
  *   - the definition is replaced only by 'custom'; 'confirm' blesses the text
@@ -123,10 +134,17 @@ export interface EntryOutcome {
  *     one; otherwise they are asserting the one already on record.
  */
 export function resolveEntryOutcome(observed: EntryObservedState, input: EntryContributionInput): EntryOutcome {
+  const respelled = input.action === 'respell' && input.newDisplayText;
   const displayText =
-    input.action === 'adopt_kaikki' && input.newDisplayText ? input.newDisplayText : observed.displayText;
+    respelled || (input.action === 'adopt_kaikki' && input.newDisplayText)
+      ? (input.newDisplayText as string)
+      : observed.displayText;
 
-  const syllables = input.syllableAction === 'accept_programmatic' ? syllabifyWord(displayText) : observed.syllables;
+  const syllables = respelled
+    ? (input.newSyllables ?? syllabifyWord(displayText))
+    : input.syllableAction === 'accept_programmatic'
+      ? syllabifyWord(displayText)
+      : observed.syllables;
 
   const definitionText =
     input.definitionAction === 'custom' ? (input.definitionText ?? null) : observed.definition;
