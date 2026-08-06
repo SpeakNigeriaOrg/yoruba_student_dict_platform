@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AssignmentSummary, AxisDecided } from './api.js';
-import { buildTaskQueue, completedTaskCount, nextTask, totalTaskCount } from './taskQueue.js';
+import { buildTaskQueue, completedTaskCount, nextAxisForWord, nextTask, totalTaskCount } from './taskQueue.js';
 
 function assignment(wordId: string, axisDecided: Partial<AxisDecided> = {}): AssignmentSummary {
   return {
@@ -86,5 +86,38 @@ describe('nextTask', () => {
   it('moves on once the preferred word is finished', () => {
     const assignments = [assignment('w1'), assignment('w2', { entry: true, etymology: true, audio: true })];
     expect(nextTask(assignments, 'w2')?.wordId).toBe('w1');
+  });
+});
+
+describe('nextAxisForWord', () => {
+  const decided = (over: Partial<AxisDecided> = {}): AxisDecided => ({
+    entry: false,
+    etymology: false,
+    audio: false,
+    ...over,
+  });
+
+  it('moves from a decided entry to etymology', () => {
+    expect(nextAxisForWord(decided({ entry: true }), 'entry')).toBe('etymology');
+  });
+
+  it('skips an axis that is already done', () => {
+    expect(nextAxisForWord(decided({ entry: true, etymology: true }), 'entry')).toBe('audio');
+  });
+
+  it('returns null when the word is finished, so the caller stays put', () => {
+    expect(nextAxisForWord(decided({ entry: true, etymology: true, audio: true }), 'entry')).toBeNull();
+  });
+
+  it('never offers the axis just decided, even if it somehow reads as pending', () => {
+    // The submission succeeded (this is only called on success), so re-offering the same
+    // axis would be a loop rather than a next step.
+    expect(nextAxisForWord(decided({ etymology: true, audio: true }), 'entry')).toBeNull();
+  });
+
+  it('follows AXIS_ORDER rather than "whatever comes after", sending a pending entry first', () => {
+    // Entry first is a dependency, not a preference: a spelling change invalidates
+    // recordings and re-matches components.
+    expect(nextAxisForWord(decided({ etymology: true }), 'etymology')).toBe('entry');
   });
 });

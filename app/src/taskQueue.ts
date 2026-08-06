@@ -28,7 +28,7 @@ export interface Task {
 }
 
 /** Axis order within a single word. Also the order the tab bar shows. */
-const AXIS_ORDER: readonly Axis[] = ['entry', 'etymology', 'audio'];
+export const AXIS_ORDER: readonly Axis[] = ['entry', 'etymology', 'audio'];
 
 function isPending(axisDecided: AxisDecided, axis: Axis): boolean {
   return !axisDecided[axis];
@@ -55,6 +55,25 @@ export function buildTaskQueue(assignments: AssignmentSummary[]): Task[] {
     }
   }
   return tasks;
+}
+
+/** The next axis of ONE word that still needs work, or null when the word is finished.
+ *
+ * Used when a word is opened directly (Browse, the review queue, a user's assignment
+ * list) rather than handed over by the queue: deciding an axis there should move on to
+ * the next one, the same as it does inside the queue. Before this, confirming on the
+ * word route left you on the axis you had just finished, with the tab bar as the only
+ * way forward.
+ *
+ * Ordered by AXIS_ORDER, not "whatever comes after the current axis", so a word whose
+ * entry is somehow still pending sends you back to entry - which is the dependency
+ * order the queue itself follows, and the reason it exists (a spelling change
+ * invalidates recordings and re-matches components).
+ *
+ * The current axis is excluded: it has just been decided, and on the rare path where
+ * the decision did not register there is nothing useful about offering it again. */
+export function nextAxisForWord(axisDecided: AxisDecided, currentAxis: Axis): Axis | null {
+  return AXIS_ORDER.find((axis) => axis !== currentAxis && isPending(axisDecided, axis)) ?? null;
 }
 
 /** Total tasks across all assigned words, done and pending, for honest

@@ -97,6 +97,24 @@ describe('App', () => {
       expect(screen.queryByLabelText('Queue progress')).not.toBeInTheDocument();
     });
 
+    it('deciding an axis on the word route moves to the next unfinished one', async () => {
+      // AXIS_STATUS is { entry: true, etymology: false, audio: true }, so confirming the
+      // entry axis should land on etymology. Before this, confirming here left you on the
+      // axis you had just finished with the tab bar as the only way forward.
+      installFetchMock();
+      const user = userEvent.setup();
+      window.location.hash = '#/word/some_word/entry';
+
+      render(<App />);
+      await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
+      // 'Confirm', not 'Confirm entry': this mock is a volunteer, who proposes rather
+      // than decides. Their submission is a contribution, which axisDecided counts as
+      // their own answer - so the advance works on both paths.
+      await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+      await waitFor(() => expect(window.location.hash).toBe('#/word/some_word/etymology'));
+    });
+
     it('normalises an empty hash so there is always a history entry to go back to', async () => {
       installFetchMock();
       render(<App />);

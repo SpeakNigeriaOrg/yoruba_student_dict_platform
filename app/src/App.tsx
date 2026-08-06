@@ -79,6 +79,10 @@ export default function App() {
                 axis={route.axis}
                 isCurator={isCurator}
                 onAxisChange={(axis) => navigate({ view: 'word', wordId: route.wordId, axis }, { replace: true })}
+                // Deciding an axis moves on to this word's next unfinished one, the same
+                // as inside the queue. Without it, confirming here left you on the axis
+                // you had just finished with no acknowledgement that there was more to do.
+                advanceAfterDecision
               />
             </>
           ) : route.view === 'user' ? (

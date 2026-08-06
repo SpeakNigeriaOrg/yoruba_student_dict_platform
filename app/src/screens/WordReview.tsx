@@ -10,6 +10,7 @@ import { AudioRecording } from './AudioRecording.js';
 import { EntryReview } from './EntryReview.js';
 import { EtymologyReview } from './EtymologyReview.js';
 import { getAxisStatus, type AxisDecided } from '../api.js';
+import { nextAxisForWord } from '../taskQueue.js';
 import { AXES, type Axis } from '../route.js';
 
 const AXIS_LABELS: Record<Axis, string> = {
@@ -36,6 +37,13 @@ export interface WordReviewProps {
    * The tabs also duplicated AxisBanner's chips, so the same three words appeared
    * twice on one phone screen. */
   showAxisTabs?: boolean;
+  /** Move to this word's next unfinished axis after a decision.
+   *
+   * On for the word route, off in the task queue - not because the queue does not
+   * advance, but because it advances itself: its onDecided re-reads the assignments and
+   * picks the next task, which may be another axis of this word OR the next word
+   * entirely. Two mechanisms racing on the same submit would fight. */
+  advanceAfterDecision?: boolean;
 }
 
 export function WordReview({
@@ -45,6 +53,7 @@ export function WordReview({
   onAxisChange,
   onDecided,
   showAxisTabs = true,
+  advanceAfterDecision = false,
 }: WordReviewProps) {
   const [axisStatus, setAxisStatus] = useState<AxisDecided | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -69,9 +78,24 @@ export function WordReview({
     };
   }, [wordId, axis, refreshToken]);
 
-  function handleDecided() {
+  async function handleDecided() {
     setRefreshToken((n) => n + 1);
     onDecided?.();
+    if (!advanceAfterDecision) return;
+
+    // Re-read rather than assuming this axis is now done: a volunteer's submission is a
+    // contribution, not a decision, and axisDecided counts a contribution only when it
+    // is the caller's own and still active (api/src/reviewShared.ts). Asking the server
+    // is the only way to know what is actually left.
+    try {
+      const status = await getAxisStatus(wordId);
+      setAxisStatus(status);
+      const next = nextAxisForWord(status, axis);
+      if (next) onAxisChange(next);
+    } catch {
+      // Staying put is a safe failure: the tab bar is still there, and the decision
+      // itself already succeeded.
+    }
   }
 
   return (
