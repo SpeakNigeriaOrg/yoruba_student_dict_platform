@@ -5,7 +5,7 @@
 // original imports these two helpers directly from kaikki_search.py rather
 // than duplicating them).
 
-import { TONE_MARKS, UNDERDOT_MARKS } from './orthography.js';
+import { orthographyInsensitiveForm, TONE_MARKS, UNDERDOT_MARKS } from './orthography.js';
 
 const STOPWORDS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'is', 'or', 'and', 'for']);
 
@@ -20,7 +20,28 @@ export function looksLikeYoruba(query: string): boolean {
   return [...decomposed].some((c) => YORUBA_ONLY_CHARS.has(c));
 }
 
+/** English words in a gloss or a query, lowercased, stopwords dropped.
+ *
+ * ---------------------------------------------------------------------------
+ * Marks are stripped BEFORE tokenising
+ * ---------------------------------------------------------------------------
+ * `[a-z0-9']+` on un-normalised text treats every non-ASCII character as a separator, so a Yoruba
+ * word inside an English gloss is shredded rather than skipped:
+ *
+ *     'alternative form of ọmọ (“child”)'  ->  ['alternative', 'form', 'm', 'child']
+ *
+ * That stray `m` is not harmless - it is a token that then matches any query containing `m`, and it
+ * exists in hundreds of cross-reference glosses. Stripping tone marks and underdots first turns
+ * `ọmọ` into `omo`, which is a real word rather than a fragment. It reuses the same
+ * `orthographyInsensitiveForm` the Yoruba side of the search has always used, so the two halves fold
+ * marks identically rather than by two separate rules.
+ *
+ * A trailing possessive is dropped too. The apostrophe sits INSIDE the character class, so
+ * "a child's toy" produced `child's`, which never equalled `child` - the gloss mentioned a child and
+ * the search could not tell. */
 export function tokenizeEnglish(text: string): string[] {
-  const matches = text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
-  return matches.filter((t) => !STOPWORDS.has(t));
+  const matches = orthographyInsensitiveForm(text).match(/[a-z0-9']+/g) ?? [];
+  return matches
+    .map((t) => t.replace(/'s$/, ''))
+    .filter((t) => t !== '' && !STOPWORDS.has(t));
 }

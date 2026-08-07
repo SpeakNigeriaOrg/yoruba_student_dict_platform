@@ -15,4 +15,5 @@ export * from './textFingerprint.js';
 export * from './tone.js';
 export * from './upstreamPin.js';
 export * from './deriveWordId.js';
+export * from './englishRelevance.js';
 export * from './nasalSplit.js';

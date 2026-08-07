@@ -10,6 +10,12 @@
 // project's corpus is small enough that a linear scan suffices.
 
 import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
+import {
+  buildGlossStats,
+  scoreGlossesAgainstQuery,
+  rootBonus,
+  type GlossStats,
+} from './englishRelevance.js';
 import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
 import type { KaikkiLexicon, KaikkiSense } from './types.js';
 
@@ -79,6 +85,34 @@ function senseKey(sense: KaikkiSense): string {
   return `content:${JSON.stringify([sense.canonicalForm.value, sense.pos, sense.glosses])}`;
 }
 
+/** Each sense once, however many spellings it is indexed under.
+ *
+ * The English pass used to walk `records`, which holds one entry PER SPELLING - so a sense with
+ * four standardForms was scored four times and written into the results map four times over. That
+ * was harmless when the score was a pure function of the sense, and it is not harmless now that
+ * the root bonus counts members of the match set. */
+function dedupedSenses(records: KaikkiSearchRecord[]): Array<{ sense: KaikkiSense }> {
+  const seen = new Set<string>();
+  const out: Array<{ sense: KaikkiSense }> = [];
+  for (const { sense } of records) {
+    const key = senseKey(sense);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ sense });
+  }
+  return out;
+}
+
+/** Corpus-wide gloss statistics for IDF, over each sense once. */
+function glossStatsFor(records: KaikkiSearchRecord[]): GlossStats {
+  return buildGlossStats(dedupedSenses(records).map(({ sense }) => sense.glosses));
+}
+
+/** Total gloss length in characters - the tie-break. */
+function glossLength(sense: KaikkiSense): number {
+  return sense.glosses.reduce((n, g) => n + g.length, 0);
+}
+
 /** Searches Yoruba spellings (tiered exact/tone/underdot-insensitive/
  * prefix) and English glosses (keyword overlap) at once, merging results
  * with Yoruba tiers ranked above English matches. Every result is keyed by
@@ -120,18 +154,47 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
   }
 
   if (qTokens.length > 0) {
-    for (const { sense } of records) {
+    // Per gloss, best-of, BM25-weighted, with a bonus for a gloss that IS the query. The old
+    // one-liner counted occurrences across `glosses.join(' ')`, which rewarded verbosity: see
+    // englishRelevance.ts for the measurements and why this is shared with yorubadict.
+    const stats = glossStatsFor(records);
+    const englishMatches: Array<{ key: string; sense: KaikkiSense; score: number }> = [];
+
+    for (const { sense } of dedupedSenses(records)) {
       const key = senseKey(sense);
       if (results.has(key)) continue; // already found via a Yoruba tier - don't downgrade to English
-      const glossTokens = tokenizeEnglish(sense.glosses.join(' '));
-      const score = qTokens.reduce((sum, t) => sum + glossTokens.filter((g) => g === t).length, 0);
-      if (score > 0) {
-        results.set(key, { tier: 'english', score, sense });
-      }
+      const score = scoreGlossesAgainstQuery(sense.glosses, qTokens, qOrtho, stats);
+      if (score > 0) englishMatches.push({ key, sense, score });
+    }
+
+    // The root bonus is computed against the MATCH SET, so a productive root is only lifted when
+    // the query also matched words built from it. That is what keeps it minor - see rootBonus.
+    const matchShapes = englishMatches.map(({ sense }) => ({
+      form: sense.canonicalForm.value,
+      partForms: new Set((sense.componentCandidates ?? []).map((c) => orthographyInsensitiveForm(c.form))),
+    }));
+    for (const [i, match] of englishMatches.entries()) {
+      const bonus = rootBonus(match.sense.canonicalForm.value, matchShapes.filter((_, j) => j !== i));
+      results.set(match.key, { tier: 'english', score: match.score + bonus, sense: match.sense });
     }
   }
 
-  const ranked = [...results.values()].sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.score - a.score);
+  const ranked = [...results.values()].sort(
+    (a, b) =>
+      TIER_RANK[a.tier] - TIER_RANK[b.tier] ||
+      b.score - a.score ||
+      // A real third key, but ONLY within the English tier.
+      //
+      // Equal scores used to fall back to Map insertion order, i.e. position in the corpus file -
+      // which is the entire reason `Àjàyí` outranked `ọmọ` for "child". A terser gloss is the
+      // likelier headline sense, and this is query-independent so it cannot smuggle file order
+      // back in.
+      //
+      // Scoped to English because every Yoruba-tier result carries score 0, so an unscoped
+      // tie-break would re-order those too - a much wider change than the bug needs, and one that
+      // moved three Python-parity fixtures that have nothing to do with gloss relevance.
+      (a.tier === 'english' && b.tier === 'english' ? glossLength(a.sense) - glossLength(b.sense) : 0),
+  );
 
   return ranked.slice(0, limit).map(({ tier, sense }) => ({
     form: sense.canonicalForm.value,
