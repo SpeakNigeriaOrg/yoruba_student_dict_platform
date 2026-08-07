@@ -158,3 +158,30 @@ before a dependent package's tests/build will see it. The root
 `test:api`/`test:ingest`/`build:api`/`build:ingest` scripts already do this
 automatically; running a workspace's own `npm test`/`npm run build`
 directly does not.
+
+## Search relevance is shared with yorubadict
+
+`englishRelevance.ts` is one half of a pair; the other is
+`yorubadict/public/english-relevance.js`. They implement the same rule, and
+`fixtures/search_agreement.json` is checked into both repos to keep them honest —
+`searchAgreement.test.ts` here, `npm run check:search` there.
+
+The pair exists because they had drifted. Both engines buried **ọmọ** for the
+query "child", for opposite reasons that shared one cause: each pooled all of a
+word's senses into a single bag before scoring. This platform *summed* over the
+pool, so verbosity won (a paragraph mentioning "child" five times beat the word
+whose gloss is "child; offspring"); yorubadict *divided* by it, so a word was
+penalised for having many senses. Nothing tested the two against each other, so
+one symptom hid two bugs.
+
+The rule: score per gloss, BM25 within the gloss, a bonus when a gloss *is* the
+query, a minor damped bonus for a root of other **matching** words, and a word
+scores as its best gloss — never the sum. Measured over 18 everyday queries, the
+word a learner wants moved from mean rank 7.5 to 2.8 here, and `ọmọ`/`igi` to #1
+in both engines.
+
+The fixture is deliberately not full parity. The two differ on result limit
+(15 vs 40), granularity (per-etymology here because citations need it, per-entry
+there), the `looksLikeYoruba` guard, the dialect tier, and whether example
+sentences are indexed. Those are recorded in the fixture's `knownDifferences`,
+so a real regression is distinguishable from an accepted difference.

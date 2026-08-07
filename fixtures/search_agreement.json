@@ -1,0 +1,55 @@
+{
+  "purpose": "Queries both search engines must agree on, so drift between them is visible.",
+  "why": [
+    "yorubadict and yoruba_student_dict_platform share the four Yoruba orthography tiers as a real",
+    "port, but their English halves had drifted into two different algorithms with two different",
+    "failure modes - and nothing tested them against each other. Searching 'child' was buried at #3",
+    "in the platform (no length normalisation, so verbose glosses won) and #35 in yorubadict (BM25",
+    "over a pooled per-entry document, so a word was penalised for having many senses). One symptom,",
+    "two causes, neither caught.",
+    "",
+    "These are not full parity. The two legitimately differ on result limit (15 vs 40), result",
+    "granularity (per-etymology rows here because citations need them, per-entry there), the",
+    "platform's diacritic guard, yorubadict's dialect tier, and whether example sentences are indexed",
+    "at all. What they must agree on is which word an English query is ABOUT.",
+    "",
+    "Checked in both repos against the same kaikki-yoruba release. If a change makes one engine",
+    "disagree, that is either a bug or a decision worth recording in knownDifferences below."
+  ],
+  "expectedTopResult": [
+    { "query": "child", "form": "ọmọ", "note": "the query that started this - the word for child, and the root of countless compounds" },
+    { "query": "tree", "form": "igi", "note": "was #22 in the platform and #79 in yorubadict" },
+    { "query": "water", "form": "omi" },
+    { "query": "fire", "form": "iná" },
+    { "query": "head", "form": "orí" },
+    { "query": "hand", "form": "ọwọ́" },
+    { "query": "bird", "form": "ẹyẹ" }
+  ],
+  "expectedInTopThree": [
+    { "query": "dog", "form": "ajá", "note": "not first because 'dog' is also a Yoruba PREFIX - dógùn-ún ('to rust') matches on the yoruba_prefix tier, which outranks every English match. Same class as the eye/ẹyẹ note below, not a scoring disagreement." },
+    { "query": "house", "form": "ilé", "note": "òrùlé genuinely glosses as 'house' too, so first place is arguable" },
+    { "query": "king", "form": "ọba" },
+    { "query": "money", "form": "owó" },
+    { "query": "moon", "form": "òṣùpá" },
+    { "query": "cow", "form": "màlúù" },
+    { "query": "book", "form": "ìwé" }
+  ],
+  "rootBonusMustNotPromote": [
+    {
+      "query": "wheelbarrow",
+      "mustNotContain": "ọmọ",
+      "note": "ọmọlan̄ke is built from ọmọ, but nothing about ọmọ means wheelbarrow. The root bonus counts only other members of the SAME result set, so a productive root is never dragged into a search it does not itself match. This is the property that keeps the bonus minor."
+    },
+    {
+      "query": "gecko",
+      "mustNotContain": "ọmọ",
+      "note": "ọmọnílé (wall gecko) is built from ọmọ. Same property."
+    }
+  ],
+  "knownDifferences": [
+    "An English query that is ALSO a Yoruba spelling or prefix gets Yoruba results first, in both engines - the four Yoruba tiers outrank English by design. 'eye' orthography-insensitively IS ẹyẹ (bird) and a prefix of eyeye/èyé/yéye, so ojú sits at ~#18 in the platform; 'dog' is a prefix of dógùn-ún ('to rust'), so ajá is second. Tier precedence, not relevance, which is why both are excluded from expectedTopResult. Whether a common English word should beat a Yoruba prefix match is a real open question and a much larger change than this pass.",
+    "eye -> ojú reaches #1 in yorubadict but not in the platform, because yorubadict caps each Yoruba tier separately while the platform slices once at the end - so a flood of prefix hits crowds the platform's first page and not yorubadict's.",
+    "The platform disables its English pass entirely for a query containing ẹ/ọ/ṣ or a combining mark (looksLikeYoruba); yorubadict has no such guard. So a query like 'kaṣu' returns 0 results here and non-empty there. Deliberate on this side.",
+    "yorubadict indexes example-sentence translations (down-weighted); the platform's corpus rows carry no examples at all, so it cannot."
+  ]
+}
