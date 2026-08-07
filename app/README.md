@@ -116,7 +116,12 @@ immediately. Three things make that safe:
 
 - **The `word_id` is derived, not chosen** (`shared/src/deriveWordId.ts`). Two volunteers
   who pick the same etymology derive the same id, which is what lets the consensus tally
-  score them as agreeing. A renameable id would fingerprint as a conflict.
+  score them as agreeing. Specifically the *etymology* fingerprint includes the component
+  id list (`consensus.ts`'s `fingerprintOutcome`), so two people naming one component under
+  two ids are counted as disagreeing. The *entry* fingerprint does not contain `word_id` at
+  all — which is why renaming a word would not invalidate entry consensus, but renaming one
+  used as a **component** would make later contributions read as dissent against a golden
+  decision fingerprinted under the old id.
 - **It is never shown.** Chips read the word, plus "will be added once a curator approves".
   Showing the id would invite asking for a different one.
 - **The server decides resolve-vs-request**, because only it sees production and the corpus

@@ -16,32 +16,53 @@
 // asked or when.
 //
 // ---------------------------------------------------------------------------
-// This is production's existing convention, not a new scheme
+// It reproduces production's SHAPE, and not production's ids
 // ---------------------------------------------------------------------------
-// Measured against the real vocabulary: `orthographyInsensitiveForm` of the spelling plus a
-// slug of the meaning is exactly how production already disambiguates words whose stripped
-// spellings collide -
+// `orthographyInsensitiveForm` of the spelling plus a slug of the meaning is how production
+// already disambiguates words whose stripped spellings collide -
 //
 //     ewa_beans   èwà        ose_soap   ọṣẹ
 //     ewa_beauty  ẹwà        oba_king   ọba
 //
 // The underdot is stripped (that is what orthographyInsensitiveForm does) and the MEANING
-// carries the distinction. `èwà` and `ẹwà` are different words with the same stripped base,
-// and the hint is what tells them apart. Add Word already prefills this shape for curators.
+// carries the distinction. Measured over all 92 existing words, the SPELLING half matches this
+// function for 92 of 92 - the shape really is production's own.
+//
+// The MEANING half is a different story, and the earlier wording here oversold it:
+//
+//     65 of 92   match deriveWordId(displayText, OUR definition)
+//      0 of 92   match deriveWordId(displayText, the cited etymology's gloss)
+//     27 of 92   match neither - a human simply chose them
+//
+// So no existing id was derived from upstream. The slug tracks our own student definition where
+// it tracks anything, and a quarter of them are outright editorial: `ese_leg` where the gloss
+// gives "foot", `inu_inside` where it gives "stomach", `aso_cloth` for "any cloth". Those are
+// pedagogical choices about what a learner should see, and they are better than the derivation.
+//
+// Two consequences worth being explicit about. First, this function is the right way to name a
+// word we do NOT have yet, and is not a claim about the ones we do. Second, the student
+// definition is editable while the id is not, so the two ALREADY drift apart by design - which
+// makes an id a slug that happens to have been derived once, not a derived value.
 //
 // ---------------------------------------------------------------------------
-// Residual collisions, measured and accepted
+// It is NOT injective, and the previous note was wrong about why that is safe
 // ---------------------------------------------------------------------------
-// About 2% of the 6272 corpus entries derive an id that another entry also derives, and they
-// are almost entirely Wiktionary's letter-name entries (`a`/`A`, `f`/`F`, `y`/`Y` - "the first
-// letter of the Yoruba alphabet"), which are never parts of a compound. Appending a token from
-// the entry id does NOT fix it, because case-pair entries share the same suffix, and it would
-// uglify 262 ids to no purpose.
+// Over the 6272-entry corpus it produces 6133 distinct ids: 123 ids are claimed by more than
+// one etymology, catching 262 entries (4.2%). Fourteen more carry no meaning slug at all,
+// because their entry has no gloss to slug.
 //
-// So the collision is handled where it can be handled properly - at request time, against
-// production, by resolveOrRequestComponent.ts, which appends a discriminator only when the id
-// is genuinely taken by a word citing a DIFFERENT etymology. That stays deterministic because
-// both volunteers see the same production state.
+// This used to say the collisions were "almost entirely Wiktionary's letter-name entries, which
+// are never parts of a compound". Measured, that is false on both halves: of the 262, only 96
+// are letters or diacritics, 47 are grammatical, and 119 are ORDINARY CONTENT WORDS - 78 nouns
+// among them, including `baba_father`, `iku_death`, `eye_mother` and `ose_baobab_tree`. Those
+// are exactly the morphemes compounds are built from, so the reassurance was unfounded.
+//
+// What actually makes it safe is not a property of this function. It is that uniqueness is
+// enforced downstream, three times over: pickFreeWordId appends a discriminator when the id is
+// genuinely taken by a word citing a DIFFERENT etymology (deterministic, because both
+// volunteers see the same production state), golden_record's primary key is the backstop, and
+// since 0017 IDENTITY is carried by entry_id rather than by this string at all. A collision here
+// costs an uglier id, never a wrong link.
 
 import { orthographyInsensitiveForm } from './orthography.js';
 
