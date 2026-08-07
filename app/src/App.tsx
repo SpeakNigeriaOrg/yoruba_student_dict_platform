@@ -95,7 +95,7 @@ export default function App() {
           ) : route.view === 'browse' && isCurator ? (
             <AllWordsList onSelect={(wordId) => openWord(wordId, 'entry')} />
           ) : route.view === 'add' && isCurator ? (
-            <AddWord />
+            <AddWord onOpenWord={(wordId) => openWord(wordId, 'entry')} />
           ) : route.view === 'contributions' && isCurator ? (
             <ReviewQueue onOpenWord={openWord} />
           ) : route.view === 'users' && isCurator ? (

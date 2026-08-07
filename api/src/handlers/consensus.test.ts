@@ -38,21 +38,9 @@ beforeAll(async () => {
   cy = await mk('cy@example.com', 'volunteer');
   curator = await mk('curator@example.com', 'curator');
 
-  // Two etymologies sharing one spelling - the `kọ́` shape, needed for the
-  // "citing different etymologies is not agreement" case below.
+  // The two-etymologies-one-spelling fixture (the `kọ́` shape) is minted per case by citedWord()
+  // below, not once here - see the note there.
   await deleteTestKaikkiSenses(pool, ENTRY_NS);
-  for (const [suffix, etym, gloss] of [
-    ['hang', '4', 'to hang, suspend'],
-    ['build', '2', 'to build, construct'],
-  ] as const) {
-    await insertTestKaikkiSense(pool, {
-      entryId: `${ENTRY_NS}${suffix}`,
-      headword: 'ikun',
-      canonicalValue: 'ikun',
-      etymologyNumber: etym,
-      glosses: [gloss],
-    });
-  }
 });
 
 afterAll(async () => {
@@ -137,38 +125,50 @@ describe('submitContribution freezes the outcome', () => {
 });
 
 describe('the cited etymology is part of what a contribution asserts', () => {
-  const HANG = `${ENTRY_NS}hang`;
-  const BUILD = `${ENTRY_NS}build`;
-
-  /** A word already citing one etymology, so a contributor can either agree with
-   * it or name a different one. */
-  async function citedWord(entryId: string): Promise<string> {
+  /** A word already citing one etymology, plus a second etymology of the SAME spelling to move it to -
+   * the `kọ́` shape, so a contributor can either agree with the citation or name a different one.
+   *
+   * Both etymologies are minted PER CALL. Since 0017 an etymology is the identity of at most one word,
+   * so cases cannot share a fixture etymology the way they used to: two tests each creating a word
+   * citing one `HANG` is now the very contradiction the constraint exists to prevent. Per-call ids
+   * also make each case independent, which it should always have been. */
+  let pairCounter = 0;
+  async function citedWord(): Promise<{ wordId: string; hang: string; build: string }> {
+    pairCounter += 1;
+    const hang = `${ENTRY_NS}hang${pairCounter}`;
+    const build = `${ENTRY_NS}build${pairCounter}`;
+    for (const [entryId, etym, gloss] of [
+      [hang, '4', 'to hang, suspend'],
+      [build, '2', 'to build, construct'],
+    ] as const) {
+      await insertTestKaikkiSense(pool, { entryId, headword: 'ikun', canonicalValue: 'ikun', etymologyNumber: etym, glosses: [gloss] });
+    }
     const wordId = await word('to hang, suspend');
     await pool.query(
       `insert into upstream_citations (word_id, entry_id, pin, pinned_by) values ($1, $2, '{}'::jsonb, $3)`,
-      [wordId, entryId, curator],
+      [wordId, hang, curator],
     );
-    return wordId;
+    return { wordId, hang, build };
   }
 
   it('freezes the etymology the word cited, even when the contributor never mentions it', async () => {
-    const wordId = await citedWord(HANG);
+    const { wordId, hang, build } = await citedWord();
     const { contributionId } = await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
     const row = await pool.query<{ resolved_value: EntryOutcome }>(
       'select resolved_value from contributions where contribution_id = $1',
       [contributionId],
     );
-    expect(row.rows[0].resolved_value.citedEntryId).toBe(HANG);
+    expect(row.rows[0].resolved_value.citedEntryId).toBe(hang);
   });
 
   it('two people citing DIFFERENT etymologies of one spelling are contested, not agreed', async () => {
     // Both say "keep the spelling, keep the definition". Under the old
     // fingerprint they agreed and would have crossed the threshold together.
-    const wordId = await citedWord(HANG);
+    const { wordId, hang, build } = await citedWord();
     await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
     await submitContribution(
       pool,
-      { axis: 'entry', wordId, proposedValue: { ...KEEP, senseEntryId: BUILD } },
+      { axis: 'entry', wordId, proposedValue: { ...KEEP, senseEntryId: build } },
       ben,
     );
 
@@ -178,9 +178,9 @@ describe('the cited etymology is part of what a contribution asserts', () => {
   });
 
   it('two people citing the SAME etymology still reach agreement', async () => {
-    const wordId = await citedWord(HANG);
+    const { wordId, hang, build } = await citedWord();
     await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
-    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: { ...KEEP, senseEntryId: HANG } }, ben);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: { ...KEEP, senseEntryId: hang } }, ben);
 
     const g = await group(wordId);
     expect(g?.summary.bucket).toBe('ready');
@@ -188,8 +188,8 @@ describe('the cited etymology is part of what a contribution asserts', () => {
   });
 
   it('confirming a consensus that moved the etymology re-cites the word', async () => {
-    const wordId = await citedWord(HANG);
-    const proposal = { ...KEEP, senseEntryId: BUILD };
+    const { wordId, hang, build } = await citedWord();
+    const proposal = { ...KEEP, senseEntryId: build };
     await submitContribution(pool, { axis: 'entry', wordId, proposedValue: proposal }, ada);
     await submitContribution(pool, { axis: 'entry', wordId, proposedValue: proposal }, ben);
 
@@ -203,15 +203,15 @@ describe('the cited etymology is part of what a contribution asserts', () => {
     const cited = await pool.query<{ entry_id: string }>('select entry_id from upstream_citations where word_id = $1', [
       wordId,
     ]);
-    expect(cited.rows[0].entry_id).toBe(BUILD);
+    expect(cited.rows[0].entry_id).toBe(build);
   });
 
   it('a routine confirmation does not restamp the pin - pinned_at means "last verified upstream"', async () => {
-    const wordId = await citedWord(HANG);
+    const { wordId, hang, build } = await citedWord();
     const before = await pool.query<{ pinned_at: Date }>('select pinned_at from upstream_citations where word_id = $1', [
       wordId,
     ]);
-    await applyEntryDecision(pool, wordId, { ...KEEP, senseEntryId: HANG }, curator);
+    await applyEntryDecision(pool, wordId, { ...KEEP, senseEntryId: hang }, curator);
     const after = await pool.query<{ pinned_at: Date }>('select pinned_at from upstream_citations where word_id = $1', [
       wordId,
     ]);
@@ -219,13 +219,13 @@ describe('the cited etymology is part of what a contribution asserts', () => {
   });
 
   it("a curator's decision naming a different etymology re-cites it and pins upstream content", async () => {
-    const wordId = await citedWord(HANG);
-    await applyEntryDecision(pool, wordId, { ...KEEP, senseEntryId: BUILD }, curator);
+    const { wordId, hang, build } = await citedWord();
+    await applyEntryDecision(pool, wordId, { ...KEEP, senseEntryId: build }, curator);
     const { rows } = await pool.query<{ entry_id: string; pin: Record<string, unknown> }>(
       'select entry_id, pin from upstream_citations where word_id = $1',
       [wordId],
     );
-    expect(rows[0].entry_id).toBe(BUILD);
+    expect(rows[0].entry_id).toBe(build);
     // Re-pinned from the corpus, not left holding the old etymology's content.
     expect(rows[0].pin).toMatchObject({ etymologyNumber: '2', glosses: ['to build, construct'] });
   });

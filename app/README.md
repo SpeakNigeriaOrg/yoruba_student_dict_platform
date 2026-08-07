@@ -122,7 +122,36 @@ immediately. Three things make that safe:
 - **The server decides resolve-vs-request**, because only it sees production and the corpus
   together (`api/src/handlers/resolveOrRequestComponent.ts`). Picking an etymology a word
   already cites *resolves to that word* rather than queuing a duplicate — which is how all 80
-  cited words behave, since the derivation reproduces the convention they were named by.
+  cited words behave, since the derivation reproduces the convention they were named by. That
+  decision now runs through `api/src/entryClaims.ts`, shared with the curator search below, so
+  the two paths cannot answer the same question differently.
+
+### The curator's Add Word search says which results are already in the dictionary
+
+It used to say nothing, and answered after the pick by comparing **spellings** — so `jẹun`
+could be offered as new while `jeun_eat` already cited the very etymology on offer, under a
+warning reading "identical spelling". Since `0014` an etymology has an exact identity, so the
+verdict belongs on the row, before the pick:
+
+| state | badge | action |
+|---|---|---|
+| already in the dictionary | red `already in the dictionary`, naming the word | **Open ‹word›** replaces Select |
+| requested by a volunteer | amber `requested, not added yet` | Select stays — adding it *fulfils* the request, and now closes it |
+| free, spelling collides | grey `same spelling as ‹word›` | Select |
+| free | *nothing* | Select |
+
+A free etymology gets **no** badge on purpose. A reassurance on all fifteen rows is a signal
+that fires constantly, and one that fires constantly is one people stop reading — which is
+precisely how the old warning came to be ignored.
+
+`DuplicateWarning` is kept and demoted below the verdict, retitled "Also worth checking". It
+is not redundant: identity is structurally silent for the pre-0014 uncited words and for
+exempt ones, and its concept path still catches a same-meaning/different-etymology overlap
+that `entry_id` equality cannot see.
+
+Clicking Select also *looks* like it did something now — the row stays marked
+(`aria-current`), and focus moves to the confirmation region rather than leaving the curator
+to scroll past the result list on faith.
 
 An etymology naming a not-yet-approved part is refused at confirmation by
 `ComponentsNotFoundError`, which names it. That ordering constraint already existed; what

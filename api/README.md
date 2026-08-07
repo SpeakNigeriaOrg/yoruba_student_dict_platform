@@ -222,7 +222,26 @@ The two overrides are different in kind, and the UI must not blur them:
 | spelling | the etymology's canonical form | a **correction** - the other spelling is wrong |
 | student definition | seeded from the etymology's glosses | a **pedagogical simplification** - it says nothing against upstream |
 
-Three invariants hold this up:
+Four invariants hold this up:
+
+0. **One etymology, one word — and the curator can see it.** If an entry *is* an
+   etymology, two entries citing one etymology is two entries claiming one
+   identity. `0017` makes that a unique index rather than a convention, and
+   `entryClaims.ts` is the one place that answers "is this etymology already
+   taken?" for both the volunteer path and the curator search.
+
+   It was reachable, not theoretical. The Add Word search returned results with
+   **nothing** on them about being already in the dictionary, and answered the
+   question after the fact by comparing **spellings** — so `jẹun` could be offered
+   as a new word while `jeun_eat` already cited the very etymology on offer, under
+   a warning that read "identical spelling". Spelling cannot answer this: `kọ́` is
+   three etymologies sharing one.
+
+   Spelling matching survives, deliberately demoted, because identity is
+   structurally *silent* for two populations — the pre-0014 words with no citation
+   row, and exempt words (`entry_id` null). For those and only those,
+   `searchKaikki.ts` offers `spellingMatches`; for a **cited** etymology it offers
+   none, because a cited word sharing a spelling is the `kọ́` false positive.
 
 1. **The citation is captured at creation, never derived later.** Adding a word
    *is* choosing an etymology - the Add Word screen searches Kaikki and a human
@@ -244,6 +263,29 @@ Three invariants hold this up:
 Every `golden_record` row has an `upstream_citations` row - cited, or explicitly
 exempt with a reason. Phrases are recorded exempt by `createPhrase.ts` rather than
 left blank, so "no citation row" means exactly one thing: not done.
+
+### Resolving a request keys on the etymology, not on the queue item
+
+`writeCitationInTransaction` is the single point where an etymology *becomes* a
+word's identity, and all six creation routes pass through it — `createWord`,
+`createPhrase`, `applyEntryDecision` (twice), `upstreamDrift`,
+`backfillCitations`. So both halves of the invariant live there: no other word may
+hold this etymology, and every open request for it is now satisfied and closes.
+
+The second half fixes a real hole. Resolution used to key on the contribution
+**row**: `approveContribution` closed only the row named in its URL, and
+`createWord` never touched `contributions` at all. A curator who satisfied a
+volunteer's request by adding the word therefore left the request standing
+forever — and if they happened to use its planned `word_id`, left it permanently
+*unapprovable*, since approving it would then try to create a `word_id` that
+already exists. `resolveRequestsSatisfiedBy` closes on either key, as a set.
+
+`new_entry` also takes no part in consensus (it has no fingerprint — the proposal
+*is* the content), so deduplication is not an optimisation there, it is the whole
+mechanism. It was a read-then-write with nothing behind it, which read committed
+does not serialise; `0017` adds the two partial unique indexes, and
+`resolveOrRequestComponent` recovers from a lost race via `trySavepoint` to return
+`already_requested` — the answer the race was trying to produce.
 
 ### A phrase's spelling is derived, so its components own it
 

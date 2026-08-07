@@ -23,6 +23,17 @@ export interface SearchBoxProps<T> {
    * component spelling that isn't in our vocab yet), rather than making
    * the user retype something already known. */
   initialQuery?: string;
+  /** Marks the caller's current pick, so a chosen row stays visibly chosen.
+   *
+   * Selection state stays with the CALLER rather than moving in here: three of the four callers keep
+   * it in their own form state (or do not have a single "current" pick at all, like the phrase tab's
+   * growing component list), and duplicating it would give two sources of truth for one fact. */
+  isSelected?: (result: T) => boolean;
+  /** Replaces the select button for ONE result. Return null to keep the default.
+   *
+   * For a result the caller cannot accept: offering "Select" on something that will be refused is
+   * worse than offering nothing, because the refusal arrives after the form is filled in. */
+  renderAction?: (result: T) => React.ReactNode;
 }
 
 export function SearchBox<T>({
@@ -33,6 +44,8 @@ export function SearchBox<T>({
   placeholder,
   resultsAriaLabel,
   initialQuery,
+  isSelected,
+  renderAction,
 }: SearchBoxProps<T>) {
   const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<T[] | null>(null);
@@ -77,14 +90,26 @@ export function SearchBox<T>({
           <p>No results.</p>
         ) : (
           <ul aria-label={resultsAriaLabel} className="plain-list">
-            {results.map((result, i) => (
-              <li key={i} className="search-result-row">
-                <span className="result-text">{renderResult(result)}</span>
-                <button type="button" className="btn btn-secondary" onClick={() => onSelect(result)}>
-                  {selectLabel}
-                </button>
-              </li>
-            ))}
+            {/* Both new props default to absent, and when they are the markup below is exactly what it
+                was - which is what lets the other three callers and their tests stay untouched. */}
+            {results.map((result, i) => {
+              const selected = isSelected?.(result) ?? false;
+              const action = renderAction?.(result);
+              return (
+                <li
+                  key={i}
+                  className={selected ? 'search-result-row selected' : 'search-result-row'}
+                  aria-current={selected ? 'true' : undefined}
+                >
+                  <span className="result-text">{renderResult(result)}</span>
+                  {action ?? (
+                    <button type="button" className="btn btn-secondary" onClick={() => onSelect(result)}>
+                      {selectLabel}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )
       ) : null}

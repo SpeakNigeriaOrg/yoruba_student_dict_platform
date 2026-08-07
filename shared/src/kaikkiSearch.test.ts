@@ -184,6 +184,18 @@ describe('searchKaikki carries the citation (an entry IS a Wiktionary etymology)
     const idless = twins.map((s) => ({ ...s, entryId: null }));
     expect(searchKaikki(buildSearchIndex({ ko: idless }), 'kọ́')).toHaveLength(1);
   });
+
+  it('leaves the claim fields UNSET - whether an etymology is taken is production state, not corpus', () => {
+    // The API handler enriches results with `claim`/`spellingMatches` by querying upstream_citations
+    // and contributions. This function must stay a pure function of the lexicon, and the distinction
+    // is load-bearing rather than stylistic: `undefined` means "nobody looked", while `null` means
+    // "looked, and it is free". Collapsing them would let the UI print a reassurance it has not
+    // earned - and would put a database dependency inside the shared search port.
+    for (const result of searchKaikki(koRecords, 'kọ́')) {
+      expect(result.claim).toBeUndefined();
+      expect(result.spellingMatches).toBeUndefined();
+    }
+  });
 });
 
 describe('searchKaikki direct unit tests', () => {

@@ -16,7 +16,7 @@
 // rather than by backfill.
 
 import type pg from 'pg';
-import { withTransaction, type Queryable } from '../db.js';
+import { isUniqueViolation, withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
 
@@ -75,6 +75,3 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
   await writeCitationInTransaction(client, input.wordId, input.citation, createdBy);
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && err.code === '23505');
-}

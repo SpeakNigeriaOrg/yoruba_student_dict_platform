@@ -6,6 +6,11 @@ import { EntryIdNotCitableError, EntryIdNotInCorpusError } from './upstreamCitat
 const NS = 'testcw_';
 const ENTRY_NS = 'testcw-entry-';
 const CITED = `${ENTRY_NS}epo`;
+/** 0017 makes an etymology the identity of at most ONE word, so every test that creates a word citing
+ * an etymology needs its own. Sharing one `CITED` across cases used to work only because nothing
+ * enforced the invariant the whole citation model is built on. */
+const CITED_ATTRIBUTED = `${ENTRY_NS}attributed`;
+const CITED_REPIN = `${ENTRY_NS}repin`;
 const pool = getTestPool();
 let curatorUserId: string;
 
@@ -32,6 +37,17 @@ beforeAll(async () => {
     etymologyText: 'Inherited.',
     glosses: ['oil', 'palm oil'],
   });
+  for (const entryId of [CITED_ATTRIBUTED, CITED_REPIN]) {
+    await insertTestKaikkiSense(pool, {
+      entryId,
+      headword: 'epo',
+      canonicalValue: 'epo',
+      pos: 'noun',
+      etymologyNumber: '1',
+      etymologyText: 'Inherited.',
+      glosses: ['oil', 'palm oil'],
+    });
+  }
 });
 
 afterAll(async () => {
@@ -106,7 +122,7 @@ describe('createWord: the upstream citation', () => {
 
   it('attributes the pin to a corpus build, so a citation is traceable to a version', async () => {
     const wordId = `${NS}run_attributed`;
-    await createWord(pool, { wordId, displayText: 'epo', syllables: ['epo'], citation: { entryId: CITED } }, curatorUserId);
+    await createWord(pool, { wordId, displayText: 'epo', syllables: ['epo'], citation: { entryId: CITED_ATTRIBUTED } }, curatorUserId);
 
     const { rows } = await pool.query<{ pinned_run_id: string | null; latest: string | null }>(
       `select c.pinned_run_id,
@@ -166,7 +182,7 @@ describe('createWord: the upstream citation', () => {
 
   it('re-pinning an existing word updates in place rather than failing - drift re-pin is a normal action', async () => {
     const wordId = `${NS}repin`;
-    await createWord(pool, { wordId, displayText: 'epo', syllables: ['epo'], citation: { entryId: CITED } }, curatorUserId);
+    await createWord(pool, { wordId, displayText: 'epo', syllables: ['epo'], citation: { entryId: CITED_REPIN } }, curatorUserId);
 
     const { writeCitationInTransaction } = await import('./upstreamCitations.js');
     await writeCitationInTransaction(pool, wordId, { exemptReason: 'reclassified as having no upstream entry' }, curatorUserId);

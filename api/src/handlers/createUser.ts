@@ -17,7 +17,7 @@
 // function reads users.role, and so the role set here is authoritative - and
 // changeable later via PATCH /api/users/{userId}.
 
-import type { Queryable } from '../db.js';
+import { isUniqueViolation, type Queryable } from '../db.js';
 import { EmailAlreadyExistsError } from './errors.js';
 
 export interface CreateUserInput {
@@ -58,6 +58,3 @@ export async function createUser(db: Queryable, input: CreateUserInput): Promise
   }
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && err.code === '23505');
-}

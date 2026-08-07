@@ -317,6 +317,13 @@ audio {
   background: var(--amber-bg);
   color: var(--amber);
 }
+/* This etymology is already a word's identity, so it cannot be added again - red because it is a
+   dead end for this action, not a caution to weigh. Amber is used for "requested, not added yet",
+   which IS a caution: you may still proceed, and doing so fulfils the request. */
+.badge.claimed {
+  background: var(--red-bg);
+  color: var(--red);
+}
 
 /* Chip row - wraps rather than overflowing on a narrow screen, and gaps the
    badges without relying on {' '} text nodes between them. */
@@ -543,6 +550,12 @@ audio {
   border: 1px solid var(--border);
   border-radius: 8px;
   margin-bottom: 8px;
+}
+/* The row you picked stays visibly picked. Clicking Select used to change nothing on screen, so the
+   only confirmation was scrolling past the whole result list to find it. */
+.search-result-row.selected {
+  border-color: var(--green);
+  background: var(--green-bg);
 }
 .search-result-row .result-text {
   font-size: 0.88rem;

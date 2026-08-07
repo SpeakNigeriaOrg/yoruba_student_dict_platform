@@ -75,6 +75,24 @@ const TIER_RANK: Record<KaikkiSearchTier, number> = {
 // english-relevance.js, so the two engines cannot drift on how a partial spelling compares to a
 // gloss match.
 
+export type EntryClaimStatus = 'in_dictionary' | 'requested';
+
+/** Who already holds this etymology as their identity.
+ *
+ * Under the "an entry IS a Wiktionary etymology" model (0014), entry_id answers "is this already in
+ * the dictionary?" exactly - the corpus has one entry_id per etymology, so equality is identity, not
+ * a resemblance. That is worth stating because the curator flow used to answer the question by
+ * comparing SPELLINGS, which cannot work: `kọ́` is three etymologies sharing one spelling, and `jẹun`
+ * was already in the dictionary under the very etymology being offered again. */
+export interface EntryClaim {
+  status: EntryClaimStatus;
+  /** The word that IS this etymology - existing for 'in_dictionary', planned for 'requested'. */
+  wordId: string;
+  displayText: string;
+  /** 'requested' only, so the UI can point at the pending request. */
+  contributionId?: string;
+}
+
 export interface KaikkiSearchResult {
   form: string;
   pos: string;
@@ -91,6 +109,28 @@ export interface KaikkiSearchResult {
    * etymology they are choosing. `kọ́` returns three results differing only
    * by this and their glosses. */
   etymologyNumber: string | null;
+  /** Whether this etymology is already someone's identity.
+   *
+   * Populated ONLY by the API handler (api/src/handlers/searchKaikki.ts), because it is production
+   * state rather than corpus content - searchKaikki below is a pure function over the lexicon and
+   * must stay that way. Three-valued on purpose:
+   *
+   *   undefined - nobody looked (a caller that never enriches, or a pure search)
+   *   null      - looked, and this etymology is free
+   *   EntryClaim- looked, and it is taken
+   *
+   * Collapsing undefined into null would make "we did not check" indistinguishable from "we checked
+   * and it is available", and the UI must not print a reassurance it has not earned. */
+  claim?: EntryClaim | null;
+  /** SECONDARY, and deliberately narrow: dictionary words that share this result's spelling AND whose
+   * identity entry_id cannot speak for - a word with no citation row at all (5 pre-0014 words) or an
+   * exempt one (entry_id null, a real word with no Wiktionary entry).
+   *
+   * Those are the only cases where spelling is the best signal available, which is the entire reason
+   * spelling matching survives at all now that identity is exact. Never populated for a CITED word:
+   * a cited word sharing a spelling with a different etymology is the `kọ́` false positive, and
+   * suppressing it is the point rather than an omission. */
+  spellingMatches?: Array<{ wordId: string; displayText: string }>;
 }
 
 // One key per ETYMOLOGY. The lexicon deliberately cross-indexes the same

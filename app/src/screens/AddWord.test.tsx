@@ -295,3 +295,110 @@ describe('AddWord - Phrase tab', () => {
     expect(screen.getByText('No components picked yet.')).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The result list says whether an etymology is already in the dictionary
+// ---------------------------------------------------------------------------
+// It used to say nothing, so a curator picked `jẹun`, filled in the form, and only then read
+// "identical spelling" - a resemblance, when the question is identity and the answer was exact.
+
+const RESULT = {
+  form: 'jẹun',
+  pos: 'verb',
+  glosses: ['to eat food'],
+  matchedVia: 'yoruba_exact',
+  altOfTargets: [],
+  standardForms: ['jẹun'],
+  entryId: 'en-jẹun-yo-verb--GhTRT14',
+  etymologyNumber: null,
+};
+
+async function searchWith(result: Record<string, unknown>, props: Record<string, unknown> = {}) {
+  const fetchMock = mockFetch({ kaikkiResults: [result] });
+  vi.stubGlobal('fetch', fetchMock);
+  const user = userEvent.setup();
+  render(<AddWord {...props} />);
+  await user.type(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...'), 'jẹun');
+  await user.click(screen.getByRole('button', { name: 'Search' }));
+  await screen.findByText(/to eat food/);
+  return user;
+}
+
+describe('AddWord - is this etymology already taken?', () => {
+  it('marks a result already in the dictionary, and names the word that IS it', async () => {
+    await searchWith({ ...RESULT, claim: { status: 'in_dictionary', wordId: 'jeun_eat', displayText: 'jẹun' }, spellingMatches: [] });
+
+    expect(screen.getByText('already in the dictionary')).toBeInTheDocument();
+    expect(screen.getByText(/as jeun_eat/)).toBeInTheDocument();
+  });
+
+  it('replaces Select with Open for it - a form that cannot be submitted must not be offered', async () => {
+    const onOpenWord = vi.fn();
+    const user = await searchWith(
+      { ...RESULT, claim: { status: 'in_dictionary', wordId: 'jeun_eat', displayText: 'jẹun' }, spellingMatches: [] },
+      { onOpenWord },
+    );
+
+    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open jeun_eat' }));
+    expect(onOpenWord).toHaveBeenCalledWith('jeun_eat');
+  });
+
+  it('marks a REQUESTED etymology but keeps Select - adding it is what fulfils the request', async () => {
+    await searchWith({ ...RESULT, claim: { status: 'requested', wordId: 'planned_word', displayText: 'jẹun', contributionId: 'c1' }, spellingMatches: [] });
+
+    expect(screen.getByText('requested, not added yet')).toBeInTheDocument();
+    expect(screen.getByText(/planned as planned_word/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
+  });
+
+  it('says NOTHING for a free etymology - a badge on every row is a badge nobody reads', async () => {
+    await searchWith({ ...RESULT, claim: null, spellingMatches: [] });
+
+    expect(screen.queryByText('already in the dictionary')).not.toBeInTheDocument();
+    expect(screen.queryByText('requested, not added yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
+  });
+
+  it('mentions a shared spelling only where identity is silent, and says so is what it is', async () => {
+    await searchWith({ ...RESULT, claim: null, spellingMatches: [{ wordId: 'pako_timber', displayText: 'pákó' }] });
+
+    expect(screen.getByText('same spelling as pako_timber')).toBeInTheDocument();
+    expect(screen.getByText(/a different etymology, or a word we cannot compare by id/)).toBeInTheDocument();
+  });
+
+  it('says nothing at all when the server did not look (claim undefined)', async () => {
+    // An unenriched result must not be reported as available - that would be a reassurance we have
+    // not earned, and it is why undefined and null are kept apart.
+    await searchWith(RESULT);
+
+    expect(screen.queryByText('already in the dictionary')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
+  });
+});
+
+describe('AddWord - clicking Select is visibly acknowledged', () => {
+  it('marks the chosen row and moves to a focusable confirmation region', async () => {
+    // The complaint: "there is no indication that I selected anything... I have to have faith the
+    // selection was made, then scroll down through a long list of search terms to confirm it."
+    const user = await searchWith({ ...RESULT, claim: null, spellingMatches: [] });
+
+    expect(screen.queryByLabelText('Selected etymology')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    const region = screen.getByLabelText('Selected etymology');
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveFocus();
+    expect(screen.getByLabelText('Cited etymology')).toHaveTextContent('Citing:');
+    expect(screen.getByRole('listitem')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('keeps ONE status region, so the submit banner stays unambiguous', async () => {
+    // The confirmation announces via aria-live rather than role="status": a second status region would
+    // break every getByRole('status') assertion in this file.
+    const user = await searchWith({ ...RESULT, claim: null, spellingMatches: [] });
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.queryAllByRole('status')).toHaveLength(0);
+  });
+});

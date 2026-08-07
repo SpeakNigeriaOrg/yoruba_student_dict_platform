@@ -101,4 +101,64 @@ describe('SearchBox', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('search failed');
     });
   });
+
+  // Both props below default to absent, and when absent the markup is exactly what it always was -
+  // which is what lets the three callers that do not use them stay untouched.
+  it('marks the caller\'s current pick without owning the selection state', async () => {
+    const search = vi.fn().mockResolvedValue([{ id: 'a', label: 'Result A' }, { id: 'b', label: 'Result B' }]);
+    const user = userEvent.setup();
+
+    render(
+      <SearchBox<TestResult>
+        search={search}
+        renderResult={(r) => r.label}
+        onSelect={vi.fn()}
+        resultsAriaLabel="Test results"
+        isSelected={(r) => r.label === 'Result B'}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Result A');
+
+    const [first, second] = screen.getAllByRole('listitem');
+    expect(first).not.toHaveAttribute('aria-current');
+    expect(second).toHaveAttribute('aria-current', 'true');
+    expect(second.className).toContain('selected');
+  });
+
+  it('lets a caller replace the action for ONE result, keeping the default for the rest', async () => {
+    const search = vi.fn().mockResolvedValue([{ id: 'a', label: 'Result A' }, { id: 'b', label: 'Result B' }]);
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <SearchBox<TestResult>
+        search={search}
+        renderResult={(r) => r.label}
+        onSelect={onSelect}
+        selectLabel="Use this"
+        resultsAriaLabel="Test results"
+        renderAction={(r) => (r.label === 'Result A' ? <span>not available</span> : null)}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Result A');
+
+    expect(screen.getByText('not available')).toBeInTheDocument();
+    // Exactly one default button survives - the row that returned null.
+    expect(screen.getAllByRole('button', { name: 'Use this' })).toHaveLength(1);
+  });
+
+  it('renders no aria-current and no extra class when neither prop is given', async () => {
+    const search = vi.fn().mockResolvedValue([{ id: 'a', label: 'Result A' }]);
+    const user = userEvent.setup();
+
+    render(<SearchBox<TestResult> search={search} renderResult={(r) => r.label} onSelect={vi.fn()} resultsAriaLabel="Test results" />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Result A');
+
+    const row = screen.getByRole('listitem');
+    expect(row).not.toHaveAttribute('aria-current');
+    expect(row.className).toBe('search-result-row');
+  });
 });

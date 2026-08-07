@@ -18,6 +18,7 @@
 
 import type { Queryable } from '../db.js';
 import { buildPin, isCitableEntryId } from '@yoruba-student-dict-platform/shared';
+import { findWordCiting } from '../entryClaims.js';
 import { loadSenseByEntryId } from '../kaikkiData.js';
 
 /** Cites an etymology, XOR explains why it cannot - the same exclusive-or the
@@ -74,6 +75,21 @@ export class ExemptReasonRequiredError extends Error {
   }
 }
 
+/** One etymology, one word - refused here rather than left to the unique index, so the message names
+ * the word that already holds it instead of quoting a constraint. */
+export class EntryAlreadyCitedError extends Error {
+  constructor(
+    public readonly entryId: string,
+    public readonly wordId: string,
+  ) {
+    super(
+      `etymology '${entryId}' is already the identity of '${wordId}' - open that word rather than ` +
+        `adding a second one, since an entry IS one Wiktionary etymology`,
+    );
+    this.name = 'EntryAlreadyCitedError';
+  }
+}
+
 /** Writes the citation for one word.
  *
  * Takes a Queryable rather than a Pool because it must run inside the SAME
@@ -83,6 +99,22 @@ export class ExemptReasonRequiredError extends Error {
  *
  * Idempotent per word (on conflict update): re-pinning is a normal curator
  * action after upstream drift, not an error.
+ *
+ * ---------------------------------------------------------------------------
+ * This is where an etymology BECOMES a word's identity
+ * ---------------------------------------------------------------------------
+ * Which makes it the one place to say both halves of that fact, and the reason both live here rather
+ * than in createWord: there are six callers (createWord, createPhrase, applyEntryDecision twice,
+ * upstreamDrift, backfillCitations), so a rule enforced in one of them would leave the other five
+ * raising a raw constraint violation.
+ *
+ *   Negatively - no OTHER word may already hold it (0017).
+ *   Positively - every open REQUEST for it is now satisfied, so it is closed.
+ *
+ * The second half is what makes "resolving it anywhere resolves it everywhere" true. It used to be
+ * keyed on the contribution row instead: approveContribution closed only the row named in its URL, and
+ * adding a word directly closed nothing at all, so a curator satisfying a volunteer's request by
+ * adding the word left the request standing forever.
  */
 export async function writeCitationInTransaction(
   client: Queryable,
@@ -94,6 +126,8 @@ export async function writeCitationInTransaction(
     const reason = citation.exemptReason.trim();
     if (!reason) throw new ExemptReasonRequiredError();
     await upsert(client, wordId, { entryId: null, exemptReason: reason, pin: {}, pinnedRunId: null }, pinnedBy);
+    // An exempt word cites no etymology, so it can only satisfy a request by planned word_id.
+    await resolveRequestsSatisfiedBy(client, wordId, null, pinnedBy);
     return;
   }
 
@@ -104,6 +138,14 @@ export async function writeCitationInTransaction(
   const sense = await loadSenseByEntryId(client, citation.entryId);
   if (!sense) {
     throw new EntryIdNotInCorpusError(citation.entryId);
+  }
+
+  // Guarded by `!== wordId` so re-pinning a word to the etymology it already cites stays idempotent -
+  // that is a normal curator action after upstream drift, not a collision. The unique index is the
+  // real enforcement; this pre-check exists so the error can name the holder.
+  const holder = await findWordCiting(client, citation.entryId);
+  if (holder !== null && holder !== wordId) {
+    throw new EntryAlreadyCitedError(citation.entryId, holder);
   }
 
   // Read inside the caller's transaction, so the pin cannot be a copy of a
@@ -125,6 +167,41 @@ export async function writeCitationInTransaction(
       pinnedRunId: rows[0]?.run_id ?? null,
     },
     pinnedBy,
+  );
+
+  await resolveRequestsSatisfiedBy(client, wordId, citation.entryId, pinnedBy);
+}
+
+/** Closes every open request this word satisfies.
+ *
+ * Set-scoped, not row-scoped, and that is the whole point. A request is satisfied the moment the word
+ * it asked for exists - by whichever door - so resolution keys on what makes it satisfied rather than
+ * on which queue item someone happened to click:
+ *
+ *   the ETYMOLOGY - the real identity. A request citing it is answered by this word being it.
+ *   the planned WORD_ID - covers an exempt request, which cites no etymology and can only be matched
+ *     this way, and closes exactly the request whose planned id this word just took. That request
+ *     would otherwise be unapprovable forever, since approving it would try to create a word_id that
+ *     now exists.
+ *
+ * `status = 'applied'` is 0013's own definition - "a 'new_entry' proposal a curator accepted, and whose
+ * word now exists in golden_record" - so this needs no new status. reviewed_by/reviewed_at are
+ * nullable and record who caused it, which for the direct-add route is the curator who added the word.
+ */
+async function resolveRequestsSatisfiedBy(
+  client: Queryable,
+  wordId: string,
+  entryId: string | null,
+  resolvedBy: string | null,
+): Promise<void> {
+  await client.query(
+    `update contributions
+        set status = 'applied', reviewed_by = coalesce($3, reviewed_by), reviewed_at = now()
+      where axis = 'new_entry'
+        and status = 'active'
+        and (proposed_value ->> 'proposedWordId' = $1
+             or ($2::text is not null and proposed_value -> 'citation' ->> 'entryId' = $2))`,
+    [wordId, entryId, resolvedBy],
   );
 }
 

@@ -12,7 +12,7 @@ import { createWord, WordIdAlreadyExistsError, type CreateWordInput } from '../h
 // A bad citation (unknown or non-citable entry_id) surfaces through the generic
 // Error -> 400 branch below, which is the right status and carries the handler's
 // own message.
-import { parseCitationInput } from '../handlers/upstreamCitations.js';
+import { EntryAlreadyCitedError, parseCitationInput } from '../handlers/upstreamCitations.js';
 
 function parseCreateWordInput(body: unknown): CreateWordInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
@@ -44,6 +44,8 @@ export async function createWordFunction(request: HttpRequest, _context: Invocat
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
     if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
     if (err instanceof WordIdAlreadyExistsError) return { status: 409, jsonBody: { error: err.message } };
+    // Same class of conflict as a duplicate word_id: something already holds this identity.
+    if (err instanceof EntryAlreadyCitedError) return { status: 409, jsonBody: { error: err.message } };
     if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
     throw err;
   }

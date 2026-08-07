@@ -43,7 +43,8 @@ import {
   isCitableEntryId,
   syllabifyWord,
 } from '@yoruba-student-dict-platform/shared';
-import type { Queryable } from '../db.js';
+import { trySavepoint, type Queryable } from '../db.js';
+import { loadEntryClaim } from '../entryClaims.js';
 import { loadSenseByEntryId } from '../kaikkiData.js';
 import { EntryIdNotCitableError, EntryIdNotInCorpusError } from './upstreamCitations.js';
 import { submitContributionInTransaction } from './submitContribution.js';
@@ -73,59 +74,62 @@ export async function resolveOrRequestComponent(
   const displayText = sense.canonicalForm.value;
   const gloss = sense.glosses[0];
 
-  // 1. Do we already hold a word citing exactly this etymology? Then it IS this component.
-  const existing = await client.query<{ word_id: string; display_text: string }>(
-    `select g.word_id, g.display_text
-     from upstream_citations c join golden_record g on g.word_id = c.word_id
-     where c.entry_id = $1`,
-    [entryId],
-  );
-  if (existing.rows.length > 0) {
-    return { wordId: existing.rows[0].word_id, outcome: 'resolved', displayText: existing.rows[0].display_text };
+  // 1 & 2. Is this etymology already someone's identity - a word we hold, or a request already
+  //         standing? Both are the same question, and it is now asked through entryClaims.ts so the
+  //         curator search asks it the same way. A standing request returns the SAME planned id
+  //         rather than a second request: two volunteers naming the same missing part must agree.
+  const claim = await loadEntryClaim(client, entryId);
+  if (claim?.status === 'in_dictionary') {
+    return { wordId: claim.wordId, outcome: 'resolved', displayText: claim.displayText };
   }
-
-  // 2. Has this etymology already been requested? Return the SAME planned id rather than a
-  //    second request - two volunteers naming the same missing part must agree, and that is
-  //    exactly what the consensus tally compares.
-  const pending = await client.query<{ contribution_id: string; proposed_value: { proposedWordId: string } }>(
-    `select contribution_id, proposed_value
-     from contributions
-     where axis = 'new_entry' and status = 'active'
-       and proposed_value -> 'citation' ->> 'entryId' = $1
-     limit 1`,
-    [entryId],
-  );
-  if (pending.rows.length > 0) {
-    return {
-      wordId: pending.rows[0].proposed_value.proposedWordId,
-      outcome: 'already_requested',
-      displayText,
-      contributionId: pending.rows[0].contribution_id,
-    };
+  if (claim?.status === 'requested') {
+    return { wordId: claim.wordId, outcome: 'already_requested', displayText, contributionId: claim.contributionId };
   }
 
   // 3. Pick the id. Discriminate only if the base is already claimed - step 1 and 2 returned for
   //    the same-etymology cases, so a claim here belongs to a DIFFERENT etymology.
   const wordId = await pickFreeWordId(client, deriveWordId(displayText, gloss), entryId);
 
-  const { contributionId } = await submitContributionInTransaction(
-    client,
-    {
-      axis: 'new_entry',
-      proposedValue: {
-        proposedWordId: wordId,
-        displayText,
-        syllables: syllablesFor(displayText),
-        type: 'word',
-        definition: gloss,
-        citation: { entryId },
+  // Under a savepoint, because losing the race is a NORMAL outcome here, not an error. 0017 makes
+  // one-open-request-per-etymology a real constraint, and the check above is still a read-then-write:
+  // read committed does not serialise it, so two volunteers asking at the same moment both pass step 2.
+  // The loser wants the same answer as if it had arrived a moment later - already_requested, naming the
+  // request that won - and it cannot ask who won without a savepoint to recover the transaction.
+  const inserted = await trySavepoint(client, 'request_component', () =>
+    submitContributionInTransaction(
+      client,
+      {
+        axis: 'new_entry',
+        proposedValue: {
+          proposedWordId: wordId,
+          displayText,
+          syllables: syllablesFor(displayText),
+          type: 'word',
+          definition: gloss,
+          citation: { entryId },
+        },
+        note: 'Requested from the etymology axis as a missing component.',
       },
-      note: 'Requested from the etymology axis as a missing component.',
-    },
-    requestedBy,
+      requestedBy,
+    ),
   );
 
-  return { wordId, outcome: 'requested', displayText, contributionId };
+  if (inserted === null) {
+    const winner = await loadEntryClaim(client, entryId);
+    if (winner?.status === 'requested') {
+      return { wordId: winner.wordId, outcome: 'already_requested', displayText, contributionId: winner.contributionId };
+    }
+    // A word appeared for this etymology mid-flight (a curator adding it directly, which also closes
+    // requests) - so it is resolved, not requested.
+    if (winner?.status === 'in_dictionary') {
+      return { wordId: winner.wordId, outcome: 'resolved', displayText: winner.displayText };
+    }
+    // Neither: the collision was on the planned word_id from a request for a DIFFERENT etymology.
+    // Nothing here can name a correct answer, so let it surface rather than inventing one.
+    throw new CannotDeriveFreeWordIdError(wordId);
+  }
+
+  return { wordId, outcome: 'requested', displayText, contributionId: inserted.contributionId };
 }
 
 /** Syllabified here rather than left to the curator: the word needs a split for its audio axis

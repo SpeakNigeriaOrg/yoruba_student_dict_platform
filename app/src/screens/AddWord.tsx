@@ -27,7 +27,7 @@
 // exemption. The preferred route - have a curator add it upstream first - is
 // stated where the choice is made.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
 import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
@@ -35,12 +35,23 @@ import { SearchBox } from './SearchBox.js';
 
 type Tab = 'word' | 'phrase';
 
+/** The spelling/concept check - kept, and deliberately SECONDARY now.
+ *
+ * It used to be the only duplicate signal on this screen, which is how `jẹun` could be offered as new
+ * while `jeun_eat` already cited the very etymology on offer: "identical spelling" is a resemblance,
+ * and the question is identity. The etymology verdict above answers that exactly.
+ *
+ * It survives because identity is structurally SILENT for two populations: the pre-0014 words with no
+ * citation row, and exempt words (a real word with no Wiktionary entry). For those, a shared spelling
+ * is the best signal there is. Its concept path also still catches a same-meaning/different-etymology
+ * overlap, which entry_id equality cannot see. Still fail-open - it warns, never blocks.
+ */
 function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
   if (matches === null) return null;
-  if (matches.length === 0) return <p>No likely duplicates found.</p>;
+  if (matches.length === 0) return <p className="field-note">No similar spellings or concepts found.</p>;
   return (
     <div role="alert" aria-label="Duplicate warning" className="warning-banner">
-      <p>Possible duplicates - review before adding:</p>
+      <p>Also worth checking - similar spellings and concepts:</p>
       <ul>
         {matches.map((m) => (
           <li key={m.wordId}>
@@ -50,6 +61,56 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
       </ul>
     </div>
   );
+}
+
+/** Whether this etymology is already someone's identity - the authoritative answer, on the row.
+ *
+ * Shown BEFORE picking, which is the actual fix. The old flow let a curator pick, fill in the form and
+ * only then read a spelling warning; the answer was available at search time all along.
+ *
+ * Silent when the etymology is free. A green "available" badge on all fifteen rows would be a
+ * reassurance on every line, and a signal that fires constantly is one people stop reading - which is
+ * precisely how the previous warning came to be ignored. */
+function ClaimBadge({ result }: { result: KaikkiSearchResult }) {
+  const claim = result.claim;
+  // undefined means nobody looked (a caller that does not enrich). Saying nothing is right; saying
+  // "available" would be a claim we have not checked.
+  if (claim === undefined) return null;
+
+  if (claim?.status === 'in_dictionary') {
+    return (
+      <>
+        {' '}
+        <span className="badge claimed">already in the dictionary</span>{' '}
+        <span className="field-note">
+          as {claim.wordId} ({claim.displayText})
+        </span>
+      </>
+    );
+  }
+
+  if (claim?.status === 'requested') {
+    return (
+      <>
+        {' '}
+        <span className="badge">requested, not added yet</span>{' '}
+        <span className="field-note">planned as {claim.wordId}</span>
+      </>
+    );
+  }
+
+  const spellingMatches = result.spellingMatches ?? [];
+  if (spellingMatches.length > 0) {
+    return (
+      <>
+        {' '}
+        <span className="badge not-started">same spelling as {spellingMatches.map((m) => m.wordId).join(', ')}</span>{' '}
+        <span className="field-note">a different etymology, or a word we cannot compare by id</span>
+      </>
+    );
+  }
+
+  return null;
 }
 
 /** How an etymology reads in the result list and in the confirmation banner.
@@ -77,7 +138,7 @@ function hintFromGloss(gloss: string | undefined): string {
     .replace(/^_+|_+$/g, '');
 }
 
-function WordTab() {
+function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
   const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
   const [selectedForm, setSelectedForm] = useState('');
   const [syllablesText, setSyllablesText] = useState('');
@@ -89,6 +150,17 @@ function WordTab() {
    * rather than a null selection, so the two paths cannot be half-entered. */
   const [offPath, setOffPath] = useState(false);
   const [exemptReason, setExemptReason] = useState('');
+  const detailsRef = useRef<HTMLDivElement | null>(null);
+
+  // Clicking Select used to change nothing visible: the confirmation sat below a long result list, so
+  // the curator had to trust it happened and then scroll to check. Move to it instead.
+  useEffect(() => {
+    if (!selected) return;
+    // Optional call - jsdom does not implement scrollIntoView, and an unguarded one throws in every
+    // test that clicks Select.
+    detailsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    detailsRef.current?.focus({ preventScroll: true });
+  }, [selected?.entryId]);
 
   useEffect(() => {
     if (!selectedForm) {
@@ -185,23 +257,41 @@ function WordTab() {
           </p>
           <SearchBox
             search={searchKaikki}
-            renderResult={(r) => <EtymologyLabel result={r} />}
+            renderResult={(r) => (
+              <>
+                <EtymologyLabel result={r} />
+                <ClaimBadge result={r} />
+              </>
+            )}
             onSelect={pickResult}
             selectLabel="Select"
             placeholder="Search Kaikki by spelling or meaning..."
             resultsAriaLabel="Kaikki search results"
+            isSelected={(r) => r.entryId !== null && r.entryId === selected?.entryId}
+            // An etymology already in the dictionary cannot be added again - the server refuses it, and
+            // 0017 makes it impossible - so offer the useful action instead of a button that leads to a
+            // rejection after the form is filled in. A REQUESTED one keeps Select: adding it is exactly
+            // what fulfilling the request means, and doing so now closes the request.
+            renderAction={(r) =>
+              r.claim?.status === 'in_dictionary' && onOpenWord ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(r.claim!.wordId)}>
+                  Open {r.claim.wordId}
+                </button>
+              ) : null
+            }
           />
         </>
       )}
 
-      {selected ? (
-        <p aria-label="Cited etymology">
-          Citing: <EtymologyLabel result={selected} />
-        </p>
-      ) : null}
-
       {showDetails ? (
-        <>
+        <div ref={detailsRef} tabIndex={-1} aria-label="Selected etymology">
+          {selected ? (
+            // aria-live rather than role="status": this screen already has one status region for the
+            // submit banner, and a second would make getByRole('status') ambiguous.
+            <p aria-label="Cited etymology" aria-live="polite" className="status-banner">
+              Citing: <EtymologyLabel result={selected} />
+            </p>
+          ) : null}
           {offPath ? (
             <div className="field">
               <label htmlFor="word-spelling-field">Spelling</label>
@@ -286,7 +376,7 @@ function WordTab() {
           <button type="button" className="btn btn-primary" onClick={submit} disabled={!citable}>
             Add to vocabulary
           </button>
-        </>
+        </div>
       ) : null}
 
       {!offPath ? (
@@ -413,7 +503,13 @@ function PhraseTab() {
   );
 }
 
-export function AddWord() {
+export interface AddWordProps {
+  /** Navigates to an existing word - used when a search result turns out to already BE a word, where
+   * "go look at it" is the only useful action. Optional so a test can render this screen alone. */
+  onOpenWord?: (wordId: string) => void;
+}
+
+export function AddWord({ onOpenWord }: AddWordProps = {}) {
   const [tab, setTab] = useState<Tab>('word');
 
   return (
@@ -426,7 +522,7 @@ export function AddWord() {
           Phrase
         </button>
       </nav>
-      {tab === 'word' ? <WordTab /> : <PhraseTab />}
+      {tab === 'word' ? <WordTab onOpenWord={onOpenWord} /> : <PhraseTab />}
     </section>
   );
 }

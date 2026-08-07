@@ -14,6 +14,7 @@ import {
   WordIdAlreadyExistsError,
   type CreatePhraseInput,
 } from '../handlers/createPhrase.js';
+import { EntryAlreadyCitedError } from '../handlers/upstreamCitations.js';
 
 function parseCreatePhraseInput(body: unknown): CreatePhraseInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
@@ -44,6 +45,8 @@ export async function createPhraseFunction(request: HttpRequest, _context: Invoc
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
     if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
     if (err instanceof WordIdAlreadyExistsError) return { status: 409, jsonBody: { error: err.message } };
+    // Same class of conflict as a duplicate word_id: something already holds this identity.
+    if (err instanceof EntryAlreadyCitedError) return { status: 409, jsonBody: { error: err.message } };
     if (err instanceof NoComponentsError || err instanceof ComponentsNotFoundError) {
       return { status: 400, jsonBody: { error: err.message } };
     }
