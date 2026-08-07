@@ -180,6 +180,26 @@ scores as its best gloss — never the sum. Measured over 18 everyday queries, t
 word a learner wants moved from mean rank 7.5 to 2.8 here, and `ọmọ`/`igi` to #1
 in both engines.
 
+#### Three tiers are hard; the prefix tier competes
+
+The whole-string Yorùbá tiers — exact, tone-insensitive, underdot-insensitive —
+are *identifications*: if you typed the word, you get the word, and no English
+match outranks that. A **prefix** match is a weaker claim, "this word starts with
+what you typed", and it used to outrank every English match automatically however
+little of the word the query covered. That is what buried `ojú`: "eye" *is* `ẹyẹ`
+(bird) underdot-insensitively and a prefix of `eyeye`/`èyé`/`yéye`, so all fifteen
+results were Yorùbá and the word whose gloss is literally "eye" sat at #18.
+
+Prefix and English now share a rank and sort against each other by score, a prefix
+scoring by how much of the matched word the query covers (`prefixMatchScore`,
+mirrored in yorubadict so the two cannot drift on the comparison). Mean rank 2.8 →
+**2.2**, `moon`/`dog` to #1, `eye` → `ojú` #18 → #9, and **no cost on Yorùbá
+queries** — `ọmọ`, `adiye`, `ile`, `oju`, `omo`, `kọ́` all stay #1, `owo` stays #5.
+
+Softening the whole-string tiers too was measured and rejected: it lifts `ojú` to
+#1 but pushes the Yorùbá query `owo` from #5 to #11, letting an English gloss match
+beat a word whose spelling you actually typed.
+
 The fixture is deliberately not full parity. The two differ on result limit
 (15 vs 40), granularity (per-etymology here because citations need it, per-entry
 there), the `looksLikeYoruba` guard, the dialect tier, and whether example
