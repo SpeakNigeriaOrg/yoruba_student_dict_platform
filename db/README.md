@@ -21,6 +21,26 @@ framework, deliberately, matching this project's general preference for
 minimal tooling. Add new schema changes as a new `NNNN_description.sql`
 file; never edit an already-applied one.
 
+### Production is migrated by hand, and only through the runner
+
+**No CI/CD workflow runs migrations.** Deploying code that needs a new column
+does not create it, so a migration has to be applied to production *before* the
+code that reads it ships.
+
+Always via `migrate.mjs`, never as raw SQL against production - even for a
+one-line `alter table`. Applying a file by hand leaves `schema_migrations`
+claiming it was never applied, and because the runner applies pending files **in
+order**, the next migration then starts at the unrecorded one, hits an object
+that already exists, rolls back and throws. The new migration never runs, and the
+error blames the wrong file.
+
+That is not hypothetical: 0014 and 0015 were applied to production by hand during
+the Phase H/J deploy and never recorded, so applying 0016 failed on 0014 until
+the ledger was reconciled. It was safe to reconcile only because a full
+column/index/constraint diff against a fully-migrated database showed 0014 and
+0015 had landed *completely* - if any of it had been missing, the fix would have
+been to apply the file, not to log it. Verify before backfilling a ledger row.
+
 ## After 0012: bootstrap the first curator
 
 `0012_google_identity.sql` moves identity to Google email addresses and does
