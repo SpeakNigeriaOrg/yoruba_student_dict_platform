@@ -320,7 +320,11 @@ async function main() {
     if (!speaker) continue;
     if (!syllableAudioBySpeaker.has(speaker)) syllableAudioBySpeaker.set(speaker, new Map());
     const map = syllableAudioBySpeaker.get(speaker);
-    if (!map.has(row.syllable_text)) map.set(row.syllable_text, row.audio_data);
+    // NFC - the game joins vocab.json's syllables to syllables.json's keys BY STRING, and stored text
+    // is not consistently normalised, so an NFD `ọ` silently failed to find its own audio. Kept in step
+    // with publishToR2.mjs, which carries the full explanation.
+    const syllableText = row.syllable_text.normalize('NFC');
+    if (!map.has(syllableText)) map.set(syllableText, row.audio_data);
   }
   console.log(`      ${wordAudioBySpeaker.size} speaker(s) with word audio, ${syllableAudioBySpeaker.size} with syllable audio`);
 
@@ -486,11 +490,38 @@ async function main() {
   const publicDir = path.join(GAME_DIR, 'public');
   mkdirSync(publicDir, { recursive: true });
 
+  // The other half of publishToR2.mjs's ownership guard. This script's syllables.json holds RELATIVE
+  // paths and it writes the media locally alongside them; publishToR2's holds bare R2 keys and writes
+  // no media. Both produce the same filenames in the same directory, so whichever ran last silently
+  // decided which origin the game would ask - and if that origin did not have the files, the only
+  // symptom was missing audio for a player. Record who wrote these, and refuse to clobber the other.
+  const markerPath = path.join(publicDir, '.manifest-source.json');
+  if (existsSync(markerPath)) {
+    try {
+      const prior = JSON.parse(readFileSync(markerPath, 'utf8'));
+      if (prior.assetBase && prior.assetBase !== 'relative' && !args.includes('--force')) {
+        console.error(
+          `\nRefusing to overwrite manifests in ${publicDir}.\n` +
+            `  They were written by ${prior.producer ?? 'an unknown script'} with assetBase="${prior.assetBase}",\n` +
+            `  and this script writes assetBase="relative" (same-origin paths, media written locally).\n` +
+            `  Pass --force if you really mean to switch this directory over.`,
+        );
+        process.exit(1);
+      }
+    } catch {
+      // An unreadable marker is not a reason to block an export.
+    }
+  }
+  writeFileSync(
+    markerPath,
+    `${JSON.stringify({ producer: 'exportGameContent.mjs', assetBase: 'relative', generatedAt: new Date().toISOString() }, null, 2)}\n`,
+  );
+
   const vocabOut = {};
   for (const [wordId, entry] of Object.entries(vocab)) {
     vocabOut[wordId] = {
       displayText: entry.displayText,
-      syllables: entry.syllables,
+      syllables: entry.syllables.map((sy) => sy.normalize('NFC')),
       definition: entry.definition,
       imageStyles: [...(imagesByWord.get(wordId)?.keys() ?? [])],
     };

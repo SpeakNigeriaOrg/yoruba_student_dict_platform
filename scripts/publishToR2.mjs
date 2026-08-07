@@ -60,13 +60,63 @@
 // Usage:
 //   DATABASE_URL=... R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
 //   R2_SECRET_ACCESS_KEY=... R2_BUCKET_NAME=... \
-//     node scripts/publishToR2.mjs [--apply] [--repo-dir=<path>] [--game-dir=<path>]
+//     node scripts/publishToR2.mjs [--apply] [--repo-dir=<path>] [--manifest-dir=<path>]
+//
+// Flags (note: `--flag=value` only - a space-separated `--flag value` is silently ignored):
+//   --apply             actually upload and write manifests; without it, nothing is written anywhere
+//   --repo-dir=         source of config.json (tone_map) and sessions_source.json
+//   --manifest-dir=     where the three JSON manifests go; defaults to the REAL game
+//   --game-dir=         legacy alias, means <game-dir>/public
+//   --word=a,b          push only these words' audio and images
+//   --speaker=name      push only this speaker's word and syllable audio
+//   --style=name        push only this image style
+//   --no-skip           re-upload even objects whose bytes already match
+//   --prune             DELETE orphaned objects (refuses alongside any targeting flag)
+//   --force             overwrite manifests written by the other producer
+//   --strict-upstream   exit non-zero on Wiktionary citation drift instead of warning
+//
+// ---------------------------------------------------------------------------
+// Three ways into the same three files, and why this one names its target
+// ---------------------------------------------------------------------------
+// vocab.json/syllables.json/sessions.json have more than one producer:
+//
+//   this script            bare R2 keys in syllables.json; no local media. For the deployed game.
+//   exportGameContent.mjs  relative paths + media written locally. For running a game offline.
+//   website-games/sync_dictionary_data.py   a third path that vendors them into the real game.
+//
+// The first two write identical filenames into one directory with incompatible contents, so whichever
+// ran last silently decided which origin the game would ask for audio - and if that origin did not have
+// the files, the only symptom was silence during play. Both now leave a .manifest-source.json marker and
+// refuse to clobber the other's without --force.
+//
+// ---------------------------------------------------------------------------
+// When to move to versioned keys
+// ---------------------------------------------------------------------------
+// Keys here are stable and content is replaced in place, which caps how long the edge may cache (see
+// CACHE_CONTROL). Content-addressed keys - `words/{speaker}/{wordId}.{hash}.wav`, with the manifest
+// naming the exact version - would make `immutable` safe, replacement instant, and stale objects
+// harmless rather than wrong.
+//
+// That is deliberately not done yet, because today a published asset has exactly ONE possible
+// derivation. Verified rather than assumed: raw_audio_data is byte-identical to audio_data for all 96
+// utterances and all 193 segments, so 0008's raw/served split is currently a no-op; all three
+// canonical_*_selections tables are empty; and there is nothing to select between anyway - the two takes
+// per session are different artifacts by design (take 1 is the whole word, take 2 carries the syllable
+// segments), and no word has more than one image variant per style.
+//
+// Adopt versioned keys when ANY of those stops being true:
+//   * post-processing lands, so audio_data starts differing from raw_audio_data
+//   * curated take/speaker selection lands, so the canonical_* tables are actually read
+//   * a second consumer (a student-facing dictionary) needs a DIFFERENT derivation of one recording
+// Each makes one logical asset have several legitimate byte-level versions, which is exactly when
+// overwrite-in-place stops being adequate.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { reportUpstreamHealth } from './upstreamPublishCheck.mjs';
-import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -75,7 +125,174 @@ function argValue(flag, fallback) {
   return found ? found.slice(flag.length + 3) : fallback;
 }
 const REPO_DIR = path.resolve(process.cwd(), argValue('repo-dir', '../yoruba-student-dict'));
-const GAME_DIR = path.resolve(process.cwd(), argValue('game-dir', '../syllable_game_concept'));
+
+/** Where the three manifests are written - the directory itself, not a repo root.
+ *
+ * This used to be `--game-dir` with `/public` appended, defaulting to `../syllable_game_concept`. That
+ * was an early proof of concept and is now an empty non-git directory holding `{}`/`[]` stubs, so a
+ * default `--apply` run pushed media to R2 correctly and then wrote its manifests where nothing would
+ * ever read them. The live game is `website-games/public/phonics`, whose layout does not have the
+ * `<root>/public` shape the old flag assumed - hence naming the directory outright.
+ *
+ * `--game-dir` still works and still means `<game-dir>/public`, so any existing invocation is
+ * unchanged. */
+const MANIFEST_DIR = path.resolve(
+  process.cwd(),
+  argValue('manifest-dir', null) ??
+    (argValue('game-dir', null) ? path.join(argValue('game-dir', ''), 'public') : '../website-games/public/phonics'),
+);
+
+/** How long a cache may serve these bytes.
+ *
+ * Audio was shipping with NO Cache-Control at all, so a player's own browser re-fetched every clip on
+ * every play. This sets it. But read the next paragraph before assuming it fixed edge caching.
+ *
+ * ---------------------------------------------------------------------------
+ * This header alone does NOT make Cloudflare cache the audio
+ * ---------------------------------------------------------------------------
+ * Measured on the live host, after setting exactly this header on a real object:
+ *
+ *     words/speaker2/aja_dog.wav    cache-control: public, max-age=86400, ...   cf-cache-status: DYNAMIC
+ *     images/cartoon/aja_dog.png    cache-control: max-age=14400                cf-cache-status: HIT
+ *
+ * Same host, same moment, and the .wav has the BETTER header - yet only the .png is cached. Cloudflare
+ * decides cache eligibility from its own default file-EXTENSION list before it ever looks at the
+ * origin's header; .png is on that list and .wav is not. So an origin header cannot buy edge caching
+ * for audio on its own.
+ *
+ * What this header DOES buy, and it is real: browsers honour it regardless of extension, so a returning
+ * player - or a replay later the same day - serves from local disk instead of the network.
+ *
+ * To get EDGE caching (the part that matters for a first play by a player far from the bucket) a
+ * Cloudflare **Cache Rule** on gamemedia.speaknigeria.org must mark these paths eligible for cache -
+ * "Eligible for cache" with Edge TTL "use cache-control header". That lives in Cloudflare's dashboard,
+ * not in this repo, and the R2 token here has no zone scope to set it. Until it exists, expect
+ * cf-cache-status: DYNAMIC on every .wav no matter what this script sends.
+ *
+ * ---------------------------------------------------------------------------
+ * A day, not `immutable`
+ * ---------------------------------------------------------------------------
+ * Keys here are STABLE and content is replaced IN PLACE (PutObject over the same key), so a long TTL
+ * would pin superseded audio with no way to invalidate it short of a purge. stale-while-revalidate keeps
+ * that from ever costing a player a wait: past 24h the cache serves the old clip immediately and
+ * refreshes behind the request.
+ *
+ * The way out of that tradeoff is content-addressed keys, which would make `immutable` safe. That is
+ * deliberately NOT done yet - see "When to move to versioned keys" in the header. */
+const CACHE_CONTROL = 'public, max-age=86400, stale-while-revalidate=604800';
+
+// --- targeting, for pushing one asset instead of the whole corpus ---
+function argList(flag) {
+  const found = args.filter((a) => a.startsWith(`--${flag}=`)).flatMap((a) => a.slice(flag.length + 3).split(','));
+  return found.map((s) => s.trim()).filter(Boolean);
+}
+const onlyWords = new Set(argList('word'));
+const onlySpeakers = new Set(argList('speaker'));
+const onlyStyles = new Set(argList('style'));
+const targeted = onlyWords.size > 0 || onlySpeakers.size > 0 || onlyStyles.size > 0;
+const noSkip = args.includes('--no-skip');
+const prune = args.includes('--prune');
+
+let uploaded = 0;
+let skipped = 0;
+
+const wantsSpeaker = (speaker) => onlySpeakers.size === 0 || onlySpeakers.has(speaker);
+const wantsWord = (wordId, speaker) =>
+  (onlyWords.size === 0 || onlyWords.has(wordId)) && wantsSpeaker(speaker) && onlyStyles.size === 0;
+const wantsImage = (wordId, style) =>
+  (onlyWords.size === 0 || onlyWords.has(wordId)) &&
+  (onlyStyles.size === 0 || onlyStyles.has(style)) &&
+  onlySpeakers.size === 0;
+
+/** The three manifests have TWO producers that disagree about what `syllables.json`'s `audio` means.
+ *
+ * publishToR2 writes a bare R2 object key ("syllables/speaker2/ba.wav") and the game prepends its
+ * BASE_URL, so the bytes come from the bucket. exportGameContent writes a RELATIVE path and also writes
+ * the media locally, so the bytes come same-origin. Both are correct for their own target and both write
+ * the same filenames into the same directory, so running one after the other left the game pointing at
+ * an origin that does not serve those files - silently, with no error anywhere.
+ *
+ * A marker file next to the manifests records who wrote them. Mismatched producer means stop, because
+ * the failure mode being prevented is invisible at publish time and only shows up as missing audio for
+ * a player. --force is the deliberate override for genuinely switching a directory's target. */
+const MANIFEST_MARKER = '.manifest-source.json';
+const PRODUCER = { producer: 'publishToR2.mjs', assetBase: 'r2' };
+
+function assertManifestOwnership(dir) {
+  const markerPath = path.join(dir, MANIFEST_MARKER);
+  if (existsSync(markerPath)) {
+    try {
+      const prior = JSON.parse(readFileSync(markerPath, 'utf8'));
+      if (prior.assetBase && prior.assetBase !== PRODUCER.assetBase && !args.includes('--force')) {
+        console.error(
+          `\nRefusing to overwrite manifests in ${dir}.\n` +
+            `  They were written by ${prior.producer ?? 'an unknown script'} with assetBase="${prior.assetBase}",\n` +
+            `  and this script writes assetBase="${PRODUCER.assetBase}" (bare R2 keys). Mixing the two points the\n` +
+            `  game at an origin that does not serve its audio. Pass --force if you really mean to switch this\n` +
+            `  directory over.`,
+        );
+        process.exit(1);
+      }
+    } catch {
+      // An unreadable marker is not a reason to block a publish; treat it as absent.
+    }
+  }
+  writeFileSync(markerPath, `${JSON.stringify({ ...PRODUCER, generatedAt: new Date().toISOString() }, null, 2)}\n`);
+}
+
+/** Lists what is in the bucket and reports what nothing references any more.
+ *
+ * Report-only unless --prune, because this tooling previously could not remove an object at ALL:
+ * DeleteObject was never even imported, so every deleted word, re-spelling, re-syllabification and
+ * renamed speaker left its bytes behind - unreferenced by the manifests, yet still publicly fetchable
+ * at a guessable URL. The bucket could only ever grow.
+ *
+ * --prune deliberately refuses to run alongside targeting. `expectedKeys` is built from the whole
+ * corpus regardless of filters for exactly this reason, but a filtered run is also a run where the
+ * operator is thinking about one word, which is the wrong frame for a bulk delete. */
+async function reportOrphans(s3, bucket, expectedKeys) {
+  const found = [];
+  for (const prefix of ['words/', 'syllables/', 'images/']) {
+    let token;
+    do {
+      const page = await s3.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      for (const obj of page.Contents ?? []) if (!expectedKeys.has(obj.Key)) found.push(obj.Key);
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+  }
+
+  if (found.length === 0) {
+    console.log(`      no orphaned objects - the bucket matches the ${expectedKeys.size} expected keys`);
+    return;
+  }
+  console.log(`      ${found.length} ORPHANED object(s) - present in the bucket, referenced by nothing:`);
+  for (const key of found.slice(0, 20)) console.log(`        ${key}`);
+  if (found.length > 20) console.log(`        ... and ${found.length - 20} more`);
+
+  if (!prune) {
+    console.log('      (report only - pass --prune to delete them)');
+    return;
+  }
+  if (targeted) {
+    console.log('      REFUSING to prune: --prune cannot be combined with --word/--speaker/--style.');
+    return;
+  }
+  if (!apply) {
+    console.log('      (dry run - would delete the above; add --apply)');
+    return;
+  }
+  for (let i = 0; i < found.length; i += 1000) {
+    await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: found.slice(i, i + 1000).map((Key) => ({ Key })) },
+      }),
+    );
+  }
+  console.log(`      deleted ${found.length} orphaned object(s)`);
+}
 
 const MIN_THEME_WORDS = 3;
 const REINFORCEMENT_LEVEL_SIZE = 10;
@@ -167,11 +384,53 @@ async function main() {
     credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
   });
 
+  /** Uploads one object unless the bucket already holds exactly these bytes, then verifies it.
+   *
+   * The HeadObject-after-Put is the load-bearing part and predates the rest: coverage is computed only
+   * from keys this function RETURNED, so sessions.json can never claim a speaker is valid for content
+   * that is not really in the bucket. See the header.
+   *
+   * The HeadObject-BEFORE-Put is the new part, and it is what makes a full republish cheap enough to
+   * stay the default - which matters because the manifests can only be trusted when built from a whole
+   * -corpus pass. R2 returns a plain MD5 as the ETag for a non-multipart object (verified against a
+   * live object before relying on it), so an unchanged asset is detectable without downloading it.
+   * Anything unexpected in that comparison falls through to uploading, because a needless upload is
+   * harmless and a skipped changed asset is not.
+   */
   async function putAndVerify(key, buffer, contentType) {
-    if (apply) {
-      await s3.send(new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: contentType }));
-      await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+    if (!apply) return key;
+
+    if (!noSkip) {
+      const local = createHash('md5').update(buffer).digest('hex');
+      try {
+        const head = await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+        const remote = (head.ETag ?? '').replace(/"/g, '');
+        // A multipart ETag looks like "<md5>-<partcount>" and cannot be compared this way; the
+        // length check rejects it along with anything else unexpected.
+        if (remote.length === 32 && remote === local) {
+          skipped += 1;
+          return key;
+        }
+      } catch (err) {
+        // Not found is the normal first-publish case. Anything else is also non-fatal here - it just
+        // means "cannot prove it is unchanged", and the upload below settles it.
+        if (err?.name !== 'NotFound' && err?.$metadata?.httpStatusCode !== 404) {
+          console.warn(`    (could not compare ${key}: ${err.message} - uploading anyway)`);
+        }
+      }
     }
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        CacheControl: CACHE_CONTROL,
+      }),
+    );
+    await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+    uploaded += 1;
     return key;
   }
 
@@ -263,7 +522,17 @@ async function main() {
     if (!speaker) continue;
     if (!syllableAudioBySpeaker.has(speaker)) syllableAudioBySpeaker.set(speaker, new Map());
     const map = syllableAudioBySpeaker.get(speaker);
-    if (!map.has(row.syllable_text)) map.set(row.syllable_text, row.audio_data);
+    // NFC, because the game looks a syllable up BY STRING: it takes the syllable out of vocab.json and
+    // indexes syllables.json with it. Stored text is not consistently normalised, and an NFD `ọ`
+    // (o + U+0323) is a different key from an NFC `ọ` (U+1ECD) even though they are the same letter - so
+    // the lookup missed and the button fell silent while the audio sat in the bucket. Live at the time
+    // this was written: `oba_king` and `ose_soap` for speaker1 and speaker2.
+    //
+    // It also de-duplicates deliberately. safeName() strips combining marks, so both forms already
+    // produced the SAME R2 filename - two rows were silently overwriting one object, which is why the
+    // upload count exceeded the number of distinct keys by exactly one.
+    const syllableText = row.syllable_text.normalize('NFC');
+    if (!map.has(syllableText)) map.set(syllableText, row.audio_data);
   }
 
   const imagesResult = await pool.query(
@@ -285,10 +554,17 @@ async function main() {
   let uploadCount = 0;
   let failCount = 0;
 
+  // The full set of keys this corpus SHOULD have, recorded whether or not targeting skips them.
+  // Needed by the orphan report, which must diff against the whole expectation - an orphan list built
+  // from a filtered expectation would call live assets orphans.
+  const expectedKeys = new Set();
+
   for (const [speaker, wordMap] of wordAudioBySpeaker) {
     verifiedWordAudioKey.set(speaker, new Map());
     for (const [wordId, buf] of wordMap) {
       const key = `words/${speaker}/${wordId}.wav`;
+      expectedKeys.add(key);
+      if (!wantsWord(wordId, speaker)) continue;
       try {
         await putAndVerify(key, buf, 'audio/wav');
         verifiedWordAudioKey.get(speaker).set(wordId, key);
@@ -303,6 +579,9 @@ async function main() {
     verifiedSyllableAudioKey.set(speaker, new Map());
     for (const [syllableText, buf] of syllableMap) {
       const key = `syllables/${speaker}/${safeName(syllableText, toneMap)}`;
+      expectedKeys.add(key);
+      // Syllables are not word-scoped, so --word cannot select among them; only --speaker applies.
+      if (!wantsSpeaker(speaker) || onlyWords.size > 0 || onlyStyles.size > 0) continue;
       try {
         await putAndVerify(key, buf, 'audio/wav');
         verifiedSyllableAudioKey.get(speaker).set(syllableText, key);
@@ -317,6 +596,8 @@ async function main() {
     verifiedImageKey.set(wordId, new Map());
     for (const [style, buf] of styleMap) {
       const key = `images/${style}/${wordId}.png`;
+      expectedKeys.add(key);
+      if (!wantsImage(wordId, style)) continue;
       try {
         await putAndVerify(key, buf, 'image/png');
         verifiedImageKey.get(wordId).set(style, key);
@@ -327,7 +608,13 @@ async function main() {
       }
     }
   }
-  console.log(`      ${uploadCount} object(s) ${apply ? 'uploaded and verified' : 'would be uploaded'}, ${failCount} failed`);
+  if (apply) {
+    console.log(`      ${uploaded} uploaded, ${skipped} already identical (skipped), ${failCount} failed`);
+  } else {
+    console.log(`      ${uploadCount} object(s) would be uploaded, ${failCount} failed`);
+  }
+
+  await reportOrphans(s3, R2_BUCKET_NAME, expectedKeys);
 
   if (!apply) {
     // Dry run: sessions.json/vocab.json/syllables.json would only be
@@ -335,6 +622,23 @@ async function main() {
     // upload - so a dry run stops here rather than writing manifests
     // that claim coverage nothing has actually verified yet.
     console.log('\nDry run only - no objects uploaded, no local manifest written. Pass --apply to publish for real.');
+    await pool.end();
+    return;
+  }
+
+  if (targeted) {
+    // Same reasoning as the dry run above, and it is the reason targeting is safe to offer at all.
+    // Coverage is computed from the keys THIS RUN verified, so a filtered run has verified only a
+    // fraction of them - writing manifests from that would mark every unvisited speaker/word as
+    // uncovered and silently drop them from every level. That is precisely the class of bug the
+    // verify-in-the-same-run design was introduced to kill (3/8 levels once shipped with zero valid
+    // speakers), so a filtered run pushes bytes and refuses to touch the manifests.
+    console.log(
+      '\nTargeted run - media pushed, manifests deliberately NOT written.\n' +
+        '  vocab/syllables/sessions.json are computed from the keys verified in THIS run, so writing them\n' +
+        '  now would drop every word this run did not visit. Re-run without --word/--speaker/--style to\n' +
+        '  regenerate them.',
+    );
     await pool.end();
     return;
   }
@@ -437,14 +741,17 @@ async function main() {
   console.log(`      ${levels.length} level(s) generated across ${speakers.length} speaker(s)`);
 
   console.log('[6/6] Writing vocab.json / syllables.json / sessions.json (local, small - still committed+deployed with app code)...');
-  const publicDir = path.join(GAME_DIR, 'public');
+  const publicDir = MANIFEST_DIR;
   mkdirSync(publicDir, { recursive: true });
+  assertManifestOwnership(publicDir);
 
   const vocabOut = {};
   for (const [wordId, entry] of Object.entries(vocab)) {
     vocabOut[wordId] = {
       displayText: entry.displayText,
-      syllables: entry.syllables,
+      // NFC for the same reason as the syllables.json keys above - these two lists are joined BY STRING
+      // by the game, so they have to agree on encoding or the audio is unreachable.
+      syllables: entry.syllables.map((s) => s.normalize('NFC')),
       definition: entry.definition,
       imageStyles: [...(verifiedImageKey.get(wordId)?.keys() ?? [])],
     };

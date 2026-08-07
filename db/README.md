@@ -165,8 +165,26 @@ reasoning. In short:
   of syllable kan, across every word and every speaker" is just
   `select * from syllable_observations_enriched where syllable_orthography_insensitive = 'kan'`.
 - **`canonical_utterance_selections`** / **`canonical_syllable_selections`**
-  are the deferred acoustic-ML canonical-selection algorithm's manual v1
-  stand-in - a curator flags a best take by hand for now - and are what the
-  publish step reads to push the current legacy R2 layout
-  (`words/{speaker}/{word_id}.wav`, `syllables/{speaker}/{legacy_syllable_key}.wav`)
-  so `syllable_game_concept` needs no changes at all.
+  (and `canonical_image_selections`, 0010) are the deferred acoustic-ML
+  canonical-selection algorithm's manual v1 stand-in - a curator would flag a
+  best take by hand.
+
+  **They are empty and nothing reads them.** This previously claimed they were
+  "what the publish step reads"; that is false. `scripts/publishToR2.mjs` and
+  `scripts/exportGameContent.mjs` both hardcode `take_number = 1` for word
+  audio and `variant_number = 1` for images, and pick syllable audio by
+  first-row-wins with no tiebreak. The key layout they produce
+  (`words/{speaker}/{word_id}.wav`, `syllables/{speaker}/{safe_name}.wav`,
+  `images/{style}/{word_id}.png`) is built from those hardcoded choices, not
+  from a selection table. Note also that the syllable filename is recomputed by
+  `safeName()` rather than read from the `legacy_syllable_key` column that
+  exists for it.
+
+  Selection is not yet needed for word audio: the two takes per recording
+  session are different artifacts by design (take 1 is the whole word, take 2
+  carries the syllable segments), so there is one candidate per role. The one
+  real gap is the 15 syllables recorded more than once by the same speaker,
+  which first-row-wins resolves arbitrarily.
+
+  The consumer is `website-games/public/phonics`, not `syllable_game_concept`,
+  which was an early proof of concept and is now empty.
