@@ -19,6 +19,34 @@
 // that fires in practice is "re-identified", found by content, not "the id is
 // still there but says something different".
 //
+// Who mints it, since "content-derived" invites the wrong guess: **wiktextract**,
+// the parser behind kaikki.org - not Wiktionary's editors, and not us. The raw
+// upstream JSONL already contains `en-A-yo-character-9n~aNY1j` before kaikki-yoruba
+// or this platform touches it; kaikki-yoruba only CHOOSES which sense's id names
+// the entry, and ingest copies it verbatim (deriveSenses.ts's `entryId: entry.id`).
+//
+// That the suffix tracks the GLOSS rather than the word is measured, not assumed.
+// Over the 6272-entry corpus, in both directions:
+//
+//   481 suffixes are shared by more than one entry - and for 447 of them (93%) the
+//       gloss is IDENTICAL. `A`/`a`, `f`/`F`, `y`/`Y` share a suffix because they
+//       share a gloss, so the suffix cannot be a function of the headword.
+//   469 glosses appear on more than one entry - and 455 (97%) map to exactly ONE
+//       suffix. The same gloss reliably reproduces the same suffix.
+//
+// (The ~3% residue means the input is not gloss text alone - tags or other sense
+// fields presumably participate - so treat this as "tracks the gloss closely",
+// which is all the drift logic below needs.)
+//
+// Note both HALVES of an id can move independently: the `en-<word>-<lang>-<pos>`
+// prefix follows the headword, so an upstream re-spelling breaks the link too,
+// by a different route than a gloss edit.
+//
+// This is also the argument for Wiktionary's `etymid`: an editor-authored,
+// human-meaningful etymology label is stable by intent, where a content hash moves
+// whenever prose is polished. Broad etymid adoption upstream would shrink the
+// re_identified churn this handler exists to absorb.
+//
 // So the content fingerprint does the real work and the id is an optimisation.
 // Both are checked, because either can move independently.
 //
