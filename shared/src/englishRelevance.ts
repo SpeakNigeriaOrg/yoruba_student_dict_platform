@@ -57,6 +57,29 @@ const EXACT_GLOSS_BONUS = 2;
 const ROOT_WEIGHT = 0.5;
 const ROOT_CAP = 3;
 
+/** Scales a partial-spelling (prefix) match onto the English score's range, so the two can be
+ * compared at all.
+ *
+ * A prefix match used to outrank every English match automatically, however little of the word the
+ * query covered. Searching "eye" filled all fifteen results with Yoruba - it IS `ẹyẹ` (bird)
+ * orthography-insensitively, and a prefix of eyeye/èyé/yéye - so `ojú`, whose gloss is literally
+ * "eye", sat at #18 with no English result on the first page at all.
+ *
+ * Coverage is always below 1 for a prefix, since a full-length match would have been the
+ * whole-string tier. 9 puts a near-complete prefix above a strong English match and a
+ * three-of-eight-character one below it: `ile` against `ilé-ìwé` scores 3.4, where a gloss that IS
+ * the query scores roughly 7 to 10.
+ *
+ * The three whole-string tiers are NOT scored and stay absolute - if you typed the word, you get the
+ * word. Softening those too was measured: it gets `ojú` to #1 but pushes the Yoruba query `owo` from
+ * #5 to #11, trading a Yoruba answer for an English one in a Yoruba dictionary. */
+export const PREFIX_SCALE = 9;
+
+export function prefixMatchScore(queryLength: number, formLength: number): number {
+  if (formLength <= 0) return 0;
+  return (queryLength / formLength) * PREFIX_SCALE;
+}
+
 /** Corpus-wide document frequency, for IDF. Built once per index build. */
 export interface GlossStats {
   /** How many glosses contain each token. */

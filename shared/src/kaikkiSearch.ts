@@ -12,6 +12,7 @@
 import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
 import {
   buildGlossStats,
+  prefixMatchScore,
   scoreGlossesAgainstQuery,
   rootBonus,
   type GlossStats,
@@ -43,13 +44,36 @@ export function buildSearchIndex(lexicon: KaikkiLexicon): KaikkiSearchRecord[] {
 
 type KaikkiSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'english';
 
+// ---------------------------------------------------------------------------
+// Three HARD tiers, then two that compete on score
+// ---------------------------------------------------------------------------
+// The first three are whole-string identifications at successively more forgiving normalisations:
+// if you typed the word, you get the word, and nothing outranks that. They stay absolute.
+//
+// A PREFIX match is a different claim - "this word starts with what you typed" - and it used to
+// outrank every English match automatically, however little of the word the query covered. Searching
+// "eye" filled all fifteen results with Yoruba (it is ẹyẹ orthography-insensitively, and a prefix of
+// eyeye/èyé/yéye), so `ojú` - whose gloss is literally "eye" - sat at #18 with no English result on
+// the first page at all.
+//
+// So prefix and english share a rank and sort against each other by score. Measured on the real
+// corpus: moon -> òṣùpá #3 to #1, eye -> ojú #18 to #9, dog -> ajá #3 to #2, and every Yoruba query
+// tested (ọmọ, adiye, ile, oju, owo) unchanged. Going further - softening tone/ortho too - does get
+// ojú to #1, but pushes the Yoruba query `owo` from #5 to #11, trading a Yoruba answer for an
+// English one in a Yoruba dictionary. Not done.
+const SOFT_RANK = 3;
+
 const TIER_RANK: Record<KaikkiSearchTier, number> = {
   yoruba_exact: 0,
   yoruba_tone: 1,
   yoruba_ortho: 2,
-  yoruba_prefix: 3,
-  english: 4,
+  yoruba_prefix: SOFT_RANK,
+  english: SOFT_RANK,
 };
+
+// PREFIX_SCALE and prefixMatchScore live in englishRelevance.ts, mirrored by yorubadict's
+// english-relevance.js, so the two engines cannot drift on how a partial spelling compares to a
+// gloss match.
 
 export interface KaikkiSearchResult {
   form: string;
@@ -145,11 +169,19 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
 
     if (tier) {
+      // A prefix match carries a real score now: how much of the word the query covers. The other
+      // three are whole-string identifications, where "how much" is not a question.
+      const score = tier === 'yoruba_prefix' ? prefixMatchScore(qOrtho.length, fOrtho.length) : 0;
       const key = senseKey(sense);
       const existing = results.get(key);
-      if (!existing || TIER_RANK[tier] < TIER_RANK[existing.tier]) {
-        results.set(key, { tier, score: 0, sense });
-      }
+      // Better rank wins; at equal rank the better score does. The same sense reaches this loop
+      // once per spelling it is indexed under, so a word can be a weak prefix match under one
+      // spelling and a strong one under another.
+      const better =
+        !existing ||
+        TIER_RANK[tier] < TIER_RANK[existing.tier] ||
+        (TIER_RANK[tier] === TIER_RANK[existing.tier] && score > existing.score);
+      if (better) results.set(key, { tier, score, sense });
     }
   }
 
@@ -162,9 +194,13 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
 
     for (const { sense } of dedupedSenses(records)) {
       const key = senseKey(sense);
-      if (results.has(key)) continue; // already found via a Yoruba tier - don't downgrade to English
+      const existing = results.get(key);
+      // A HARD Yoruba tier is never downgraded - you typed the word, you get the word. A soft one
+      // (prefix) is only a claim about spelling overlap, so if this sense ALSO means what was asked,
+      // it keeps whichever of the two reads stronger.
+      if (existing && TIER_RANK[existing.tier] < SOFT_RANK) continue;
       const score = scoreGlossesAgainstQuery(sense.glosses, qTokens, qOrtho, stats);
-      if (score > 0) englishMatches.push({ key, sense, score });
+      if (score > 0 && (!existing || score > existing.score)) englishMatches.push({ key, sense, score });
     }
 
     // The root bonus is computed against the MATCH SET, so a productive root is only lifted when
@@ -190,10 +226,12 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
       // likelier headline sense, and this is query-independent so it cannot smuggle file order
       // back in.
       //
-      // Scoped to English because every Yoruba-tier result carries score 0, so an unscoped
-      // tie-break would re-order those too - a much wider change than the bug needs, and one that
-      // moved three Python-parity fixtures that have nothing to do with gloss relevance.
-      (a.tier === 'english' && b.tier === 'english' ? glossLength(a.sense) - glossLength(b.sense) : 0),
+      // Scoped to the SOFT tiers, which are the only ones that carry a score. The three hard tiers
+      // all score 0, so an unscoped tie-break would reorder those too - a much wider change than
+      // the bug needs, and one that moved Python-parity fixtures with nothing to do with relevance.
+      (TIER_RANK[a.tier] >= SOFT_RANK && TIER_RANK[b.tier] >= SOFT_RANK
+        ? glossLength(a.sense) - glossLength(b.sense)
+        : 0),
   );
 
   return ranked.slice(0, limit).map(({ tier, sense }) => ({

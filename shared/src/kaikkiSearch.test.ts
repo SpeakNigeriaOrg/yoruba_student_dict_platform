@@ -40,7 +40,7 @@ function withoutCitation(results: ReturnType<typeof searchKaikki>): unknown[] {
  * Named rather than re-snapshotted, and asserted from BOTH sides, so a future accidental change to
  * the ranking cannot hide inside an updated blob. The Yoruba tiers are untouched and still hold
  * byte-for-byte parity, which is most of what this fixture set is for. */
-const ENGLISH_RANKING_DIVERGENCES: Record<string, { pythonTop: string; oursTop: string; why: string }> = {
+const RANKING_DIVERGENCES: Record<string, { expectFirst: string; why: string }> = {
   // Python put `ọwá` ("the parlor or inner courtyard of a home") first and `ilé` at index 5, purely
   // on gloss-word count. We put `òrùlé` first, whose glosses are ["roof (of a house)", "house"] -
   // Wiktionary does list "house" as a sense of it - and `ilé` third.
@@ -51,9 +51,30 @@ const ENGLISH_RANKING_DIVERGENCES: Record<string, { pythonTop: string; oursTop: 
   // the ranking to one fixture query is how a search engine ends up worse everywhere else. On the
   // full production corpus (5,580 forms rather than this fixture's snapshot) `ilé` ranks third.
   house: {
-    pythonTop: 'ọwá',
-    oursTop: 'òrùlé',
-    why: 'the Python engine ranked by raw gloss-word count, which put the obvious word at index 5',
+    expectFirst: 'òrùlé',
+    why: 'per-gloss scoring replaced the raw gloss-word count that put the obvious word at index 5',
+  },
+
+  // These two moved because the PREFIX tier became soft - it competes with English on score rather
+  // than outranking it automatically. See SOFT_RANK in kaikkiSearch.ts.
+  //
+  // `ile` is the honest one: the reordering is a mixed bag rather than an improvement. `ilé` is
+  // still first, and several results that rose are genuinely `ilé`-related (`ilé ìkàwé` library,
+  // `ilé ìwòsàn` hospital, `اِلعِ` the Ajami spelling of ilé). But `ilé-ìwé` (school) fell from
+  // index 5 to 14, which is a loss. The query is unusual in being both a Yoruba prefix AND a token
+  // that appears inside English glosses - once marks are folded, a gloss reading "alternative form
+  // of ilé" tokenises to include `ile` - so gloss-mention matches now compete with weak prefix
+  // matches. Recorded rather than tuned: the English-query gains are large and measured, and this
+  // is one ASCII query that is really a Yoruba one.
+  ile: {
+    expectFirst: 'ilé',
+    why: 'the prefix tier is soft now, so gloss matches interleave with partial-spelling matches',
+  },
+  // `owo` changes only in its tail: fifteen results deep, two prefix matches swap for two others of
+  // different coverage. Nothing a reader would notice, and `owó` stays where it was.
+  owo: {
+    expectFirst: 'òò',
+    why: 'the prefix tier is soft now, which reorders the prefix matches at the tail by coverage',
   },
 };
 
@@ -62,26 +83,30 @@ describe('searchKaikki (parity with kaikki_search.py, via real fixtures)', () =>
     expect(fixtures.length).toBeGreaterThan(0);
   });
 
-  for (const fixture of fixtures.filter((f) => !(f.query in ENGLISH_RANKING_DIVERGENCES))) {
+  for (const fixture of fixtures.filter((f) => !(f.query in RANKING_DIVERGENCES))) {
     it(`query ${JSON.stringify(fixture.query)}: matches the Python engine's results, in order`, () => {
       expect(withoutCitation(searchKaikki(records, fixture.query))).toEqual(fixture.results);
     });
   }
 
-  for (const [query, divergence] of Object.entries(ENGLISH_RANKING_DIVERGENCES)) {
+  for (const [query, divergence] of Object.entries(RANKING_DIVERGENCES)) {
     it(`query ${JSON.stringify(query)}: deliberately diverges - ${divergence.why}`, () => {
       const fixture = fixtures.find((f) => f.query === query);
       expect(fixture, `${query} is no longer in the fixture set`).toBeDefined();
 
-      // Both sides asserted: the fixture still records what Python did, and we now do the
-      // documented different thing.
-      expect((fixture!.results[0] as { form: string }).form).toBe(divergence.pythonTop);
-      expect(searchKaikki(records, query)[0].form).toBe(divergence.oursTop);
+      // The order really does differ - so a stale entry here, left behind after the ranking was
+      // changed back, fails rather than sitting unnoticed.
+      const ours = withoutCitation(searchKaikki(records, query));
+      expect(ours).not.toEqual(fixture!.results);
 
-      // Same SET of senses, reordered - the change is to ranking, not to matching.
-      const ours = new Set(searchKaikki(records, query, 500).map((r) => r.form));
+      // And it differs in the documented way.
+      expect(searchKaikki(records, query)[0].form).toBe(divergence.expectFirst);
+
+      // Ranking moved; MATCHING did not. Every sense Python found is still findable - it may have
+      // moved past the default limit, so this looks deeper than one page.
+      const found = new Set(searchKaikki(records, query, 500).map((r) => r.form));
       for (const result of fixture!.results as Array<{ form: string }>) {
-        expect(ours, `${result.form} dropped out of the results entirely`).toContain(result.form);
+        expect(found, `${result.form} dropped out of the results entirely`).toContain(result.form);
       }
     });
   }
@@ -92,7 +117,7 @@ describe('searchKaikki (parity with kaikki_search.py, via real fixtures)', () =>
     const diverging = fixtures
       .filter((f) => JSON.stringify(withoutCitation(searchKaikki(records, f.query))) !== JSON.stringify(f.results))
       .map((f) => f.query);
-    expect(diverging.sort()).toEqual(Object.keys(ENGLISH_RANKING_DIVERGENCES).sort());
+    expect(diverging.sort()).toEqual(Object.keys(RANKING_DIVERGENCES).sort());
   });
 });
 
@@ -170,13 +195,34 @@ describe('searchKaikki direct unit tests', () => {
     expect(searchKaikki(records, 'ile', 2)).toHaveLength(2);
   });
 
-  it('ranks Yoruba tiers above English matches even when an English query would also match', () => {
-    const results = searchKaikki(records, 'ile');
-    const firstEnglishIndex = results.findIndex((r) => r.matchedVia === 'english');
-    const lastYorubaIndex = results.map((r) => r.matchedVia).lastIndexOf('yoruba_prefix');
-    if (firstEnglishIndex !== -1 && lastYorubaIndex !== -1) {
-      expect(lastYorubaIndex).toBeLessThan(firstEnglishIndex);
+  // The old version of this asserted that EVERY Yoruba tier outranks English, and it was
+  // self-disarming: the whole body sat inside `if (firstEnglishIndex !== -1 && ...)`, and for its one
+  // query no English result survived the limit, so it never ran. The invariant it should have been
+  // protecting is narrower and now actually holds.
+
+  it('never ranks an English match above a whole-string Yoruba match', () => {
+    // exact / tone-insensitive / underdot-insensitive are identifications: if you typed the word,
+    // you get the word. This is the guarantee that softening the PREFIX tier did not touch.
+    const hardTiers = new Set(['yoruba_exact', 'yoruba_tone', 'yoruba_ortho']);
+    for (const query of ['ile', 'owo', 'eye', 'oju', 'omo']) {
+      const tiers = searchKaikki(records, query, 60).map((r) => r.matchedVia);
+      const lastHard = tiers.reduce((last, tier, i) => (hardTiers.has(tier) ? i : last), -1);
+      const firstSoft = tiers.findIndex((t) => !hardTiers.has(t));
+      if (lastHard !== -1 && firstSoft !== -1) {
+        expect(lastHard, `${query}: a soft match preceded a whole-string one`).toBeLessThan(firstSoft);
+      }
     }
+  });
+
+  it('lets a partial-spelling match lose to a strong English match, which is the point of softening it', () => {
+    // Searching "eye" used to fill all fifteen results with Yoruba - it IS ẹyẹ (bird)
+    // orthography-insensitively, and a prefix of eyeye/èyé/yéye - so ojú, whose gloss is literally
+    // "eye", sat at #18 with no English result on the first page at all.
+    const tiers = searchKaikki(records, 'eye', 15).map((r) => r.matchedVia);
+    expect(tiers).toContain('english');
+    // And a prefix match still beats a WEAK english one, so the tier has not simply been demoted.
+    const results = searchKaikki(records, 'ile', 60);
+    expect(results.some((r) => r.matchedVia === 'yoruba_prefix')).toBe(true);
   });
 });
 

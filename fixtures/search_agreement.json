@@ -17,22 +17,69 @@
     "disagree, that is either a bug or a decision worth recording in knownDifferences below."
   ],
   "expectedTopResult": [
-    { "query": "child", "form": "ọmọ", "note": "the query that started this - the word for child, and the root of countless compounds" },
-    { "query": "tree", "form": "igi", "note": "was #22 in the platform and #79 in yorubadict" },
-    { "query": "water", "form": "omi" },
-    { "query": "fire", "form": "iná" },
-    { "query": "head", "form": "orí" },
-    { "query": "hand", "form": "ọwọ́" },
-    { "query": "bird", "form": "ẹyẹ" }
+    {
+      "query": "child",
+      "form": "ọmọ",
+      "note": "the query that started this - the word for child, and the root of countless compounds"
+    },
+    {
+      "query": "tree",
+      "form": "igi",
+      "note": "was #22 in the platform and #79 in yorubadict"
+    },
+    {
+      "query": "water",
+      "form": "omi"
+    },
+    {
+      "query": "fire",
+      "form": "iná"
+    },
+    {
+      "query": "head",
+      "form": "orí"
+    },
+    {
+      "query": "hand",
+      "form": "ọwọ́"
+    },
+    {
+      "query": "bird",
+      "form": "ẹyẹ"
+    },
+    {
+      "query": "dog",
+      "form": "ajá",
+      "note": "reached #1 in both engines once the prefix tier became soft - dógùn-ún (\"to rust\") is a prefix match with low coverage and no longer outranks a gloss that says \"dog\""
+    },
+    {
+      "query": "moon",
+      "form": "òṣùpá",
+      "note": "same: soft prefix took it from #3 to #1 in both engines"
+    }
   ],
   "expectedInTopThree": [
-    { "query": "dog", "form": "ajá", "note": "not first because 'dog' is also a Yoruba PREFIX - dógùn-ún ('to rust') matches on the yoruba_prefix tier, which outranks every English match. Same class as the eye/ẹyẹ note below, not a scoring disagreement." },
-    { "query": "house", "form": "ilé", "note": "òrùlé genuinely glosses as 'house' too, so first place is arguable" },
-    { "query": "king", "form": "ọba" },
-    { "query": "money", "form": "owó" },
-    { "query": "moon", "form": "òṣùpá" },
-    { "query": "cow", "form": "màlúù" },
-    { "query": "book", "form": "ìwé" }
+    {
+      "query": "house",
+      "form": "ilé",
+      "note": "òrùlé genuinely glosses as 'house' too, so first place is arguable"
+    },
+    {
+      "query": "king",
+      "form": "ọba"
+    },
+    {
+      "query": "money",
+      "form": "owó"
+    },
+    {
+      "query": "cow",
+      "form": "màlúù"
+    },
+    {
+      "query": "book",
+      "form": "ìwé"
+    }
   ],
   "rootBonusMustNotPromote": [
     {
@@ -47,8 +94,7 @@
     }
   ],
   "knownDifferences": [
-    "An English query that is ALSO a Yoruba spelling or prefix gets Yoruba results first, in both engines - the four Yoruba tiers outrank English by design. 'eye' orthography-insensitively IS ẹyẹ (bird) and a prefix of eyeye/èyé/yéye, so ojú sits at ~#18 in the platform; 'dog' is a prefix of dógùn-ún ('to rust'), so ajá is second. Tier precedence, not relevance, which is why both are excluded from expectedTopResult. Whether a common English word should beat a Yoruba prefix match is a real open question and a much larger change than this pass.",
-    "eye -> ojú reaches #1 in yorubadict but not in the platform, because yorubadict caps each Yoruba tier separately while the platform slices once at the end - so a flood of prefix hits crowds the platform's first page and not yorubadict's.",
+    "An English query that is ALSO a whole Yoruba word gets that word first, in both engines. The three whole-string tiers (exact, tone-insensitive, underdot-insensitive) are identifications and stay absolute: if you typed the word, you get the word. 'eye' orthography-insensitively IS ẹyẹ (bird), and there are several tone variants of it, so ojú reaches about #9 in BOTH engines rather than #1. The PREFIX tier is no longer hard - it competes with English on score - which is what took ojú from #18 to #9 and lifted dog and moon to #1 in both. Softening the whole-string tiers too was measured and rejected: it lifts ojú to #1 but pushes the Yoruba query `owo` from #5 to #11 in the platform, trading a Yoruba answer for an English one.",
     "The platform disables its English pass entirely for a query containing ẹ/ọ/ṣ or a combining mark (looksLikeYoruba); yorubadict has no such guard. So a query like 'kaṣu' returns 0 results here and non-empty there. Deliberate on this side.",
     "yorubadict indexes example-sentence translations (down-weighted); the platform's corpus rows carry no examples at all, so it cannot."
   ]
