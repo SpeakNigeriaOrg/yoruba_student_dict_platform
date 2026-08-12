@@ -534,31 +534,44 @@ describe('AddWord - the phrase path can finish the job', () => {
     spellingMatches: [],
   };
 
-  it('adds a component that is NOT in the dictionary, citing its own etymology', async () => {
-    // This is the 475-of-480 case. Before, a curator sent to the Phrase tab whose component word was
-    // absent had no way forward at all: the picker only saw golden_record and createPhrase hard-failed.
+  it('routes to the Word tab to add a missing component, then brings it back into the phrase', async () => {
+    // This is the 475-of-480 case. It used to be a dead end - the picker only saw golden_record and
+    // createPhrase hard-failed - and was briefly a cut-down inline form here. Words are created in ONE
+    // place now: the Word tab, with the whole form that job needs.
     const fetchMock = mockFetch({ kaikkiResults: [MISSING_PART] });
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
     render(<AddWord />);
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
 
+    // Build up some state first, so the round trip has something to lose.
+    const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dict.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+    await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
+
     const upstream = within(screen.getByRole('search', { name: 'Search Wiktionary for a missing word' }));
     await user.click(upstream.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText(/a divination sign/));
-    await user.click(upstream.getByRole('button', { name: 'Use this' }));
+    await user.click(upstream.getByRole('button', { name: 'Add it as a word first' }));
 
-    // It is not created behind the curator's back - the derived id is shown and editable first, because
-    // deriveWordId is not injective.
-    const idField = screen.getByLabelText('Word ID') as HTMLInputElement;
-    expect(idField.value).toBe('odu_a_divination_sign');
-    await user.click(screen.getByRole('button', { name: 'Add it and use it' }));
+    // We are on the WORD tab, told why, with the etymology already picked.
+    expect(screen.getByLabelText('Add word tab')).toBeInTheDocument();
+    expect(screen.getByLabelText('Adding for a phrase')).toHaveTextContent('odù');
+    expect(screen.getByLabelText('Cited etymology')).toHaveTextContent('odù');
 
-    await waitFor(() => expect(screen.getByLabelText('Phrase components')).toHaveTextContent('odù'));
-    const created = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/words'));
-    expect(created).toBeTruthy();
-    const body = JSON.parse(created![1].body);
-    expect(body.wordId).toBe('odu_a_divination_sign');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    // Back on the phrase, with the new word appended AND the earlier work intact.
+    await waitFor(() => expect(screen.getByLabelText('Add phrase tab')).toBeInTheDocument());
+    const list = screen.getByLabelText('Phrase components');
+    expect(list).toHaveTextContent('existingspelling');
+    expect(list).toHaveTextContent('odù');
+    expect((screen.getByLabelText('Word ID hint') as HTMLInputElement).value).toBe('phrasehint');
+
+    // And the word was created through the normal word path, citing its own etymology.
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/words'))![1].body);
     expect(body.citation).toEqual({ entryId: 'en-odù-yo-noun-PART' });
   });
 

@@ -29,7 +29,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
-import { deriveWordId, isMultiWord, orthographyInsensitiveForm, phraseTokens, syllabifyWord } from '@yoruba-student-dict-platform/shared';
+import { isMultiWord, orthographyInsensitiveForm, phraseTokens, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
 import { SearchBox } from './SearchBox.js';
 
@@ -168,9 +168,17 @@ function hintFromGloss(gloss: string | undefined): string {
 function WordTab({
   onOpenWord,
   onBuildAsPhrase,
+  prefill,
+  onCreatedForPhrase,
 }: {
   onOpenWord?: (wordId: string) => void;
   onBuildAsPhrase: (handoff: PhraseHandoff) => void;
+  /** An etymology the Phrase tab needs as a word, pre-picked so the curator lands on a filled form
+   * rather than having to search for what they just found. */
+  prefill?: KaikkiSearchResult;
+  /** Set only while serving that request: the created word goes back to the phrase instead of the form
+   * simply clearing. */
+  onCreatedForPhrase?: (part: PhrasePart) => void;
 }) {
   const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
   const [selectedForm, setSelectedForm] = useState('');
@@ -196,6 +204,16 @@ function WordTab({
     detailsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     detailsRef.current?.focus({ preventScroll: true });
   }, [selected?.entryId]);
+
+  // Arrive with the etymology the Phrase tab sent already picked. Keyed on the id so a second request
+  // for a different word takes effect without remounting the tab.
+  useEffect(() => {
+    if (!prefill) return;
+    setSelected(prefill);
+    chooseSpelling(prefill.standardForms[0] ?? prefill.form);
+    setDefinitionText(prefill.glosses[0] ?? '');
+    setHint(hintFromGloss(prefill.glosses[0]));
+  }, [prefill?.entryId]);
 
   useEffect(() => {
     if (!selectedForm) {
@@ -303,10 +321,21 @@ function WordTab({
         citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
+      const syllablesOut = syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
       // Clear the form and go back to the top. Adding words is a repeated action, and the confirmation
       // used to appear at the bottom of a long form with the just-submitted values still in it - so the
       // next word meant scrolling back up past everything, and the enabled button re-POSTed a duplicate.
       resetForm();
+      if (onCreatedForPhrase) {
+        // Straight back to the phrase that needed it, with this word already in place.
+        onCreatedForPhrase({
+          wordId: wordIdPreview,
+          displayText: selectedForm,
+          syllables: syllablesOut,
+          definition: definitionText.trim() || null,
+        });
+        return;
+      }
       topRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -486,33 +515,49 @@ interface PhrasePart {
   definition: string | null;
 }
 
+/** A phrase being built, held by AddWord rather than by the Phrase tab.
+ *
+ * Because a missing component is now added on the WORD tab - one creation path for words, not two - and
+ * switching tabs unmounts the tab being left. A half-built phrase has to survive that round trip, so the
+ * draft lives one level up and the Phrase tab is controlled. */
+interface PhraseDraft {
+  components: PhrasePart[];
+  hint: string;
+  adopted: KaikkiSearchResult | null;
+}
+
+const EMPTY_DRAFT: PhraseDraft = { components: [], hint: '', adopted: null };
+
 function PhraseTab({
   handoff,
   onConsumeHandoff,
   onOpenWord,
+  draft,
+  setDraft,
+  onNeedWord,
 }: {
   handoff?: PhraseHandoff;
   onConsumeHandoff: () => void;
   onOpenWord?: (wordId: string) => void;
+  draft: PhraseDraft;
+  setDraft: (next: PhraseDraft) => void;
+  /** "This word is not in the dictionary yet" - hands it to the Word tab to be added properly, rather
+   * than creating it from a stripped-down form here. */
+  onNeedWord: (entry: KaikkiSearchResult) => void;
 }) {
-  const [components, setComponents] = useState<PhrasePart[]>([]);
-  const [hint, setHint] = useState('');
+  const { components, hint, adopted } = draft;
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  /** The etymology of the WHOLE phrase, when it came from a multi-word upstream entry. */
-  const [adopted, setAdopted] = useState<KaikkiSearchResult | null>(null);
-  /** An upstream word picked as a component that we do not hold yet - pending confirmation of its id. */
-  const [pendingPart, setPendingPart] = useState<{ entry: KaikkiSearchResult; wordId: string } | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
+  const setComponents = (next: PhrasePart[]) => setDraft({ ...draft, components: next });
+  const setHint = (next: string) => setDraft({ ...draft, hint: next });
 
   // Seed from the Word tab. Runs once per handoff: the tab is not unmounted between them, so keying the
   // effect on the spelling is what makes a second hand-off take effect.
   useEffect(() => {
     if (!handoff) return;
-    setAdopted(handoff.entry ?? null);
-    setComponents([]);
-    setHint(hintFromGloss(handoff.entry?.glosses[0]));
+    setDraft({ components: [], hint: hintFromGloss(handoff.entry?.glosses[0]), adopted: handoff.entry ?? null });
     setStatus(
       `${handoff.displayText} is ${handoff.tokens.length} words, so it is a phrase. Add each word below - ` +
         `anything missing from the dictionary can be added from Wiktionary without leaving this tab.`,
@@ -539,57 +584,15 @@ function PhraseTab({
    * restriction: component_position is the primary key and resyncPhraseFromComponents maps the submitted
    * list through a lookup, so a repeat resolves twice and joins correctly. */
   function addComponent(part: PhrasePart) {
-    setComponents((prev) => [...prev, part]);
+    setComponents([...components, part]);
   }
 
   function removeComponentAt(index: number) {
-    setComponents((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  /** An upstream word we do not hold: create it first, with its OWN citation, then use it.
-   *
-   * This is what makes the multi-word redirect honest. Only 5 of the 480 multi-word corpus entries have
-   * every constituent word already in the dictionary, so without this a curator sent here would be
-   * stranded 475 times out of 480 - the same dead end resolveOrRequestComponent removed from the
-   * etymology axis. A curator may create words, so there is nothing to request: it is created outright.
-   *
-   * The id is shown and editable before creating because deriveWordId is not injective (4.2% of corpus
-   * entries derive an id another entry also derives), and letting the curator settle a collision is
-   * better than guessing at a discriminator on their behalf. */
-  async function createPendingPart() {
-    if (!pendingPart || saving) return;
-    const { entry, wordId } = pendingPart;
-    const form = entry.standardForms[0] ?? entry.form;
-    setSaving(true);
-    try {
-      const syllablesForPart = syllabifyWord(form);
-      await createWord({
-        wordId,
-        displayText: form,
-        syllables: syllablesForPart.length > 0 ? syllablesForPart : [form],
-        definition: entry.glosses[0] ?? null,
-        citation: { entryId: entry.entryId! },
-      });
-      addComponent({
-        wordId,
-        displayText: form,
-        syllables: syllablesForPart.length > 0 ? syllablesForPart : [form],
-        definition: entry.glosses[0] ?? null,
-      });
-      setPendingPart(null);
-      setStatus(`Added ${wordId} to the dictionary and used it as a component.`);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
+    setComponents(components.filter((_, i) => i !== index));
   }
 
   function resetForm() {
-    setComponents([]);
-    setHint('');
-    setAdopted(null);
-    setPendingPart(null);
+    setDraft(EMPTY_DRAFT);
     setDuplicates(null);
   }
 
@@ -737,38 +740,18 @@ function PhraseTab({
             setStatus('That is itself a phrase, so it cannot be one word of this one.');
             return;
           }
-          const form = r.standardForms[0] ?? r.form;
-          setPendingPart({ entry: r, wordId: deriveWordId(form, r.glosses[0]) });
+          // Sent to the WORD tab rather than created from a cut-down form here. Words are created in one
+          // place, with the whole form that belongs to that job - spelling choice among standardForms,
+          // syllables, a student definition, the duplicate check - none of which a component picker
+          // should be reimplementing. The phrase draft is held by AddWord, so it survives the trip and
+          // the new word is appended on the way back.
+          onNeedWord(r);
         }}
-        selectLabel="Use this"
+        selectLabel="Add it as a word first"
         placeholder="Search Wiktionary for a missing word..."
         resultsAriaLabel="Kaikki component search results"
         label="Search Wiktionary for a missing word"
       />
-
-      {pendingPart ? (
-        <div className="warning-banner" aria-label="New component">
-          <p>
-            <strong>{pendingPart.entry.standardForms[0] ?? pendingPart.entry.form}</strong> is not in the dictionary. It
-            will be added first, citing its own etymology.
-          </p>
-          <div className="field">
-            <label htmlFor="pending-part-id">Word ID</label>
-            <input
-              id="pending-part-id"
-              type="text"
-              value={pendingPart.wordId}
-              onChange={(e) => setPendingPart({ ...pendingPart, wordId: e.target.value.replace(/\s+/g, '_') })}
-            />
-          </div>
-          <button type="button" className="btn btn-primary" onClick={createPendingPart} disabled={saving || !pendingPart.wordId}>
-            Add it and use it
-          </button>{' '}
-          <button type="button" className="btn btn-secondary" onClick={() => setPendingPart(null)}>
-            Cancel
-          </button>
-        </div>
-      ) : null}
 
       <p>
         Display text: <strong>{displayText || '(pick components)'}</strong>
@@ -807,9 +790,26 @@ export function AddWord({ onOpenWord }: AddWordProps = {}) {
    * which is exactly what a hand-off must survive. Both tabs stay mounted-or-not as before; only this
    * one value crosses between them. */
   const [handoff, setHandoff] = useState<PhraseHandoff | undefined>(undefined);
+  /** The phrase being built. Held here so it survives the Phrase -> Word -> Phrase round trip a missing
+   * component now takes: switching tabs unmounts the tab being left, and losing a half-built phrase to
+   * go and add one of its words would make the trip not worth taking. */
+  const [draft, setDraft] = useState<PhraseDraft>(EMPTY_DRAFT);
+  /** The etymology the Phrase tab asked to have added as a word, while that is being served. */
+  const [wordForPhrase, setWordForPhrase] = useState<KaikkiSearchResult | undefined>(undefined);
 
   function buildAsPhrase(next: PhraseHandoff) {
     setHandoff(next);
+    setTab('phrase');
+  }
+
+  function needWord(entry: KaikkiSearchResult) {
+    setWordForPhrase(entry);
+    setTab('word');
+  }
+
+  function componentCreated(part: PhrasePart) {
+    setDraft((prev) => ({ ...prev, components: [...prev.components, part] }));
+    setWordForPhrase(undefined);
     setTab('phrase');
   }
 
@@ -823,12 +823,30 @@ export function AddWord({ onOpenWord }: AddWordProps = {}) {
           Phrase
         </button>
       </nav>
+      {wordForPhrase ? (
+        <p className="field-note" aria-label="Adding for a phrase">
+          Adding <strong>{wordForPhrase.standardForms[0] ?? wordForPhrase.form}</strong> as a word first. It will be added
+          to the phrase you were building as soon as it is saved.
+        </p>
+      ) : null}
       {tab === 'word' ? (
-        <WordTab onOpenWord={onOpenWord} onBuildAsPhrase={buildAsPhrase} />
+        <WordTab
+          onOpenWord={onOpenWord}
+          onBuildAsPhrase={buildAsPhrase}
+          prefill={wordForPhrase}
+          onCreatedForPhrase={wordForPhrase ? componentCreated : undefined}
+        />
       ) : (
         // Cleared once consumed, so switching back to Phrase later does not re-seed a stale hand-off
         // over work in progress.
-        <PhraseTab handoff={handoff} onConsumeHandoff={() => setHandoff(undefined)} onOpenWord={onOpenWord} />
+        <PhraseTab
+          handoff={handoff}
+          onConsumeHandoff={() => setHandoff(undefined)}
+          onOpenWord={onOpenWord}
+          draft={draft}
+          setDraft={setDraft}
+          onNeedWord={needWord}
+        />
       )}
     </section>
   );
