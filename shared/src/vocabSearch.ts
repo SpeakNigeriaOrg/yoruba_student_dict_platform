@@ -29,6 +29,13 @@ export interface VocabSearchResult {
   definition: string | null;
   baseSpelling: string;
   matchedVia: VocabSearchTier;
+  /** 'phrase' when this result is itself a composed phrase; absent for an ordinary word.
+   *
+   * Carried because the component picker is the main consumer, and without it a phrase was offered as
+   * a candidate component of a phrase with nothing to say it was one - so `ẹ jọ̀ọ́ — Please  [Add]`
+   * looked like an invitation to create a duplicate of a word that already existed. `VocabEntry`
+   * already knew (loadVocab sets it from golden_record.entry_type); the projection simply dropped it. */
+  entryType?: 'phrase';
 }
 
 export function searchVocab(vocab: Vocab, query: string, limit = 15): VocabSearchResult[] {
@@ -80,6 +87,7 @@ export function searchVocab(vocab: Vocab, query: string, limit = 15): VocabSearc
       definition: entry.definition ?? null,
       baseSpelling: orthographyInsensitiveForm(entry.displayText),
       matchedVia: tier,
+      ...(entry.type === 'phrase' ? { entryType: 'phrase' as const } : {}),
     };
   });
 }

@@ -486,7 +486,15 @@ interface PhrasePart {
   definition: string | null;
 }
 
-function PhraseTab({ handoff, onConsumeHandoff }: { handoff?: PhraseHandoff; onConsumeHandoff: () => void }) {
+function PhraseTab({
+  handoff,
+  onConsumeHandoff,
+  onOpenWord,
+}: {
+  handoff?: PhraseHandoff;
+  onConsumeHandoff: () => void;
+  onOpenWord?: (wordId: string) => void;
+}) {
   const [components, setComponents] = useState<PhrasePart[]>([]);
   const [hint, setHint] = useState('');
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
@@ -648,19 +656,60 @@ function PhraseTab({ handoff, onConsumeHandoff }: { handoff?: PhraseHandoff; onC
         </ul>
       )}
 
-      <p className="field-note">Add each word of the phrase, in order.</p>
+      <p className="field-note">
+        Add each word of the phrase, in order. This searches words the dictionary already holds - to
+        change an existing phrase, open it and use its Etymology tab.
+      </p>
       <SearchBox
         search={searchVocab}
         renderResult={(r) => (
           <>
             <strong>{r.displayText}</strong>
             {r.definition ? ` — ${r.definition}` : ''}
+            {/* Said out loud, because a phrase offered as a candidate component of a phrase read as an
+                invitation to duplicate a word that already existed. Nesting is not forbidden - the
+                schema allows it and a proverb containing an idiom is conceivable - but it must be a
+                choice rather than a surprise. */}
+            {r.entryType === 'phrase' ? (
+              <>
+                {' '}
+                <span className="badge">already a phrase</span>
+              </>
+            ) : null}
           </>
         )}
         onSelect={(r: VocabSearchResult) =>
           addComponent({ wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition })
         }
-        selectLabel="Add"
+        // Both actions, because "Add" alone had no object: it means "use as one word of the phrase I am
+        // building", and with nothing being built it reads as "create this". Opening the word is what a
+        // curator who found an existing entry actually wanted.
+        renderAction={(r: VocabSearchResult) => (
+          <span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() =>
+                addComponent({
+                  wordId: r.wordId,
+                  displayText: r.displayText,
+                  syllables: r.syllables,
+                  definition: r.definition,
+                })
+              }
+            >
+              Add as component
+            </button>
+            {onOpenWord ? (
+              <>
+                {' '}
+                <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(r.wordId)}>
+                  Open {r.wordId}
+                </button>
+              </>
+            ) : null}
+          </span>
+        )}
         placeholder="Search words already in the dictionary..."
         resultsAriaLabel="Vocab search results"
         label="Search words already in the dictionary"
@@ -779,7 +828,7 @@ export function AddWord({ onOpenWord }: AddWordProps = {}) {
       ) : (
         // Cleared once consumed, so switching back to Phrase later does not re-seed a stale hand-off
         // over work in progress.
-        <PhraseTab handoff={handoff} onConsumeHandoff={() => setHandoff(undefined)} />
+        <PhraseTab handoff={handoff} onConsumeHandoff={() => setHandoff(undefined)} onOpenWord={onOpenWord} />
       )}
     </section>
   );

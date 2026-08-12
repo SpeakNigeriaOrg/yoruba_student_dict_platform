@@ -246,7 +246,7 @@ describe('AddWord - Phrase tab', () => {
     // etymology - that is the point of the phrase tab - but the id is a key, and leading with it
     // made the list unreadable to anyone who did not already know our naming scheme.
     await waitFor(() => screen.getByText('existingspelling', { exact: false }));
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
 
     const componentsList = screen.getByLabelText('Phrase components');
     expect(componentsList).toHaveTextContent('existingspelling');
@@ -295,7 +295,7 @@ describe('AddWord - Phrase tab', () => {
       }),
     );
     await waitFor(() => screen.getByText('existingspelling', { exact: false }));
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
 
     expect(screen.getByLabelText('Phrase components')).toHaveTextContent('existingspelling');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
@@ -573,8 +573,8 @@ describe('AddWord - the phrase path can finish the job', () => {
     const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
     await user.click(dict.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText('existingspelling', { exact: false }));
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
 
     const list = screen.getByLabelText('Phrase components');
     expect(list.querySelectorAll('li')).toHaveLength(2);
@@ -598,5 +598,62 @@ describe('AddWord - after adding, you can add another', () => {
     // The form is gone, so the search box is what is in front of the curator again.
     expect(screen.queryByLabelText('Selected etymology')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...')).toBeInTheDocument();
+  });
+});
+
+describe('AddWord - the component picker says what it is offering', () => {
+  const EXISTING_PHRASE = {
+    wordId: 'e_joo_please',
+    displayText: 'ẹ jọ̀ọ́',
+    syllables: ['ẹ', 'jọ̀ọ́'],
+    definition: 'Please',
+    baseSpelling: 'e joo',
+    matchedVia: 'yoruba_exact',
+    entryType: 'phrase' as const,
+  };
+
+  async function searchDictionary(vocabResults: unknown[], props: Record<string, unknown> = {}) {
+    vi.stubGlobal('fetch', mockFetch({ vocabResults }));
+    const user = userEvent.setup();
+    render(<AddWord {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+    await user.click(
+      within(screen.getByRole('search', { name: 'Search words already in the dictionary' })).getByRole('button', {
+        name: 'Search',
+      }),
+    );
+    await waitFor(() => screen.getByText('ẹ jọ̀ọ́', { exact: false }));
+    return user;
+  }
+
+  it('marks a result that is itself a phrase', async () => {
+    // Reported: searching the phrase tab for an existing phrase returned `ẹ jọ̀ọ́ — Please  [Add]`, which
+    // read as an invitation to duplicate something that already existed. VocabSearchResult carried no
+    // entryType, so the picker could not tell a phrase from a word.
+    await searchDictionary([EXISTING_PHRASE]);
+    expect(screen.getByText('already a phrase')).toBeInTheDocument();
+  });
+
+  it('names the action, so "Add" cannot be read as "create"', async () => {
+    await searchDictionary([EXISTING_PHRASE]);
+    expect(screen.getByRole('button', { name: 'Add as component' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument();
+  });
+
+  it('offers to OPEN an existing entry, which is what was actually wanted', async () => {
+    const onOpenWord = vi.fn();
+    const user = await searchDictionary([EXISTING_PHRASE], { onOpenWord });
+    await user.click(screen.getByRole('button', { name: 'Open e_joo_please' }));
+    expect(onOpenWord).toHaveBeenCalledWith('e_joo_please');
+  });
+
+  it('says where editing an existing phrase actually happens', async () => {
+    // The Add screens only create. A phrase's components are edited on its Etymology axis, and nothing
+    // on this screen used to say so.
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+    expect(screen.getByText(/open it and use its Etymology tab/)).toBeInTheDocument();
   });
 });
