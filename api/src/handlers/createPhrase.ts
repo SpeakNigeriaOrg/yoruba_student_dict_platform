@@ -18,8 +18,16 @@ export interface CreatePhraseInput {
   wordId: string;
   displayText: string;
   syllables: string[];
-  /** word_ids, in order - component_position is each entry's array index. */
+  /** word_ids, in order - component_position is each entry's array index. A word_id may REPEAT: a
+   * reduplication like `méjì méjì` is two positions holding one word, and the position is the key. */
   components: string[];
+  /** The phrase's OWN Wiktionary etymology, when upstream has one for the whole phrase.
+   *
+   * Optional, and absence still means the by-nature exemption below. Wiktionary has multi-word entries
+   * - 480 of our 6272 - so a phrase frequently DOES have an etymology of its own, distinct from its
+   * parts' ("hail the king" is not the sum of its words). Refusing to record it, as this used to,
+   * threw away the one thing 0017 made the identity, and left drift detection with nothing to check. */
+  citation?: { entryId: string };
 }
 
 export { WordIdAlreadyExistsError };
@@ -82,18 +90,26 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
     );
   }
 
-  // A phrase is exempt BY NATURE, and recorded as exempt rather than left with
-  // no row at all. Without this, golden_record has three citation states -
-  // cited, explicitly exempt, and simply absent - and "absent" would mean both
-  // "a phrase, correctly" and "a word nobody has got round to". The publish gate
-  // and the reconciliation queue both need "no row" to mean exactly one thing.
+  // Exactly one citation row either way, because the alternative is three states - cited, explicitly
+  // exempt, and simply absent - where "absent" would mean both "a phrase, correctly" and "a word nobody
+  // has got round to". The publish gate and the reconciliation queue both need "no row" to mean one
+  // thing.
   //
-  // Its identity is not missing, it is derived: a phrase is a composition of
-  // golden_record words, each of which cites its own etymology.
+  // WHICH row depends on whether upstream has an entry for the whole phrase:
+  //
+  //   cited  - it does, so record it. A phrase's composition and its own etymology are different facts
+  //            and recording one never precluded the other; the code simply never offered the choice.
+  //            0014's constraint is entryId XOR exempt_reason per row, so this needs no migration, and
+  //            0017's unique index then covers phrases too - correctly, since one etymology is one
+  //            entry whatever its shape.
+  //   exempt - it does not (a locally composed phrase). Its identity is not missing but derived: a
+  //            composition of golden_record words, each citing its own etymology.
   await writeCitationInTransaction(
     client,
     input.wordId,
-    { exemptReason: 'composed phrase - its identity comes from its components, each of which cites its own etymology' },
+    input.citation ?? {
+      exemptReason: 'composed phrase - its identity comes from its components, each of which cites its own etymology',
+    },
     createdBy,
   );
 }

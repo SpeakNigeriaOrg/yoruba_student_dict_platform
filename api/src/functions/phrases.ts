@@ -16,6 +16,16 @@ import {
 } from '../handlers/createPhrase.js';
 import { EntryAlreadyCitedError } from '../handlers/upstreamCitations.js';
 
+/** A phrase may cite an etymology but never claim the exemption - createPhrase decides that itself,
+ * from whether a citation was supplied. Accepting `exemptReason` on the wire would let a caller
+ * declare a phrase exempt while upstream really does have an entry for it. */
+function parseEntryIdCitation(raw: unknown): { entryId: string } {
+  if (!raw || typeof raw !== 'object') throw new Error('citation must be an object with an entryId');
+  const c = raw as Record<string, unknown>;
+  if (typeof c.entryId !== 'string' || !c.entryId) throw new Error('citation.entryId is required');
+  return { entryId: c.entryId };
+}
+
 function parseCreatePhraseInput(body: unknown): CreatePhraseInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
   const b = body as Record<string, unknown>;
@@ -32,6 +42,10 @@ function parseCreatePhraseInput(body: unknown): CreatePhraseInput {
     displayText: b.displayText,
     syllables: b.syllables as string[],
     components: b.components as string[],
+    // Optional: upstream has multi-word entries, so a phrase may have an etymology of its own. This
+    // field used to be dropped silently here, which meant a curator adopting `ọmọ odù` lost its
+    // entry_id with nothing reporting the loss. Absent still means the by-nature exemption.
+    ...(b.citation === undefined ? {} : { citation: parseEntryIdCitation(b.citation) }),
   };
 }
 

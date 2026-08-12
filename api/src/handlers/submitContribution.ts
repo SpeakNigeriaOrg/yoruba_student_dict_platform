@@ -51,7 +51,8 @@ export interface NewEntryProposedValue {
    * compiler cannot enforce anything about it, so pretending otherwise would be
    * a false guarantee. Enforced for real at the two places that matter: the HTTP
    * edge that accepts it (parseNewEntryInput) and the approval that consumes it
-   * (approveNewEntry). Absent for type 'phrase', which is exempt by nature. */
+   * (approveNewEntry). OPTIONAL for type 'phrase': absent means the by-nature exemption, present
+   * means upstream has an entry for the whole phrase (480 of 6272 corpus etymologies are multi-word). */
   citation?: UpstreamCitationInput;
   /** The word's meaning in English.
    *

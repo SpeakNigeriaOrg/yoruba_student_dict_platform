@@ -29,24 +29,27 @@ function parseNewEntryInput(b: Record<string, unknown>): NewEntryProposedValue {
   if (b.components !== undefined && (!Array.isArray(b.components) || !b.components.every((c) => typeof c === 'string'))) {
     throw new Error('components must be an array of word_id strings if provided');
   }
-  // A citation is required for a word and refused for a phrase: a phrase's
-  // identity comes from its components (createPhrase.ts records that exemption
-  // itself), so citing an etymology on one would be a claim nobody can act on.
+  // A citation is REQUIRED for a word and OPTIONAL for a phrase.
   //
-  // Enforced at submission rather than only at approval, matching the 'entry'
-  // axis below: a volunteer who proposes an uncited word should be told now, not
-  // have it sit in the queue until a curator hits the same error.
-  if (b.type === 'phrase' && b.citation !== undefined) {
-    throw new Error('a phrase cannot cite an etymology - its components do');
-  }
-
+  // It used to be refused outright for a phrase, on the reasoning that a phrase's identity comes from
+  // its components. That is true of a locally composed phrase and false of one Wiktionary has its own
+  // entry for - 480 of 6272 corpus etymologies are multi-word, and "hail the king" is not the sum of
+  // its words. Refusing the citation discarded the very thing 0017 made the identity, so absence now
+  // means the by-nature exemption (createPhrase records it) rather than being the only option.
+  //
+  // Still enforced at submission for a word rather than only at approval, matching the 'entry' axis
+  // below: a volunteer proposing an uncited word should be told now, not have it sit in the queue.
   return {
     proposedWordId: b.proposedWordId,
     displayText: b.displayText,
     syllables: b.syllables as string[],
     type: b.type,
     components: b.components as string[] | undefined,
-    ...(b.type === 'word' ? { citation: parseCitationInput(b.citation) } : {}),
+    ...(b.type === 'word'
+      ? { citation: parseCitationInput(b.citation) }
+      : b.citation === undefined
+        ? {}
+        : { citation: parseCitationInput(b.citation) }),
     ...(typeof b.definition === 'string' && b.definition.trim() ? { definition: b.definition.trim() } : {}),
   };
 }

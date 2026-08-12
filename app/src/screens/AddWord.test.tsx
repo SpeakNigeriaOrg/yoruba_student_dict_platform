@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { syllabifyWord } from '@yoruba-student-dict-platform/shared';
@@ -238,7 +238,10 @@ describe('AddWord - Phrase tab', () => {
     render(<AddWord />);
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
 
-    await user.click(screen.getByRole('button', { name: 'Search' }));
+    // Scoped: the Phrase tab has two searches now - one over the dictionary, one over Wiktionary for a
+    // word we do not hold yet.
+    const dictSearch = () => within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dictSearch().getByRole('button', { name: 'Search' }));
     // Found and listed by its SPELLING, not its word_id. Picking a word_id is still picking one
     // etymology - that is the point of the phrase tab - but the id is a key, and leading with it
     // made the list unreadable to anyone who did not already know our naming scheme.
@@ -286,7 +289,11 @@ describe('AddWord - Phrase tab', () => {
 
     render(<AddWord />);
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
-    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.click(
+      within(screen.getByRole('search', { name: 'Search words already in the dictionary' })).getByRole('button', {
+        name: 'Search',
+      }),
+    );
     await waitFor(() => screen.getByText('existingspelling', { exact: false }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
@@ -451,5 +458,145 @@ describe('AddWord - spelling and syllables cannot drift apart', () => {
     );
     expect(body.displayText).toBe('adiye');
     expect(body.syllables).toEqual(syllabifyWord('adiye'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A multi-word entry is a phrase
+// ---------------------------------------------------------------------------
+// Wiktionary has no rule against multi-word entries, so they appear in the Add WORD search alongside
+// single words - and adding one there produced a row that was really a phrase. Only 5 of the 480
+// multi-word corpus entries have every constituent word already in the dictionary, which is why the
+// redirect alone would not have been enough: it needs somewhere to land that can actually finish.
+
+const MULTIWORD = {
+  form: 'ọmọ odù',
+  pos: 'noun',
+  glosses: ['one of the sixteen principal signs'],
+  matchedVia: 'yoruba_exact',
+  altOfTargets: [],
+  standardForms: ['ọmọ odù'],
+  entryId: 'en-ọmọ odù-yo-noun-XYZ',
+  etymologyNumber: null,
+  claim: null,
+  spellingMatches: [],
+};
+
+describe('AddWord - a multi-word entry is a phrase', () => {
+  it('labels a multi-word search result rather than offering it as a word', async () => {
+    await searchWith(MULTIWORD);
+    expect(screen.getByText('multi-word - add as a phrase')).toBeInTheDocument();
+  });
+
+  it('selecting one lands on the Phrase tab, citing the whole phrase and naming its words', async () => {
+    // The requested behaviour: it still SURFACES in the word search, but picking it switches tabs with
+    // the fields populated rather than filling in a word form.
+    const user = await searchWith(MULTIWORD);
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.getByLabelText('Add phrase tab')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Add word tab')).not.toBeInTheDocument();
+    // The phrase's OWN etymology is carried over, not discarded.
+    expect(screen.getByLabelText('Adopted etymology')).toHaveTextContent('ọmọ odù');
+    // And it says how many words there are to add.
+    expect(screen.getByRole('status')).toHaveTextContent('2 words');
+  });
+
+  it('refuses to submit a multi-word spelling as a word, and posts nothing', async () => {
+    // The backstop, reachable by typing a space into the off-path spelling field.
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+
+    await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+    await user.type(screen.getByLabelText('Spelling'), 'ọmọ odù');
+    await user.type(screen.getByLabelText('Why is this word not in Wiktionary?'), 'local compound');
+    await user.type(screen.getByLabelText(/Word ID hint/), 'sign');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('belongs on the Phrase tab');
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/words')).length).toBe(0);
+  });
+});
+
+describe('AddWord - the phrase path can finish the job', () => {
+  const MISSING_PART = {
+    form: 'odù',
+    pos: 'noun',
+    glosses: ['a divination sign'],
+    matchedVia: 'yoruba_exact',
+    altOfTargets: [],
+    standardForms: ['odù'],
+    entryId: 'en-odù-yo-noun-PART',
+    etymologyNumber: null,
+    claim: null,
+    spellingMatches: [],
+  };
+
+  it('adds a component that is NOT in the dictionary, citing its own etymology', async () => {
+    // This is the 475-of-480 case. Before, a curator sent to the Phrase tab whose component word was
+    // absent had no way forward at all: the picker only saw golden_record and createPhrase hard-failed.
+    const fetchMock = mockFetch({ kaikkiResults: [MISSING_PART] });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    const upstream = within(screen.getByRole('search', { name: 'Search Wiktionary for a missing word' }));
+    await user.click(upstream.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText(/a divination sign/));
+    await user.click(upstream.getByRole('button', { name: 'Use this' }));
+
+    // It is not created behind the curator's back - the derived id is shown and editable first, because
+    // deriveWordId is not injective.
+    const idField = screen.getByLabelText('Word ID') as HTMLInputElement;
+    expect(idField.value).toBe('odu_a_divination_sign');
+    await user.click(screen.getByRole('button', { name: 'Add it and use it' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Phrase components')).toHaveTextContent('odù'));
+    const created = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/words'));
+    expect(created).toBeTruthy();
+    const body = JSON.parse(created![1].body);
+    expect(body.wordId).toBe('odu_a_divination_sign');
+    expect(body.citation).toEqual({ entryId: 'en-odù-yo-noun-PART' });
+  });
+
+  it('allows the same word twice, which is what a reduplication is', async () => {
+    // `méjì méjì` was unrepresentable: the component list de-duplicated by wordId. The server never
+    // had that restriction - component_position is the primary key.
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dict.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    const list = screen.getByLabelText('Phrase components');
+    expect(list.querySelectorAll('li')).toHaveLength(2);
+    expect(screen.getByText(/Display text:/)).toHaveTextContent('existingspelling existingspelling');
+
+    // Removing is by POSITION, so taking one out leaves the other.
+    await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);
+    expect(screen.getByLabelText('Phrase components').querySelectorAll('li')).toHaveLength(1);
+  });
+});
+
+describe('AddWord - after adding, you can add another', () => {
+  it('clears the word form and keeps the confirmation', async () => {
+    // Reported: the confirmation appears but the form stays filled at the bottom of a long page, so
+    // adding a second word meant scrolling back up past everything.
+    const user = await searchWith({ ...RESULT, claim: null, spellingMatches: [] });
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    // The form is gone, so the search box is what is in front of the curator again.
+    expect(screen.queryByLabelText('Selected etymology')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...')).toBeInTheDocument();
   });
 });

@@ -29,11 +29,27 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
-import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-platform/shared';
+import { deriveWordId, isMultiWord, orthographyInsensitiveForm, phraseTokens, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
 import { SearchBox } from './SearchBox.js';
 
 type Tab = 'word' | 'phrase';
+
+/** What the Word tab hands to the Phrase tab when the thing being added turns out to be a phrase.
+ *
+ * Wiktionary has no rule against multi-word entries - 480 of our 6272 - so they arrive in the same
+ * search as single words, and adding one on the Word tab produced a row that was really a phrase. The
+ * split exists precisely to make a curator say which words a phrase is made of, so a multi-word pick
+ * moves the curator there instead of quietly accepting it.
+ *
+ * `entry` is carried because a multi-word entry usually has an etymology OF ITS OWN, which the phrase
+ * can now cite (see createPhrase). `tokens` seeds one component slot per word, so the work arrives
+ * half-done rather than as a blank form. */
+export interface PhraseHandoff {
+  entry?: KaikkiSearchResult;
+  displayText: string;
+  tokens: string[];
+}
 
 /** The spelling/concept check - kept, and deliberately SECONDARY now.
  *
@@ -72,6 +88,17 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
  * reassurance on every line, and a signal that fires constantly is one people stop reading - which is
  * precisely how the previous warning came to be ignored. */
 function ClaimBadge({ result }: { result: KaikkiSearchResult }) {
+  // Said first, because it changes what the row's button does. A multi-word entry is a phrase whatever
+  // else is true of it, and offering "Select" here would add a phrase as a word.
+  if (isMultiWord(result.standardForms[0] ?? result.form)) {
+    return (
+      <>
+        {' '}
+        <span className="badge">multi-word - add as a phrase</span>
+      </>
+    );
+  }
+
   const claim = result.claim;
   // undefined means nobody looked (a caller that does not enrich). Saying nothing is right; saying
   // "available" would be a claim we have not checked.
@@ -138,7 +165,13 @@ function hintFromGloss(gloss: string | undefined): string {
     .replace(/^_+|_+$/g, '');
 }
 
-function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
+function WordTab({
+  onOpenWord,
+  onBuildAsPhrase,
+}: {
+  onOpenWord?: (wordId: string) => void;
+  onBuildAsPhrase: (handoff: PhraseHandoff) => void;
+}) {
   const [selected, setSelected] = useState<KaikkiSearchResult | null>(null);
   const [selectedForm, setSelectedForm] = useState('');
   const [syllablesText, setSyllablesText] = useState('');
@@ -150,7 +183,9 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
    * rather than a null selection, so the two paths cannot be half-entered. */
   const [offPath, setOffPath] = useState(false);
   const [exemptReason, setExemptReason] = useState('');
+  const [saving, setSaving] = useState(false);
   const detailsRef = useRef<HTMLDivElement | null>(null);
+  const topRef = useRef<HTMLDivElement | null>(null);
 
   // Clicking Select used to change nothing visible: the confirmation sat below a long result list, so
   // the curator had to trust it happened and then scroll to check. Move to it instead.
@@ -191,30 +226,42 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
   }
 
   function pickResult(result: KaikkiSearchResult) {
+    const form = result.standardForms[0] ?? result.form;
+    // A multi-word entry is a phrase. Rather than refusing, carry it over with its etymology and its
+    // words already split out - the curator asked for this entry, and the Phrase tab is where it can
+    // actually be recorded.
+    if (isMultiWord(form)) {
+      onBuildAsPhrase({ entry: result, displayText: form, tokens: phraseTokens(form) });
+      return;
+    }
     setSelected(result);
-    chooseSpelling(result.standardForms[0] ?? result.form);
+    chooseSpelling(form);
     // Seeded from the etymology's primary gloss, not authored from scratch: the
     // student definition is a simplification OF this etymology's meaning.
     setDefinitionText(result.glosses[0] ?? '');
     setHint(hintFromGloss(result.glosses[0]));
   }
 
-  function startOffPath() {
-    setOffPath(true);
+  /** Everything the form holds about ONE word, so the three callers that need a clean slate cannot
+   * drift apart. `status` is deliberately not cleared - after a successful add it is the confirmation. */
+  function resetForm() {
     setSelected(null);
     setSelectedForm('');
     setSyllablesText('');
     setDefinitionText('');
     setHint('');
+    setExemptReason('');
+    setOffPath(false);
+    setDuplicates(null);
+  }
+
+  function startOffPath() {
+    resetForm();
+    setOffPath(true);
   }
 
   function backToSearch() {
-    setOffPath(false);
-    setExemptReason('');
-    setSelectedForm('');
-    setSyllablesText('');
-    setDefinitionText('');
-    setHint('');
+    resetForm();
   }
 
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
@@ -231,11 +278,22 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
       setStatus('Say why this word has no Wiktionary entry - a blank cannot be told apart from unfinished work.');
       return;
     }
+    // The backstop. The pick above already redirects, so reaching here means an off-path spelling was
+    // typed with a space in it - and a word row whose spelling is two words is the exact ambiguity the
+    // word/phrase split exists to prevent.
+    if (isMultiWord(selectedForm)) {
+      setStatus('That is more than one word, so it belongs on the Phrase tab - build it from its words there.');
+      return;
+    }
     if (!offPath && !selected?.entryId) {
       // Only reachable against a corpus ingested before entry ids existed.
       setStatus('That Kaikki record carries no etymology id - re-ingest the corpus before citing it.');
       return;
     }
+    // Neither submit had an in-flight guard, so a double click fired two POSTs and the second came back
+    // as a confusing 409 for a word that had in fact just been added successfully.
+    if (saving) return;
+    setSaving(true);
     try {
       await createWord({
         wordId: wordIdPreview,
@@ -245,8 +303,15 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
         citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
+      // Clear the form and go back to the top. Adding words is a repeated action, and the confirmation
+      // used to appear at the bottom of a long form with the just-submitted values still in it - so the
+      // next word meant scrolling back up past everything, and the enabled button re-POSTed a duplicate.
+      resetForm();
+      topRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -410,11 +475,42 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
   );
 }
 
-function PhraseTab() {
-  const [components, setComponents] = useState<VocabSearchResult[]>([]);
+/** A component of a phrase, held locally so a just-created word can be added without a round trip.
+ *
+ * Positional rather than keyed by wordId: a reduplication like `méjì méjì` is one word in two
+ * positions, and the position is what distinguishes them. */
+interface PhrasePart {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+}
+
+function PhraseTab({ handoff, onConsumeHandoff }: { handoff?: PhraseHandoff; onConsumeHandoff: () => void }) {
+  const [components, setComponents] = useState<PhrasePart[]>([]);
   const [hint, setHint] = useState('');
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  /** The etymology of the WHOLE phrase, when it came from a multi-word upstream entry. */
+  const [adopted, setAdopted] = useState<KaikkiSearchResult | null>(null);
+  /** An upstream word picked as a component that we do not hold yet - pending confirmation of its id. */
+  const [pendingPart, setPendingPart] = useState<{ entry: KaikkiSearchResult; wordId: string } | null>(null);
+  const topRef = useRef<HTMLDivElement | null>(null);
+
+  // Seed from the Word tab. Runs once per handoff: the tab is not unmounted between them, so keying the
+  // effect on the spelling is what makes a second hand-off take effect.
+  useEffect(() => {
+    if (!handoff) return;
+    setAdopted(handoff.entry ?? null);
+    setComponents([]);
+    setHint(hintFromGloss(handoff.entry?.glosses[0]));
+    setStatus(
+      `${handoff.displayText} is ${handoff.tokens.length} words, so it is a phrase. Add each word below - ` +
+        `anything missing from the dictionary can be added from Wiktionary without leaving this tab.`,
+    );
+    onConsumeHandoff();
+  }, [handoff?.displayText]);
 
   const displayText = components.map((c) => c.displayText).join(' ');
   const syllables = components.flatMap((c) => c.syllables);
@@ -428,12 +524,65 @@ function PhraseTab() {
     getDuplicateCheck(displayText, []).then(setDuplicates).catch(() => setDuplicates(null));
   }, [displayText]);
 
-  function addComponent(result: VocabSearchResult) {
-    setComponents((prev) => (prev.some((c) => c.wordId === result.wordId) ? prev : [...prev, result]));
+  /** Appends, deliberately without de-duplicating.
+   *
+   * It used to refuse a word already in the list, which made a reduplication - `méjì méjì`, `mẹ́ta
+   * mẹ́ta`, and several more real corpus entries - impossible to build at all. The server never had that
+   * restriction: component_position is the primary key and resyncPhraseFromComponents maps the submitted
+   * list through a lookup, so a repeat resolves twice and joins correctly. */
+  function addComponent(part: PhrasePart) {
+    setComponents((prev) => [...prev, part]);
   }
 
-  function removeComponent(wordId: string) {
-    setComponents((prev) => prev.filter((c) => c.wordId !== wordId));
+  function removeComponentAt(index: number) {
+    setComponents((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  /** An upstream word we do not hold: create it first, with its OWN citation, then use it.
+   *
+   * This is what makes the multi-word redirect honest. Only 5 of the 480 multi-word corpus entries have
+   * every constituent word already in the dictionary, so without this a curator sent here would be
+   * stranded 475 times out of 480 - the same dead end resolveOrRequestComponent removed from the
+   * etymology axis. A curator may create words, so there is nothing to request: it is created outright.
+   *
+   * The id is shown and editable before creating because deriveWordId is not injective (4.2% of corpus
+   * entries derive an id another entry also derives), and letting the curator settle a collision is
+   * better than guessing at a discriminator on their behalf. */
+  async function createPendingPart() {
+    if (!pendingPart || saving) return;
+    const { entry, wordId } = pendingPart;
+    const form = entry.standardForms[0] ?? entry.form;
+    setSaving(true);
+    try {
+      const syllablesForPart = syllabifyWord(form);
+      await createWord({
+        wordId,
+        displayText: form,
+        syllables: syllablesForPart.length > 0 ? syllablesForPart : [form],
+        definition: entry.glosses[0] ?? null,
+        citation: { entryId: entry.entryId! },
+      });
+      addComponent({
+        wordId,
+        displayText: form,
+        syllables: syllablesForPart.length > 0 ? syllablesForPart : [form],
+        definition: entry.glosses[0] ?? null,
+      });
+      setPendingPart(null);
+      setStatus(`Added ${wordId} to the dictionary and used it as a component.`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetForm() {
+    setComponents([]);
+    setHint('');
+    setAdopted(null);
+    setPendingPart(null);
+    setDuplicates(null);
   }
 
   async function submit() {
@@ -445,27 +594,43 @@ function PhraseTab() {
       setStatus('Enter a word_id hint first.');
       return;
     }
+    if (saving) return;
+    setSaving(true);
     try {
       await createPhrase({
         wordId: wordIdPreview,
         displayText,
         syllables,
         components: components.map((c) => c.wordId),
+        // The phrase's own etymology, when it has one. Upstream has 480 multi-word entries, and their
+        // meaning is not the sum of their parts - so recording it is not redundant with the components.
+        ...(adopted?.entryId ? { citation: { entryId: adopted.entryId } } : {}),
       });
       setStatus(`Added phrase ${wordIdPreview} to vocabulary.`);
+      resetForm();
+      topRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <div aria-label="Add phrase tab">
+    <div aria-label="Add phrase tab" ref={topRef}>
+      {adopted ? (
+        <p aria-label="Adopted etymology" className="status-banner">
+          Citing the whole phrase as: <EtymologyLabel result={adopted} />
+        </p>
+      ) : null}
+
       {components.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
         <ul aria-label="Phrase components" className="plain-list">
-          {components.map((c) => (
-            <li key={c.wordId} className="search-result-row">
+          {components.map((c, i) => (
+            // Keyed by position, not wordId - a reduplication holds the same word twice.
+            <li key={`${i}-${c.wordId}`} className="search-result-row">
               {/* The word and its meaning, not the word_id. Picking a word_id IS picking one
                   etymology - that is the point - but the id is a key, and leading with it made the
                   list unreadable to anyone who does not already know our naming scheme. The meaning
@@ -475,13 +640,15 @@ function PhraseTab() {
                 <strong>{c.displayText}</strong>
                 {c.definition ? ` — ${c.definition}` : ''}
               </span>
-              <button type="button" className="btn btn-danger" onClick={() => removeComponent(c.wordId)}>
+              <button type="button" className="btn btn-danger" onClick={() => removeComponentAt(i)}>
                 Remove
               </button>
             </li>
           ))}
         </ul>
       )}
+
+      <p className="field-note">Add each word of the phrase, in order.</p>
       <SearchBox
         search={searchVocab}
         renderResult={(r) => (
@@ -490,11 +657,69 @@ function PhraseTab() {
             {r.definition ? ` — ${r.definition}` : ''}
           </>
         )}
-        onSelect={addComponent}
+        onSelect={(r: VocabSearchResult) =>
+          addComponent({ wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition })
+        }
         selectLabel="Add"
-        placeholder="Search existing vocabulary..."
+        placeholder="Search words already in the dictionary..."
         resultsAriaLabel="Vocab search results"
+        label="Search words already in the dictionary"
       />
+
+      <p className="field-note">Not in the dictionary yet? Find the word in Wiktionary and it will be added first.</p>
+      <SearchBox
+        search={searchKaikki}
+        renderResult={(r) => (
+          <>
+            <EtymologyLabel result={r} />
+            <ClaimBadge result={r} />
+          </>
+        )}
+        onSelect={(r: KaikkiSearchResult) => {
+          if (!r.entryId) {
+            setStatus('That Kaikki record carries no etymology id - re-ingest the corpus before citing it.');
+            return;
+          }
+          if (r.claim?.status === 'in_dictionary') {
+            setStatus(`${r.claim.wordId} already holds that etymology - add it from the dictionary search above.`);
+            return;
+          }
+          if (isMultiWord(r.standardForms[0] ?? r.form)) {
+            setStatus('That is itself a phrase, so it cannot be one word of this one.');
+            return;
+          }
+          const form = r.standardForms[0] ?? r.form;
+          setPendingPart({ entry: r, wordId: deriveWordId(form, r.glosses[0]) });
+        }}
+        selectLabel="Use this"
+        placeholder="Search Wiktionary for a missing word..."
+        resultsAriaLabel="Kaikki component search results"
+        label="Search Wiktionary for a missing word"
+      />
+
+      {pendingPart ? (
+        <div className="warning-banner" aria-label="New component">
+          <p>
+            <strong>{pendingPart.entry.standardForms[0] ?? pendingPart.entry.form}</strong> is not in the dictionary. It
+            will be added first, citing its own etymology.
+          </p>
+          <div className="field">
+            <label htmlFor="pending-part-id">Word ID</label>
+            <input
+              id="pending-part-id"
+              type="text"
+              value={pendingPart.wordId}
+              onChange={(e) => setPendingPart({ ...pendingPart, wordId: e.target.value.replace(/\s+/g, '_') })}
+            />
+          </div>
+          <button type="button" className="btn btn-primary" onClick={createPendingPart} disabled={saving || !pendingPart.wordId}>
+            Add it and use it
+          </button>{' '}
+          <button type="button" className="btn btn-secondary" onClick={() => setPendingPart(null)}>
+            Cancel
+          </button>
+        </div>
+      ) : null}
 
       <p>
         Display text: <strong>{displayText || '(pick components)'}</strong>
@@ -513,7 +738,7 @@ function PhraseTab() {
 
       <DuplicateWarning matches={duplicates} />
 
-      <button type="button" className="btn btn-primary" onClick={submit}>
+      <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
         Add phrase to vocabulary
       </button>
       {status ? <p role="status" className="status-banner">{status}</p> : null}
@@ -529,6 +754,15 @@ export interface AddWordProps {
 
 export function AddWord({ onOpenWord }: AddWordProps = {}) {
   const [tab, setTab] = useState<Tab>('word');
+  /** Held HERE rather than in either tab, because switching tabs unmounts one and destroys its state -
+   * which is exactly what a hand-off must survive. Both tabs stay mounted-or-not as before; only this
+   * one value crosses between them. */
+  const [handoff, setHandoff] = useState<PhraseHandoff | undefined>(undefined);
+
+  function buildAsPhrase(next: PhraseHandoff) {
+    setHandoff(next);
+    setTab('phrase');
+  }
 
   return (
     <section aria-label="Add a word" className="card">
@@ -540,7 +774,13 @@ export function AddWord({ onOpenWord }: AddWordProps = {}) {
           Phrase
         </button>
       </nav>
-      {tab === 'word' ? <WordTab onOpenWord={onOpenWord} /> : <PhraseTab />}
+      {tab === 'word' ? (
+        <WordTab onOpenWord={onOpenWord} onBuildAsPhrase={buildAsPhrase} />
+      ) : (
+        // Cleared once consumed, so switching back to Phrase later does not re-seed a stale hand-off
+        // over work in progress.
+        <PhraseTab handoff={handoff} onConsumeHandoff={() => setHandoff(undefined)} />
+      )}
     </section>
   );
 }

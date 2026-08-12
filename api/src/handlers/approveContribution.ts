@@ -154,6 +154,12 @@ async function approveNewEntry(client: Queryable, proposedValue: NewEntryPropose
         displayText: proposedValue.displayText,
         syllables: proposedValue.syllables,
         components: proposedValue.components ?? [],
+        // Carried through when the proposal had one. A phrase may cite its OWN etymology (upstream has
+        // multi-word entries); dropping it here would have silently downgraded an approved phrase to
+        // the by-nature exemption, which is the same loss the HTTP edge used to enforce.
+        ...(proposedValue.citation && 'entryId' in proposedValue.citation
+          ? { citation: { entryId: proposedValue.citation.entryId } }
+          : {}),
       },
       approvedBy,
     );

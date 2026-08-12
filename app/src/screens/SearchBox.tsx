@@ -34,6 +34,12 @@ export interface SearchBoxProps<T> {
    * For a result the caller cannot accept: offering "Select" on something that will be refused is
    * worse than offering nothing, because the refusal arrives after the form is filled in. */
   renderAction?: (result: T) => React.ReactNode;
+  /** Names this search box, for a screen that has more than one.
+   *
+   * The Phrase tab has two - one over the dictionary, one over Wiktionary - and unlabelled they present
+   * as two identical anonymous searches with two identical "Search" buttons. Ambiguous to assistive
+   * technology, not merely to a test. Omitted by the other callers, which have only one. */
+  label?: string;
 }
 
 export function SearchBox<T>({
@@ -46,6 +52,7 @@ export function SearchBox<T>({
   initialQuery,
   isSelected,
   renderAction,
+  label,
 }: SearchBoxProps<T>) {
   const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<T[] | null>(null);
@@ -69,7 +76,7 @@ export function SearchBox<T>({
   }, []);
 
   return (
-    <div>
+    <div role={label ? 'search' : undefined} aria-label={label}>
       <div className="search-row">
         <input
           type="text"
