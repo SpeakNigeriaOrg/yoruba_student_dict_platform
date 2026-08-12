@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
+import { syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import { AddWord } from './AddWord.js';
 
 afterEach(() => {
@@ -320,7 +321,8 @@ async function searchWith(result: Record<string, unknown>, props: Record<string,
   render(<AddWord {...props} />);
   await user.type(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...'), 'jẹun');
   await user.click(screen.getByRole('button', { name: 'Search' }));
-  await screen.findByText(/to eat food/);
+  // Wait on the result ROW rather than a particular gloss, so this helper works for any fixture.
+  await screen.findByRole('listitem');
   return user;
 }
 
@@ -400,5 +402,54 @@ describe('AddWord - clicking Select is visibly acknowledged', () => {
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
     expect(screen.queryAllByRole('status')).toHaveLength(0);
+  });
+});
+
+describe('AddWord - spelling and syllables cannot drift apart', () => {
+  const TWO_SPELLINGS = {
+    form: 'adìyẹ',
+    pos: 'noun',
+    glosses: ['chicken'],
+    matchedVia: 'yoruba_exact',
+    altOfTargets: [],
+    // Two standard forms, so the "choose a spelling" radios render.
+    standardForms: ['adìyẹ', 'adiye'],
+    entryId: 'en-adiye-yo-noun-ABC',
+    etymologyNumber: null,
+    claim: null,
+    spellingMatches: [],
+  };
+
+  it('re-splits the syllables when a different spelling is chosen', async () => {
+    // The reported bug: switching spelling left the PREVIOUS form's syllables in the box, and nothing
+    // downstream checks the pair - words.ts only requires a non-empty array of strings - so the
+    // mismatch became the word's canonical split.
+    const user = await searchWith(TWO_SPELLINGS);
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    const syllables = () => (screen.getByLabelText('Syllables (comma-separated)') as HTMLInputElement).value;
+    const first = syllables();
+    expect(first).toBeTruthy();
+
+    await user.click(screen.getByRole('radio', { name: 'adiye' }));
+
+    // The value must correspond to the NEWLY chosen spelling, not the previous one.
+    expect(syllables()).toBe(syllabifyWord('adiye').join(','));
+    expect(syllables()).not.toBe(first);
+  });
+
+  it('submits a spelling and syllables that agree, after switching', async () => {
+    // What actually reaches the server is the pair, so assert the pair.
+    const user = await searchWith(TWO_SPELLINGS);
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByRole('radio', { name: 'adiye' }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find((c) => String(c[0]).includes('/api/words'))![1].body,
+    );
+    expect(body.displayText).toBe('adiye');
+    expect(body.syllables).toEqual(syllabifyWord('adiye'));
   });
 });

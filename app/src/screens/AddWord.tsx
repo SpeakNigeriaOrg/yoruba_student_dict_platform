@@ -172,11 +172,27 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
       .catch(() => setDuplicates(null));
   }, [selectedForm, selected]);
 
-  function pickResult(result: KaikkiSearchResult) {
-    setSelected(result);
-    const form = result.standardForms[0] ?? result.form;
+  /** Setting the spelling and splitting it are ONE action, never two.
+   *
+   * They were written as three separate copies - the initial pick, the off-path spelling field, and the
+   * "choose a spelling" radio - and the radio only set the spelling. So switching spelling left the
+   * PREVIOUS form's syllables in the box, and nothing downstream would ever notice: words.ts checks
+   * only that syllables is a non-empty array of strings, so the mismatched pair lands in golden_record
+   * as the word's canonical split. From there the tone grid teaches a volunteer to record exactly that
+   * split, and publish compares recorded_syllables to golden_record.syllables with EXACT equality - so
+   * the word either ships with a wrong split or can never be recorded in a way that matches.
+   *
+   * The syllables field stays editable on purpose (an automatic split can be wrong - see the nasal
+   * cases in shared/src/syllabify.ts), but an edit made for one spelling says nothing about a different
+   * one, so changing spelling correctly discards it. */
+  function chooseSpelling(form: string) {
     setSelectedForm(form);
     setSyllablesText(syllabifyWord(form).join(','));
+  }
+
+  function pickResult(result: KaikkiSearchResult) {
+    setSelected(result);
+    chooseSpelling(result.standardForms[0] ?? result.form);
     // Seeded from the etymology's primary gloss, not authored from scratch: the
     // student definition is a simplification OF this etymology's meaning.
     setDefinitionText(result.glosses[0] ?? '');
@@ -299,10 +315,7 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
                 id="word-spelling-field"
                 type="text"
                 value={selectedForm}
-                onChange={(e) => {
-                  setSelectedForm(e.target.value);
-                  setSyllablesText(syllabifyWord(e.target.value).join(','));
-                }}
+                onChange={(e) => chooseSpelling(e.target.value)}
               />
             </div>
           ) : null}
@@ -313,7 +326,12 @@ function WordTab({ onOpenWord }: { onOpenWord?: (wordId: string) => void }) {
               {selected.standardForms.map((form) => (
                 <div key={form} className="field-inline">
                   <label>
-                    <input type="radio" name="spelling-form" checked={selectedForm === form} onChange={() => setSelectedForm(form)} />
+                    <input
+                      type="radio"
+                      name="spelling-form"
+                      checked={selectedForm === form}
+                      onChange={() => chooseSpelling(form)}
+                    />
                     {form}
                   </label>
                 </div>
