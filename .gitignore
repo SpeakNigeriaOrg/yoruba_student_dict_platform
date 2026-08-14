@@ -28,5 +28,10 @@ venv/
 # Azure SWA CLI
 .swa/
 
+# Generated Wiktionary drafts (scripts/exportWiktionaryDrafts.mjs) - regenerated
+# from the database on demand, and a draft committed here would be a second,
+# staler copy of what the database already says
+out/
+
 # OS
 .DS_Store

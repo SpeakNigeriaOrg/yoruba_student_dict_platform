@@ -8,6 +8,13 @@
 // real enforcement of that; the existence pre-check here exists only to
 // give a clean, specific error instead of a raw FK-violation (mirrors
 // resolve_server.py:249-260's identical rationale).
+//
+// displayText and syllables are AUTHORED, not derived from the components. They arrive from the
+// phrase tab's tone grid, and this handler stores what it is given. The Add Phrase screen used to
+// compute both by joining the parts, which made a phrase whose surface form differs from its parts -
+// `o ṣé` for `o` + `ṣe`, `muti` for {{contraction|yo|mu|ọtí}} - unstorable. The components remain a
+// claim about which words the phrase is built from, which is a different claim from how it is spelled;
+// shared/src/phraseSpelling.ts reports where the two diverge.
 
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
@@ -28,6 +35,12 @@ export interface CreatePhraseInput {
    * parts' ("hail the king" is not the sum of its words). Refusing to record it, as this used to,
    * threw away the one thing 0017 made the identity, and left drift detection with nothing to check. */
   citation?: { entryId: string };
+  /** 0018's publication overrides. Same rule as createWord's, and MORE often needed here: a
+   * locally composed phrase takes the by-nature exemption below, so its pin is empty and
+   * nothing else in the database knows its part of speech or how to gloss it in English. */
+  pos?: string | null;
+  englishGloss?: string | null;
+  etymidLabel?: string | null;
 }
 
 export { WordIdAlreadyExistsError };
@@ -77,9 +90,17 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
   }
 
   await client.query(
-    `insert into golden_record (word_id, display_text, syllables, entry_type, updated_by)
-     values ($1, $2, $3, 'phrase', $4)`,
-    [input.wordId, input.displayText, input.syllables, createdBy],
+    `insert into golden_record (word_id, display_text, syllables, entry_type, pos, english_gloss, etymid_label, updated_by)
+     values ($1, $2, $3, 'phrase', $4, $5, $6, $7)`,
+    [
+      input.wordId,
+      input.displayText,
+      input.syllables,
+      input.pos ?? null,
+      input.englishGloss ?? null,
+      input.etymidLabel ?? null,
+      createdBy,
+    ],
   );
 
   for (const [position, componentWordId] of input.components.entries()) {

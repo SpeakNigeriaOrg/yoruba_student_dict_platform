@@ -346,8 +346,19 @@ export function getDuplicateCheck(spelling: string, altOfTargets: string[]): Pro
  * stale or hand-edited client cannot poison drift detection. */
 export type UpstreamCitationInput = { entryId: string } | { exemptReason: string };
 
+/** 0018's publication overrides, on both creation calls.
+ *
+ * Sent only when the entry has no citation pin to read them from - i.e. the off-path word and
+ * the locally composed phrase. A cited entry leaves them absent, and the generator reads
+ * pin.pos / pin.glosses instead. */
+export interface PublicationFields {
+  pos?: string | null;
+  englishGloss?: string | null;
+  etymidLabel?: string | null;
+}
+
 // Mirrors api/src/handlers/createWord.ts's CreateWordInput.
-export interface CreateWordInput {
+export interface CreateWordInput extends PublicationFields {
   wordId: string;
   displayText: string;
   syllables: string[];
@@ -364,11 +375,15 @@ export function createWord(input: CreateWordInput): Promise<{ wordId: string }> 
 }
 
 // Mirrors api/src/handlers/createPhrase.ts's CreatePhraseInput.
-export interface CreatePhraseInput {
+export interface CreatePhraseInput extends PublicationFields {
   wordId: string;
   displayText: string;
   syllables: string[];
   components: string[];
+  /** The phrase's OWN etymology, when upstream has an entry for the whole phrase. Was missing
+   * from this type while the screen already sent it - the excess-property check does not fire
+   * through a conditional spread, so it compiled and the field was simply undocumented here. */
+  citation?: { entryId: string };
 }
 
 export function createPhrase(input: CreatePhraseInput): Promise<{ wordId: string }> {
@@ -744,4 +759,36 @@ export function base64ToAudioUrl(base64: string, mimeType = 'audio/wav'): string
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+}
+
+// Mirrors api/src/handlers/contributionGrants.ts's GrantStatus - what this account has
+// agreed to about its own contributions, and whether the app should ask.
+export interface GrantStatus {
+  releaseState: 'unknown' | 'declined' | 'revoked' | 'internal_only' | 'open_permitted';
+  acceptedVersion: string | null;
+  currentVersion: string;
+  needsAcceptance: boolean;
+  /** False for an account that declined or withdrew. Every write endpoint refuses one, so
+   * the app shows the agreement rather than letting someone work into a 403. */
+  canContribute: boolean;
+}
+
+export function getMyGrant(): Promise<GrantStatus> {
+  return fetchJson('/api/grants/me');
+}
+
+export interface RecordGrantInput {
+  termsVersion: string;
+  openReleasePermitted?: boolean;
+  attributionMode?: 'real_name' | 'pseudonym' | 'anonymous';
+  attributionName?: string | null;
+  declineReason?: string;
+}
+
+export function recordMyGrant(input: RecordGrantInput): Promise<GrantStatus> {
+  return fetchJson('/api/grants/me', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }

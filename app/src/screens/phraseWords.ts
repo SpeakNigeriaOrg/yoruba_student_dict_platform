@@ -82,3 +82,28 @@ export function joinPhrase(words: PhraseWord[], separators: string[]): string {
 export function withWordSyllables(words: PhraseWord[], index: number, syllables: string[]): PhraseWord[] {
   return words.map((w, i) => (i === index ? { ...w, syllables } : w));
 }
+
+/** Every syllable of an authored phrase, in order, flattened across its words.
+ *
+ * What golden_record.syllables holds for a phrase. It used to be the components' stored
+ * syllables concatenated, which was only correct while a phrase was spelled exactly as its
+ * parts - the assumption `o ṣé` breaks, and it broke the syllables the same way it broke the
+ * spelling: the phrase inherited `ṣe` at mid tone from the component and the tone grid taught
+ * a volunteer to record that.
+ *
+ * Reading them from the composed text instead keeps the two in step by construction, since the
+ * composer's own grids are what produced that text. A word the syllabifier refuses (an Ajami
+ * spelling, a hyphenated form) contributes itself as one unit, exactly as it is written, so the
+ * list always accounts for every word on screen.
+ *
+ * Peeled punctuation is NOT restored here, unlike in joinPhrase: a syllable is a tone-bearing
+ * unit that gets recorded and played on its own, and a full stop is not one. It only arises at
+ * all because this splitter is shared with the example composer, where sentences are the point;
+ * a dictionary phrase has none. */
+export function phraseSyllables(words: PhraseWord[]): string[] {
+  return words.flatMap((w) => {
+    const whole = w.leading + w.core + w.trailing;
+    if (w.core === '') return [];
+    return w.syllables === null ? [whole] : w.syllables;
+  });
+}

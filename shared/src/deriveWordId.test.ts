@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveWordId, discriminateWordId, hashDiscriminateWordId, meaningSlug } from './deriveWordId';
+import { deriveWordId, discriminateWordId, etymidLabelFromWordId, hashDiscriminateWordId, meaningSlug } from './deriveWordId';
 
 describe('deriveWordId reproduces production\'s own convention', () => {
   // These are real production word_ids. The point is that this is not a new scheme: the
@@ -125,5 +125,33 @@ describe('hashDiscriminateWordId', () => {
 
   it('produces a word_id-safe suffix of fixed width', () => {
     expect(hashDiscriminateWordId('x', 'en-x-yo-noun-a~b_c')).toMatch(/^x_[0-9a-f]{8}$/);
+  });
+});
+
+describe('etymidLabelFromWordId', () => {
+  it('reads back the hint a curator chose, as an etymid label', () => {
+    // Production ids. The hint IS the label {{etymid|yo|...}} wants - a short English
+    // disambiguator, which upstream carries on only 72 of 6272 entries.
+    expect(etymidLabelFromWordId('owo_hand', 'ọwọ́')).toBe('hand');
+    expect(etymidLabelFromWordId('jeun_eat', 'jẹun')).toBe('eat');
+    expect(etymidLabelFromWordId('ko_to_build', 'kọ́')).toBe('to build');
+  });
+
+  it('handles a multi-word entry, where the prefix has underscores of its own', () => {
+    // The case a regex would get wrong: `o ṣé` becomes `o_se`, so a naive "everything after
+    // the first underscore" returns `se thank you`.
+    expect(etymidLabelFromWordId('o_se_thank_you', 'o ṣé')).toBe('thank you');
+    expect(etymidLabelFromWordId('e_joo_please', 'ẹ jọ̀ọ́')).toBe('please');
+  });
+
+  it('round-trips whatever deriveWordId built', () => {
+    expect(etymidLabelFromWordId(deriveWordId('ọwọ́', 'hand'), 'ọwọ́')).toBe('hand');
+    expect(etymidLabelFromWordId(deriveWordId('èwà', 'beans, cowpea'), 'èwà')).toBe('beans');
+  });
+
+  it('is null when the id was not built that way, rather than guessing', () => {
+    expect(etymidLabelFromWordId('legacy_thing', 'ọwọ́')).toBeNull();
+    // The glossless case deriveWordId itself produces: base only, no hint to read back.
+    expect(etymidLabelFromWordId('owo', 'ọwọ́')).toBeNull();
   });
 });

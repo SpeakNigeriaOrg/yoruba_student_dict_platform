@@ -18,3 +18,5 @@ export * from './deriveWordId.js';
 export * from './englishRelevance.js';
 export * from './nasalSplit.js';
 export * from './phraseTokens.js';
+export * from './phraseSpelling.js';
+export * from './contributorTerms.js';

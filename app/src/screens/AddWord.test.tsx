@@ -230,7 +230,7 @@ describe('AddWord - Word tab', () => {
 });
 
 describe('AddWord - Phrase tab', () => {
-  it('adds a searched component, derives display text/syllables, and submits createPhrase', async () => {
+  it('submits the AUTHORED spelling and its own syllables, with the components as a separate claim', async () => {
     const fetchMock = mockFetch();
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
@@ -252,6 +252,8 @@ describe('AddWord - Phrase tab', () => {
     expect(componentsList).toHaveTextContent('existingspelling');
     expect(componentsList).not.toHaveTextContent('existing_component');
 
+    // The spelling is typed, not assembled. This used to be display_text = components joined.
+    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'existingspelling');
     await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
 
@@ -265,9 +267,55 @@ describe('AddWord - Phrase tab', () => {
     expect(body).toEqual({
       wordId: 'existingspelling_phrasehint',
       displayText: 'existingspelling',
-      syllables: ['exi', 'sting'],
+      // From the composed text, not from the component's stored ['exi','sting']. The syllabifier
+      // refuses this ASCII fixture spelling, so it stands as one unit exactly as typed - the same
+      // rule the composer itself follows, which is what keeps the two in step.
+      syllables: ['existingspelling'],
       components: ['existing_component'],
+      pos: null,
+      englishGloss: null,
     });
+  });
+
+  it('stores a phrase whose spelling its parts cannot produce, and says what differs', async () => {
+    // The case that was unstorable. Upstream's `o ṣe` entry carries canonical form `o ṣé` with IPA
+    // /ō ʃé/, while its parts are `o` (pron, etym 2) and `ṣe` (verb, etym 2) - so joining the parts
+    // spelled it `o ṣe`, at a tone nobody says, and the tone grid then taught that tone to a
+    // volunteer. Minting a `ṣé` word instead is blocked by 0017: it would cite `ṣe`'s etymology.
+    const fetchMock = mockFetch({
+      vocabResults: [
+        { wordId: 'o_you', displayText: 'o', syllables: ['o'], definition: 'you', baseSpelling: 'o', matchedVia: 'yoruba_exact' },
+        { wordId: 'se_do', displayText: 'ṣe', syllables: ['ṣe'], definition: 'to do', baseSpelling: 'se', matchedVia: 'yoruba_exact' },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dict.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('to do', { exact: false }));
+    const add = screen.getAllByRole('button', { name: 'Add as component' });
+    await user.click(add[0]);
+    await user.click(add[1]);
+
+    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'o ṣé');
+
+    // Reported, not corrected: the difference is a real fact about the phrase.
+    const warning = await screen.findByLabelText('Spelling differs from components');
+    expect(warning).toHaveTextContent('ṣe is written ṣé here');
+    expect(warning).toHaveTextContent('o ṣe');
+
+    await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/phrases')![1].body);
+    expect(body.displayText).toBe('o ṣé');
+    expect(body.syllables).toEqual(['o', 'ṣé']);
+    expect(body.components).toEqual(['o_you', 'se_do']);
   });
 
   it('refuses to submit with no components', async () => {
@@ -591,7 +639,11 @@ describe('AddWord - the phrase path can finish the job', () => {
 
     const list = screen.getByLabelText('Phrase components');
     expect(list.querySelectorAll('li')).toHaveLength(2);
-    expect(screen.getByText(/Display text:/)).toHaveTextContent('existingspelling existingspelling');
+    // The spelling is authored now, so what proves both positions are held is the component list
+    // itself - and the spelling check, which knows the phrase should be that word twice.
+    expect(screen.getByLabelText('Spelling differs from components')).toHaveTextContent(
+      'existingspelling existingspelling',
+    );
 
     // Removing is by POSITION, so taking one out leaves the other.
     await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);

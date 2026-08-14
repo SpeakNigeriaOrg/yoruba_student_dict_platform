@@ -92,6 +92,30 @@ export function deriveWordId(displayText: string, gloss: string | undefined): st
   return meaning ? `${base}_${meaning}` : base;
 }
 
+/** The meaning half of a word_id, read back out - which is an {{etymid|yo|...}} label.
+ *
+ * The inverse of deriveWordId's shape, and it lives here so the two cannot drift: this has to
+ * strip exactly the prefix that function builds, and reimplementing orthographyInsensitiveForm
+ * in the caller is how `o_se_thank_you` would come back as `se thank you`.
+ *
+ * Worth having because the label is already authored. Wiktionary's {{etymid}} takes a short
+ * English disambiguator ({{etymid|yo|tie down}}, {{etymid|yo|plantain}}) and carries it on just
+ * 72 of 6,272 corpus entries - while every word here has one, chosen by a curator at the moment
+ * they picked the etymology, for exactly that purpose: telling apart the several etymologies
+ * that share a spelling.
+ *
+ *     owo_hand,         ọwọ́   -> 'hand'
+ *     o_se_thank_you,   o ṣé  -> 'thank you'
+ *
+ * Returns null when the id does not have that shape - a legacy id, or one a human wrote freehand
+ * - rather than inventing a label out of part of a key. */
+export function etymidLabelFromWordId(wordId: string, displayText: string): string | null {
+  const prefix = `${orthographyInsensitiveForm(displayText).replace(/\s+/g, '_')}_`;
+  if (!wordId.startsWith(prefix)) return null;
+  const hint = wordId.slice(prefix.length);
+  return hint ? hint.replace(/_/g, ' ') : null;
+}
+
 /** Appends a stable token from the cited entry id, for the one case that needs it: the derived
  * id is already taken by a word citing a DIFFERENT etymology. Deterministic per etymology, so
  * two volunteers requesting the same word still agree. */

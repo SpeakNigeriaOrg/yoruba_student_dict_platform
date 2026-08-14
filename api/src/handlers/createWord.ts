@@ -35,6 +35,16 @@ export interface CreateWordInput {
    * an etymology to add. Deriving it later from the spelling is impossible - one
    * spelling maps to several etymologies (`kọ́` is three). */
   citation: UpstreamCitationInput;
+  /** 0018's publication overrides - all optional, and normally all absent.
+   *
+   * A cited word needs none of them: the pin already holds pos and glosses as upstream stated
+   * them when a human validated the citation, and the etymid label is what the word_id hint
+   * already is. They exist for the population with no pin to read - a word carrying an exempt
+   * citation, which is also the only kind of word we would ever actually contribute upstream.
+   * See 0018 for why these are overrides rather than copies. */
+  pos?: string | null;
+  englishGloss?: string | null;
+  etymidLabel?: string | null;
 }
 
 export { WordIdAlreadyExistsError };
@@ -57,9 +67,18 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
 
   try {
     await client.query(
-      `insert into golden_record (word_id, display_text, syllables, definition, updated_by)
-       values ($1, $2, $3, $4, $5)`,
-      [input.wordId, input.displayText, input.syllables, input.definition ?? null, createdBy],
+      `insert into golden_record (word_id, display_text, syllables, definition, pos, english_gloss, etymid_label, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        input.wordId,
+        input.displayText,
+        input.syllables,
+        input.definition ?? null,
+        input.pos ?? null,
+        input.englishGloss ?? null,
+        input.etymidLabel ?? null,
+        createdBy,
+      ],
     );
   } catch (err) {
     // The pre-check above closes the common case with a clean error, but

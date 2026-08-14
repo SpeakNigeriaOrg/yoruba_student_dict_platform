@@ -15,9 +15,11 @@ import { AddWord } from './screens/AddWord.js';
 import { AdminUserDetail } from './screens/AdminUserDetail.js';
 import { AdminUsers } from './screens/AdminUsers.js';
 import { AllWordsList } from './screens/AllWordsList.js';
+import { ContributorTerms } from './screens/ContributorTerms.js';
 import { ReviewQueue } from './screens/ReviewQueue.js';
 import { TaskQueue } from './screens/TaskQueue.js';
 import { WordReview } from './screens/WordReview.js';
+import { getMyGrant } from './api.js';
 import { getClientPrincipal, type ClientPrincipal } from './identity.js';
 import { useRoute } from './useRoute.js';
 import type { Axis, Route } from './route.js';
@@ -34,11 +36,40 @@ const MAIN_VIEWS: Array<{ view: MainView; label: string; icon: string }> = [
 
 export default function App() {
   const [principal, setPrincipal] = useState<ClientPrincipal | null | undefined>(undefined);
+  /** Whether this account still has to answer the contributor agreement (0019).
+   *
+   * Undefined while unknown, which includes "the call failed". Interrupting on an
+   * unanswered question is right; interrupting because a fetch timed out is not, so a
+   * failure resolves to false and the app opens normally. That is a deliberate fail-OPEN
+   * on a consent prompt, and it is safe because this screen is not the enforcement: the
+   * enforcement is at release time, where the export refuses anything a grant does not
+   * cover. Locking a teacher out of a day's work to protect a rights check that runs
+   * weeks later would cost something real to protect nothing.
+   */
+  const [needsTerms, setNeedsTerms] = useState<boolean | undefined>(undefined);
+  /** True once an account has declined or withdrawn. Every write endpoint refuses one, so
+   * the agreement goes back in front of them - showing the queue would be showing work they
+   * cannot save, and finding that out at the end of a recording is the worst moment to. */
+  const [paused, setPaused] = useState(false);
   const { route, navigate } = useRoute();
 
   useEffect(() => {
     getClientPrincipal().then(setPrincipal);
   }, []);
+
+  useEffect(() => {
+    if (!principal) return;
+    getMyGrant()
+      // `=== true`/`=== false` rather than the values themselves, because undefined is this
+      // state's "still asking" sentinel: a response missing the field would otherwise leave
+      // the app on its loading line forever, which is a worse failure than not showing the
+      // prompt. Same reason `paused` needs an explicit false and not just a falsy value.
+      .then((grant) => {
+        setNeedsTerms(grant.needsAcceptance === true);
+        setPaused(grant.canContribute === false);
+      })
+      .catch(() => setNeedsTerms(false));
+  }, [principal?.userId]);
 
   const isCurator = principal?.userRoles.includes('curator') ?? false;
 
@@ -67,6 +98,21 @@ export default function App() {
         <p>
           <a href="/login">Log in</a> to see your assigned words.
         </p>
+      ) : needsTerms === undefined ? (
+        <p>Checking login status...</p>
+      ) : needsTerms || paused ? (
+        // Before the routed views, and instead of them. Shown once per wording version for
+        // an account that has not answered - and shown again, indefinitely, for one that
+        // declined, because every write endpoint now refuses it and there is no honest way
+        // to present a queue of work that cannot be saved.
+        <ContributorTerms
+          displayName={principal.userDetails}
+          paused={paused}
+          onAnswered={(grant) => {
+            setNeedsTerms(false);
+            setPaused(grant.canContribute === false);
+          }}
+        />
       ) : (
         <>
           {route.view === 'word' ? (

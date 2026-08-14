@@ -82,6 +82,69 @@ is the statement — it just isn't needed for the legacy data:
 update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';
 ```
 
+## After 0019: the app asks, and nobody has been asked yet
+
+`0019_contribution_grants.sql` adds `contribution_grants`, the `grant_release_state` function, the
+`speaker_release_rights` and `contributor_release_rights` views, and two attribution columns on
+`speakers`. It backfills **nothing**, so every existing person reads as `release_state = 'unknown'`.
+
+That is not a gap to close in SQL, and mostly it closes itself: the app now asks once, after login
+(`app/src/screens/ContributorTerms.tsx`, `POST /api/grants/me`), and records the answer against both
+the account and its speaker row. Asked once per **wording version** - `instrument_ref` stores the
+version from `shared/src/contributorTerms.ts`, and a changed version asks again, because consent to
+v1 is not consent to v2. Editing that wording without bumping `CONTRIBUTOR_TERMS_VERSION` silently
+attributes new terms to people who agreed to the old ones.
+
+What the prompt cannot reach is the three legacy speakers, created by the import scripts with
+`user_id` null (see the 0012 section above) - which is the database's own record that nobody was
+ever asked anything about those 189 recordings. They need an out-of-band row naming the real
+instrument (`instrument = 'paid_contract'`, `instrument_ref` pointing at the contract version), or
+a `no_grant_reason` row saying why there is none. Writing an acceptance for them would launder an
+assumption into a consent someone gave on a date.
+
+Three things follow, all deliberate:
+
+- **Internal pipelines are not gated.** `scripts/exportGameContent.mjs` and
+  `scripts/publishToR2.mjs` ignore this table entirely and keep publishing. The teachers were paid
+  to record for exactly this use, and taking working audio out of the game to enforce paperwork
+  would cost learners something real for no gain in anyone's rights.
+- **Writes are gated on a refusal, and only on a refusal.** An account whose effective state is
+  `declined` or `revoked` gets a 403 from every non-GET endpoint; it can still read. Enforced once
+  in `requireUser` (`api/src/httpAuth.ts`) rather than per handler, so it also covers endpoints
+  written later. `unknown` deliberately does **not** block: someone nobody has asked yet is not
+  someone who said no, and neither is someone whose grant lookup just failed.
+- **External release is gated.** `scripts/exportWiktionaryDrafts.mjs` emits an `{{audio}}` line only
+  for a speaker whose `release_state` is `open_permitted`, and a `{{uxi}}` example only where its
+  **author's** is - example text and translations are volunteer writing, and the export publishes
+  them. Everything withheld is named per entry with the state that withheld it.
+
+Read the state back through a view, never through the table: the "most recent statement wins,
+revoked or not" rule lives there, and `stated_on` (not `granted_on`) is the ordering key precisely
+so a refusal - which grants nothing and so had no date - can supersede an earlier acceptance.
+
+There is deliberately **no release log yet**. Nothing has been released, and this repo already has
+the cautionary case of a table added ahead of its consumer: `canonical_utterance_selections` has
+sat empty since 0001 while the publish scripts hardcode take 1, and this README had to be corrected
+for claiming otherwise. The grant is what a release would have to check; the log gets written when
+something is actually released.
+
+## After 0018: no backfill, because two of the three fields are already answered
+
+`0018_entry_publication_fields.sql` adds `pos`, `english_gloss` and `etymid_label` to
+`golden_record`, and every one of them is an **override**. A cited word's `pos` and glosses are
+already in its 0014 pin, and the etymid label is what the `word_id` hint already is - so null means
+"read the pin" / "derive it", not "missing".
+
+The population that genuinely needs these is the ~7 words carrying an *exempt* citation, whose pin
+is `{}`. They are also the only entries we would ever contribute upstream, which is why the fields
+exist at all. `scripts/exportWiktionaryDrafts.mjs --report-only` lists exactly which entries are
+still blocked and on which field.
+
+`etymid_label` is not backfilled in SQL on purpose: recovering the hint means stripping
+`orthographyInsensitiveForm(display_text)` off the front of the `word_id`, and that function lives
+in `shared/` (`etymidLabelFromWordId`). A SQL reimplementation would be the third independent copy
+of orthography logic this schema refuses to grow.
+
 ## After 0015: the example axis needs no backfill
 
 `0015_word_examples.sql` adds the fourth axis's table and nothing else. No backfill: an

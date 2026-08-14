@@ -172,3 +172,154 @@ describe('App', () => {
     });
   });
 });
+
+describe('App - the contributor agreement is asked once', () => {
+  /** Same shape as installFetchMock, plus a real /grants/me answer and a spy on the POST
+   * so the recorded answer can be inspected. The default mock returns {} for that route,
+   * which is why every other test in this file opens straight into the app: an
+   * unanswerable response never interrupts. */
+  function installGrantMock(needsAcceptance: boolean) {
+    const post = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes('/.auth/me')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clientPrincipal: {
+                identityProvider: 'google',
+                userId: 'u1',
+                userDetails: 'tester@example.com',
+                userRoles: ['authenticated'],
+              },
+            }),
+          });
+        }
+        if (url.includes('/grants/me')) {
+          if (init?.method === 'POST') {
+            post(JSON.parse(String(init.body)));
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({ releaseState: 'open_permitted', needsAcceptance: false }),
+            });
+          }
+          return Promise.resolve({ ok: true, json: async () => ({ releaseState: 'unknown', needsAcceptance }) });
+        }
+        if (url.includes('/assignments/me')) return Promise.resolve({ ok: true, json: async () => assignmentsFixture });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+    return post;
+  }
+
+  it('interrupts an account that has never answered', async () => {
+    installGrantMock(true);
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText('Contributor agreement')).toBeInTheDocument());
+    // And the work behind it is genuinely not shown yet.
+    expect(screen.queryByLabelText('Queue progress')).not.toBeInTheDocument();
+  });
+
+  it('does not interrupt an account that has already answered', async () => {
+    installGrantMock(false);
+    render(<App />);
+    await waitFor(() => screen.getByLabelText('Queue progress'));
+    expect(screen.queryByLabelText('Contributor agreement')).not.toBeInTheDocument();
+  });
+
+  it('agreeing records the answer and opens the app', async () => {
+    const post = installGrantMock(true);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByLabelText('Contributor agreement'));
+
+    await user.click(screen.getByRole('button', { name: 'I agree' }));
+
+    await waitFor(() => screen.getByLabelText('Queue progress'));
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({ openReleasePermitted: true, attributionMode: 'real_name' }),
+    );
+  });
+
+  it('declining also opens the app - it is an answer, not a refusal to work', async () => {
+    // The property that makes this consent rather than coercion. A contributor who says
+    // no keeps working exactly as before; only external publication is affected.
+    const post = installGrantMock(true);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByLabelText('Contributor agreement'));
+
+    await user.click(screen.getByRole('button', { name: 'I do not agree' }));
+    await user.click(screen.getByRole('button', { name: /Confirm/ }));
+
+    await waitFor(() => screen.getByLabelText('Queue progress'));
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ declineReason: expect.any(String) }));
+  });
+
+  it('lets someone accept the rest while refusing open release', async () => {
+    // The terms promise this half can be answered separately, so it has to be reachable
+    // without declining everything.
+    const post = installGrantMock(true);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByLabelText('Contributor agreement'));
+
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'I agree' }));
+
+    await waitFor(() => screen.getByLabelText('Queue progress'));
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ openReleasePermitted: false }));
+  });
+});
+
+describe('App - a declined account cannot contribute', () => {
+  function installDeclinedMock() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/.auth/me')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              clientPrincipal: {
+                identityProvider: 'google',
+                userId: 'u1',
+                userDetails: 'tester@example.com',
+                userRoles: ['authenticated'],
+              },
+            }),
+          });
+        }
+        if (url.includes('/grants/me')) {
+          // The shape a declined account gets back: it HAS answered the current wording, so
+          // needsAcceptance is false - what puts the screen back is canContribute.
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ releaseState: 'declined', needsAcceptance: false, canContribute: false }),
+          });
+        }
+        if (url.includes('/assignments/me')) return Promise.resolve({ ok: true, json: async () => assignmentsFixture });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+  }
+
+  it('shows the agreement again rather than a queue of work it cannot save', async () => {
+    // Every write endpoint refuses this account, so a task list would be a list of things
+    // that fail on submit - and finding that out at the end of a recording is the worst
+    // possible moment to find it out.
+    installDeclinedMock();
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText('Contributions paused')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Queue progress')).not.toBeInTheDocument();
+  });
+
+  it('offers the way back, and says the earlier work is kept', async () => {
+    installDeclinedMock();
+    render(<App />);
+    await waitFor(() => screen.getByLabelText('Contributions paused'));
+    expect(screen.getByRole('button', { name: 'I agree' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Contributions paused')).toHaveTextContent('still here');
+  });
+});

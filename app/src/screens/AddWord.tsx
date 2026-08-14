@@ -29,8 +29,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
-import { isMultiWord, orthographyInsensitiveForm, phraseTokens, syllabifyWord } from '@yoruba-student-dict-platform/shared';
+import {
+  checkPhraseSpelling,
+  describePhraseSpelling,
+  isMultiWord,
+  orthographyInsensitiveForm,
+  phraseTokens,
+  syllabifyWord,
+} from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
+import { PhraseComposer } from './PhraseComposer.js';
+import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
 
 type Tab = 'word' | 'phrase';
@@ -43,8 +52,9 @@ type Tab = 'word' | 'phrase';
  * moves the curator there instead of quietly accepting it.
  *
  * `entry` is carried because a multi-word entry usually has an etymology OF ITS OWN, which the phrase
- * can now cite (see createPhrase). `tokens` seeds one component slot per word, so the work arrives
- * half-done rather than as a blank form. */
+ * can now cite (see createPhrase). `displayText` is upstream's canonical spelling and now seeds the
+ * phrase's own spelling field directly; `tokens` says how many words that is, which is what the
+ * hand-off message needs. */
 export interface PhraseHandoff {
   entry?: KaikkiSearchResult;
   displayText: string;
@@ -191,6 +201,14 @@ function WordTab({
    * rather than a null selection, so the two paths cannot be half-entered. */
   const [offPath, setOffPath] = useState(false);
   const [exemptReason, setExemptReason] = useState('');
+  /** 0018's publication fields, asked for on the off-path branch only.
+   *
+   * An exempt word's citation pin is empty ({}), so its part of speech and its dictionary-style
+   * English gloss exist NOWHERE in the database - and it is exactly the population we would want to
+   * contribute upstream one day, since a cited word is already there. Two fields at the one moment
+   * the person adding it knows the answer, rather than a reconstruction job later. */
+  const [pos, setPos] = useState('');
+  const [englishGloss, setEnglishGloss] = useState('');
   const [saving, setSaving] = useState(false);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
@@ -269,6 +287,8 @@ function WordTab({
     setDefinitionText('');
     setHint('');
     setExemptReason('');
+    setPos('');
+    setEnglishGloss('');
     setOffPath(false);
     setDuplicates(null);
   }
@@ -319,6 +339,9 @@ function WordTab({
         syllables: syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
         definition: definitionText.trim() || null,
         citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
+        // Off-path only: a cited word reads both from its pin, and 0018 keeps these as overrides
+        // precisely so the cited majority needs no second copy of what upstream already said.
+        ...(offPath ? { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null } : {}),
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
       const syllablesOut = syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
@@ -462,16 +485,42 @@ function WordTab({
           </div>
 
           {offPath ? (
-            <div className="field">
-              <label htmlFor="word-exempt-field">Why is this word not in Wiktionary?</label>
-              <input
-                id="word-exempt-field"
-                type="text"
-                value={exemptReason}
-                onChange={(e) => setExemptReason(e.target.value)}
-                placeholder="e.g. recent loanword; traditional calendar name"
-              />
-            </div>
+            <>
+              <div className="field">
+                <label htmlFor="word-exempt-field">Why is this word not in Wiktionary?</label>
+                <input
+                  id="word-exempt-field"
+                  type="text"
+                  value={exemptReason}
+                  onChange={(e) => setExemptReason(e.target.value)}
+                  placeholder="e.g. recent loanword; traditional calendar name"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="word-pos-field">Part of speech</label>
+                <input
+                  id="word-pos-field"
+                  type="text"
+                  value={pos}
+                  onChange={(e) => setPos(e.target.value)}
+                  placeholder="e.g. noun, verb, intj"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="word-gloss-field">English gloss</label>
+                <input
+                  id="word-gloss-field"
+                  type="text"
+                  value={englishGloss}
+                  onChange={(e) => setEnglishGloss(e.target.value)}
+                  placeholder="e.g. radio"
+                />
+                <p className="field-note">
+                  Ordinary dictionary wording, for the entry we would send upstream one day - not the simplified
+                  student definition above. A word with no Wiktionary entry has this recorded nowhere else.
+                </p>
+              </div>
+            </>
           ) : null}
 
           <div className="field">
@@ -521,12 +570,26 @@ interface PhrasePart {
  * switching tabs unmounts the tab being left. A half-built phrase has to survive that round trip, so the
  * draft lives one level up and the Phrase tab is controlled. */
 interface PhraseDraft {
+  /** The phrase's spelling, AUTHORED on the tone grid rather than computed from the components.
+   *
+   * This used to be `components.map(c => c.displayText).join(' ')`, with no field for it and no way
+   * to correct it - and the server re-derived it the same way on every later etymology edit. So a
+   * phrase whose surface form is not its parts run together could not be entered: `o ṣé` (upstream's
+   * own canonical form for the `o ṣe` entry, IPA /ō ʃé/) came out as `o ṣe`, at a tone nobody says,
+   * because the component `ṣe` is spelled at mid tone in its own right. Minting a second word to
+   * carry the high tone is not available either - that word would cite `ṣe`'s etymology, and 0017
+   * makes one etymology one word. */
+  displayText: string;
   components: PhrasePart[];
   hint: string;
   adopted: KaikkiSearchResult | null;
+  /** 0018's publication fields, collected only when this phrase will have no citation pin to read
+   * them from - i.e. when it is locally composed rather than adopted from upstream. */
+  pos: string;
+  englishGloss: string;
 }
 
-const EMPTY_DRAFT: PhraseDraft = { components: [], hint: '', adopted: null };
+const EMPTY_DRAFT: PhraseDraft = { displayText: '', components: [], hint: '', adopted: null, pos: '', englishGloss: '' };
 
 function PhraseTab({
   handoff,
@@ -545,7 +608,7 @@ function PhraseTab({
    * than creating it from a stripped-down form here. */
   onNeedWord: (entry: KaikkiSearchResult) => void;
 }) {
-  const { components, hint, adopted } = draft;
+  const { displayText, components, hint, adopted, pos, englishGloss } = draft;
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -555,18 +618,37 @@ function PhraseTab({
 
   // Seed from the Word tab. Runs once per handoff: the tab is not unmounted between them, so keying the
   // effect on the spelling is what makes a second hand-off take effect.
+  //
+  // The spelling now arrives filled in, with upstream's own canonical form for the entry the curator
+  // picked - tone marks included, which is the half that was being lost. `tokens` was documented as
+  // seeding the form and never could: there was no spelling field to seed, so it only ever supplied a
+  // count for the message below, which is all it is used for now.
   useEffect(() => {
     if (!handoff) return;
-    setDraft({ components: [], hint: hintFromGloss(handoff.entry?.glosses[0]), adopted: handoff.entry ?? null });
+    setDraft({
+      ...EMPTY_DRAFT,
+      displayText: handoff.displayText,
+      hint: hintFromGloss(handoff.entry?.glosses[0]),
+      adopted: handoff.entry ?? null,
+      pos: handoff.entry?.pos ?? '',
+      englishGloss: handoff.entry?.glosses[0] ?? '',
+    });
     setStatus(
-      `${handoff.displayText} is ${handoff.tokens.length} words, so it is a phrase. Add each word below - ` +
-        `anything missing from the dictionary can be added from Wiktionary without leaving this tab.`,
+      `${handoff.displayText} is ${handoff.tokens.length} words, so it is a phrase. Its spelling is filled in ` +
+        `below - add the word behind each part, and anything missing from the dictionary can be added from ` +
+        `Wiktionary without leaving this tab.`,
     );
     onConsumeHandoff();
   }, [handoff?.displayText]);
 
-  const displayText = components.map((c) => c.displayText).join(' ');
-  const syllables = components.flatMap((c) => c.syllables);
+  const { words: phraseWordList } = splitPhrase(displayText);
+  const syllables = phraseSyllables(phraseWordList);
+  const spellingCheck = checkPhraseSpelling(displayText, components.map((c) => c.displayText));
+  // Silent until there is something to compare against. With no components picked yet, EVERY word of
+  // the phrase is one the components do not account for - true, and useless, since the list above
+  // already says none have been picked. A warning that fires through the whole of normal authoring is
+  // one people learn to scroll past, which is how the old duplicate warning came to be ignored.
+  const spellingNote = components.length === 0 ? null : describePhraseSpelling(spellingCheck);
   const wordIdPreview = displayText && hint ? `${orthographyInsensitiveForm(displayText).replace(/ /g, '_')}_${hint}` : '';
 
   useEffect(() => {
@@ -601,6 +683,10 @@ function PhraseTab({
       setStatus('A phrase needs at least one component.');
       return;
     }
+    if (!displayText.trim()) {
+      setStatus('Write the phrase itself first - it is no longer assembled from the components.');
+      return;
+    }
     if (!wordIdPreview) {
       setStatus('Enter a word_id hint first.');
       return;
@@ -610,12 +696,17 @@ function PhraseTab({
     try {
       await createPhrase({
         wordId: wordIdPreview,
-        displayText,
+        displayText: displayText.trim(),
         syllables,
         components: components.map((c) => c.wordId),
         // The phrase's own etymology, when it has one. Upstream has 480 multi-word entries, and their
         // meaning is not the sum of their parts - so recording it is not redundant with the components.
         ...(adopted?.entryId ? { citation: { entryId: adopted.entryId } } : {}),
+        // Only for a locally composed phrase. An adopted one takes the by-nature citation, and its pin
+        // already holds both - see 0018 on why these are overrides rather than copies.
+        ...(adopted
+          ? {}
+          : { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null }),
       });
       setStatus(`Added phrase ${wordIdPreview} to vocabulary.`);
       resetForm();
@@ -634,6 +725,17 @@ function PhraseTab({
           Citing the whole phrase as: <EtymologyLabel result={adopted} />
         </p>
       ) : null}
+
+      {/* The phrase itself, first, because it is now the thing being authored rather than a
+          read-out of the components. The composer gives it a tone grid per word, so a curator
+          never types a combining mark and `o ṣé` can be written at the tone people actually say. */}
+      <PhraseComposer
+        id="phrase-spelling"
+        label="The phrase, spelled as it is said"
+        placeholder="e.g. o ṣé"
+        value={displayText}
+        onChange={(next) => setDraft({ ...draft, displayText: next })}
+      />
 
       {components.length === 0 ? (
         <p>No components picked yet.</p>
@@ -754,10 +856,55 @@ function PhraseTab({
       />
 
       <p>
-        Display text: <strong>{displayText || '(pick components)'}</strong>
-        <br />
         Syllables: <strong>{syllables.join(' · ')}</strong>
       </p>
+
+      {/* The old rule, demoted to a report. A phrase that is not its parts run together is
+          usually a real fact about Yoruba - an elision, a contraction, a tone change, a clipping -
+          and occasionally a typo, and nothing in the data tells them apart. So this says what
+          differs and lets a curator decide, the same way the duplicate check below does. */}
+      {spellingNote ? (
+        <div role="alert" aria-label="Spelling differs from components" className="warning-banner">
+          <p>
+            This phrase is not its components run together: {spellingNote}.
+          </p>
+          <p className="field-note">
+            Expected from the parts: <strong>{spellingCheck.joined}</strong>. That is fine if the phrase really is
+            written differently - a contraction, an elision, a tone change - and worth a second look if it is not.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Collected only for a locally composed phrase. An adopted one has a citation pin holding
+          both already; asking again would be asking a curator to retype what upstream said. */}
+      {adopted ? null : (
+        <>
+          <div className="field">
+            <label htmlFor="phrase-pos-field">Part of speech</label>
+            <input
+              id="phrase-pos-field"
+              type="text"
+              value={pos}
+              onChange={(e) => setDraft({ ...draft, pos: e.target.value })}
+              placeholder="e.g. intj, noun, verb"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="phrase-gloss-field">English gloss</label>
+            <input
+              id="phrase-gloss-field"
+              type="text"
+              value={englishGloss}
+              onChange={(e) => setDraft({ ...draft, englishGloss: e.target.value })}
+              placeholder="e.g. thank you (non-honorific, to one person)"
+            />
+            <p className="field-note">
+              Ordinary dictionary wording, for the entry we would send upstream - not the simplified student
+              definition. Nothing else records it for a phrase we composed ourselves.
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="field">
         <label htmlFor="phrase-hint-field">Word ID hint</label>

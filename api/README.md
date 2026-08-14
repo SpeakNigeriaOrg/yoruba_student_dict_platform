@@ -102,6 +102,33 @@ the roles it got from the roles function into the session token. Server-side
 loses API access as soon as their token refreshes and cannot act as a curator
 server-side even while a stale token claims it.
 
+### The contributor agreement gates writes, in one place
+
+An account whose effective grant state is `declined` or `revoked` (0019) may not contribute.
+That is enforced inside **`requireUser`**, keyed on the HTTP method: a `GET` is reading the
+dictionary, which stays open to them, and anything else produces or changes content and gets a
+403. `requireCurator` inherits it — a curator's decisions and definitions are authored content
+too.
+
+One place rather than a check in each write handler, for two reasons. A dozen handlers is a
+dozen chances to forget one, and the forgotten one is silent, because a missing check looks
+exactly like a passing one. And `ContributionsPausedError` extends `ForbiddenError`, so it maps
+to 403 through the catch chain every route file already has — no route was edited to add this,
+and none needs editing to keep it.
+
+Two things are deliberately outside it:
+
+- **`GetRoles`**, which is a POST and would strip a declined user's roles, locking them out of
+  the app rather than out of contributing. It cannot use `requireUser` at all (the principal is
+  what that call is helping to build), so it is out of reach by construction, not by an
+  exception someone maintains.
+- **`POST /api/grants/me`**, via `{ allowWithoutGrant: true }`. For an account that declined,
+  answering again *is* the way back, and the gate would otherwise refuse the only request that
+  could lift it.
+
+`unknown` does not block. Someone nobody has asked yet — or whose grant lookup failed — has not
+said no, and stopping their work over it would be the gate doing harm in the name of consent.
+
 ### First-curator bootstrap
 
 Pre-registration is curator-only, so with no curators there is no way to
@@ -287,16 +314,27 @@ does not serialise; `0017` adds the two partial unique indexes, and
 `resolveOrRequestComponent` recovers from a lost race via `trySavepoint` to return
 `already_requested` — the answer the race was trying to produce.
 
-### A phrase's spelling is derived, so its components own it
+### A phrase's spelling is authored, and its components are a claim about its parts
 
-That exemption says a phrase's *"identity comes from its components, each of which cites its own
-etymology"* - and `createPhrase` builds `display_text` (the parts' spellings joined) and `syllables`
-(their syllables concatenated) from them at authoring time. Nothing re-derived either afterwards, so
-editing a phrase's word list on the etymology axis left the phrase spelled as its **old** parts. Not
-cosmetic: publish compares a recording's frozen `recorded_display_text`/`recorded_syllables` to those
-columns with exact equality, so a silent respell takes the phrase's audio out of the game.
-`resyncPhraseFromComponents` now runs on both write paths - the action path and the consensus one -
-and is a no-op for ordinary words, whose spelling is authored rather than derived.
+This previously went the other way: `createPhrase` built `display_text` from the parts' spellings
+joined, and `resyncPhraseFromComponents` re-derived it on every etymology decision so an edited word
+list could not leave the phrase spelled as its **old** parts.
+
+That fixed a real staleness bug by making the components the *only* source of a phrase's spelling -
+which promoted "a phrase is a sequence of words" into "a phrase's spelling is the concatenation of
+its words' spellings". Wiktionary never makes that second claim (`{{compound}}` asserts a derivation,
+not a string) and Yoruba breaks it constantly. Upstream's own record for `o ṣe` carries
+`canonical_form` **`o ṣé`** with IPA `/ō ʃé/` while its parts are `o` and `ṣe`; `muti` is
+`{{contraction|yo|mu|ọtí}}`; `pẹjapẹja` is a reduplication written without the space. None could be
+stored correctly, and `0017` closes the workaround - a second word holding the changed tone would be
+two words citing one etymology.
+
+So the phrase tab composes the spelling on a tone grid, both write paths leave it alone, and
+`shared/src/phraseSpelling.ts`'s `checkPhraseSpelling` **reports** a spelling its parts cannot
+produce wherever a phrase is authored, reviewed or exported. It warns and never blocks, like the
+duplicate check on the same screen: a mismatch is usually a real linguistic fact and occasionally a
+typo, and nothing in the data tells them apart. The staleness bug does not return, because nothing
+derives the spelling for anything to go stale against.
 
 `getEtymologyReview` also reports `entryType`, because the screen has to ask a phrase a different
 question, and it no longer returns `usedInProposal`/`usedAsComponentOf` - nothing on that screen could

@@ -107,7 +107,6 @@ export async function applyEtymologyDecisionInTransaction(
       decidedBy,
       wordId,
     ]);
-    await resyncPhraseFromComponents(client, wordId, components, decidedBy);
   }
 
   const decision = { componentsAction: input.componentsAction, components: input.components };
@@ -122,48 +121,30 @@ export async function applyEtymologyDecisionInTransaction(
   );
 }
 
-/** A phrase's spelling and syllables are DERIVED from its components, so changing the components
- * has to change them too, in the same transaction.
- *
- * createPhrase builds both at authoring time - display_text is the components' spellings joined by
- * spaces and syllables is their syllables concatenated (see AddWord's phrase tab, which is what
- * posts them). Nothing re-derived them afterwards, so editing a phrase's word list on the etymology
- * axis left the phrase spelled as its OLD parts. That is not a cosmetic drift: publish compares a
- * recording's frozen recorded_display_text/recorded_syllables to these columns with exact equality,
- * so a silent respell here takes the phrase's audio out of the game.
- *
- * A no-op for ordinary words, whose spelling is authored rather than derived - which is why the
- * entry_type check is inside this function rather than at the call site: there is exactly one place
- * that has to remember. */
-async function resyncPhraseFromComponents(
-  client: Queryable,
-  wordId: string,
-  components: string[],
-  decidedBy: string,
-): Promise<void> {
-  const { rows } = await client.query<{ entry_type: 'phrase' | null }>(
-    'select entry_type from golden_record where word_id = $1',
-    [wordId],
-  );
-  if (rows[0]?.entry_type !== 'phrase') return;
-  // An empty component list cannot describe a phrase, and joining nothing would blank its spelling.
-  // Left alone rather than emptied - the decision row still records what was submitted.
-  if (components.length === 0) return;
-
-  const partRows = await client.query<{ word_id: string; display_text: string; syllables: string[] }>(
-    'select word_id, display_text, syllables from golden_record where word_id = any($1)',
-    [components],
-  );
-  const byId = new Map(partRows.rows.map((r) => [r.word_id, r]));
-  // In the submitted order, not the query's - the order IS the phrase.
-  const parts = components.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => p !== undefined);
-  if (parts.length !== components.length) return;
-
-  await client.query(
-    'update golden_record set display_text = $1, syllables = $2, updated_at = now(), updated_by = $3 where word_id = $4',
-    [parts.map((p) => p.display_text).join(' '), parts.flatMap((p) => p.syllables), decidedBy, wordId],
-  );
-}
+// ---------------------------------------------------------------------------
+// A phrase's spelling is NOT re-derived here, and that is a deliberate reversal
+// ---------------------------------------------------------------------------
+// This used to end with resyncPhraseFromComponents, which rewrote a phrase's display_text to
+// its components' spellings joined by spaces and its syllables to theirs concatenated, on
+// every component edit. It was written to fix a real bug - editing a phrase's word list left
+// it spelled as its OLD parts, and publish compares a recording's frozen
+// recorded_display_text to this column with exact equality, so a stale spelling takes the
+// phrase's audio out of the game.
+//
+// But it fixed that bug by making the components the ONLY source of a phrase's spelling,
+// which promoted "a phrase is a sequence of words" into "a phrase's spelling is the
+// concatenation of its words' spellings". Yoruba breaks that constantly, and upstream's own
+// data says so: `o ṣé` has canonical_form `o ṣé` with IPA /ō ʃé/ while its parts are `o` and
+// `ṣe`; `muti` is {{contraction|yo|mu|ọtí}}. Under this rule those phrases could not be
+// stored correctly at all, and 0017 blocks the workaround of minting a second word to hold
+// the changed tone.
+//
+// So the spelling is authored (AddWord's phrase tab composes it on a tone grid) and this
+// function is gone. The original bug does not return: nothing derives the spelling, so
+// nothing can leave it derived-from-something-stale. What replaces the guarantee is a
+// report - shared/src/phraseSpelling.ts's checkPhraseSpelling, shown where a phrase is
+// authored and in the Wiktionary export - because a spelling that differs from its parts is
+// usually a real linguistic fact and occasionally a typo, and only a human can tell which.
 
 /** Writes a consensus OUTCOME as the golden etymology decision - the etymology
  * counterpart of applyEntryOutcomeInTransaction. Replaces the component list
@@ -199,8 +180,9 @@ export async function applyEtymologyOutcomeInTransaction(
     );
   }
   await client.query('update golden_record set updated_at = now(), updated_by = $1 where word_id = $2', [decidedBy, wordId]);
-  // Both write paths, or a phrase settled by consensus keeps the spelling of its old parts.
-  await resyncPhraseFromComponents(client, wordId, outcome.components, decidedBy);
+  // No respelling here either - see the note above the action path. A consensus is about which
+  // words a phrase is built from; it carries no opinion about how the phrase is spelled, and
+  // rewriting the spelling from it would apply an opinion nobody voted on.
 
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)

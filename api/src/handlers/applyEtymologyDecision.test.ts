@@ -103,12 +103,13 @@ describe('applyEtymologyDecision', () => {
     expect(decision.rowCount).toBe(0);
   });
 
-  describe('a phrase is respelled by its components, because that is where its spelling came from', () => {
-    // createPhrase derives display_text (parts joined by spaces) and syllables (parts' syllables
-    // concatenated) at authoring time. Nothing re-derived them afterwards, so editing a phrase's
-    // word list left the phrase spelled as its OLD parts. Not cosmetic: publish compares a
-    // recording's frozen recorded_display_text/recorded_syllables to these columns with exact
-    // equality, so a silent respell takes the phrase's audio out of the game.
+  describe('a phrase keeps its authored spelling when its components change', () => {
+    // The reverse of what this block used to assert. Re-deriving display_text from the
+    // components made the components the only source of a phrase's spelling, which is a
+    // claim Yoruba breaks constantly (`o ṣé` is `o` + `ṣe` at a different tone; `muti` is
+    // {{contraction|yo|mu|ọtí}}) and one that upstream itself never makes. A phrase's
+    // spelling is now authored on the tone grid, and a mismatch with its parts is reported
+    // rather than corrected - see shared/src/phraseSpelling.ts.
     // The file's shared insertWord fixes display_text to 'x', which cannot show a join.
     async function insertSpelledWord(wordId: string, displayText: string, syllables: string[]) {
       await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [
@@ -131,7 +132,7 @@ describe('applyEtymologyDecision', () => {
       }
     }
 
-    it('re-derives display_text and syllables from the new word list', async () => {
+    it('leaves display_text and syllables alone when the word list changes', async () => {
       const one = `${NS}ph_one`;
       const two = `${NS}ph_two`;
       const three = `${NS}ph_three`;
@@ -152,26 +153,52 @@ describe('applyEtymologyDecision', () => {
         'select display_text, syllables from golden_record where word_id = $1',
         [phrase],
       );
-      expect(row.rows[0].display_text).toBe('ẹ gbà');
-      expect(row.rows[0].syllables).toEqual(['ẹ', 'gbà']);
+      expect(row.rows[0].display_text).toBe('ẹ jọ̀ọ́');
+      expect(row.rows[0].syllables).toEqual(['ẹ', 'jọ̀', 'ọ́']);
     });
 
-    it('keeps the submitted ORDER, because the order is the phrase', async () => {
+    it('still records the new components, in the submitted order - the order IS the phrase', async () => {
       const one = `${NS}ord_one`;
       const two = `${NS}ord_two`;
       const phrase = `${NS}ord_phrase`;
       await insertSpelledWord(one, 'abo', ['a', 'bo']);
       await insertSpelledWord(two, 'adìyẹ', ['a', 'dì', 'yẹ']);
-      await insertPhrase(phrase, 'adìyẹ abo', ['a', 'dì', 'yẹ', 'a', 'bo'], [two, one]);
+      await insertPhrase(phrase, 'abo adìyẹ', ['a', 'bo', 'a', 'dì', 'yẹ'], [two, one]);
 
       await applyEtymologyDecision(pool, phrase, { componentsAction: 'custom', components: [one, two] }, curatorUserId);
+
+      const components = await pool.query<{ component_word_id: string }>(
+        'select component_word_id from golden_record_components where word_id = $1 order by component_position',
+        [phrase],
+      );
+      expect(components.rows.map((r) => r.component_word_id)).toEqual([one, two]);
+    });
+
+    it('keeps a spelling its parts cannot produce - the case the old rule could not store', async () => {
+      // `o ṣé`: upstream's own entry carries canonical_form `o ṣé` (explicit_canonical_tag,
+      // confidence 1.0) and IPA /ō ʃé/, while its components are `o` (pron, etym 2) and `ṣe`
+      // (verb, etym 2). Re-deriving spelled it `o ṣe`, at a tone nobody says, and the tone grid
+      // then taught a volunteer to record that.
+      const you = `${NS}ose_o`;
+      const doVerb = `${NS}ose_se`;
+      const phrase = `${NS}ose_phrase`;
+      await insertSpelledWord(you, 'o', ['o']);
+      await insertSpelledWord(doVerb, 'ṣe', ['ṣe']);
+      await insertPhrase(phrase, 'o ṣé', ['o', 'ṣé'], [you, doVerb]);
+
+      await applyEtymologyDecision(
+        pool,
+        phrase,
+        { componentsAction: 'custom', components: [you, doVerb] },
+        curatorUserId,
+      );
 
       const row = await pool.query<{ display_text: string; syllables: string[] }>(
         'select display_text, syllables from golden_record where word_id = $1',
         [phrase],
       );
-      expect(row.rows[0].display_text).toBe('abo adìyẹ');
-      expect(row.rows[0].syllables).toEqual(['a', 'bo', 'a', 'dì', 'yẹ']);
+      expect(row.rows[0].display_text).toBe('o ṣé');
+      expect(row.rows[0].syllables).toEqual(['o', 'ṣé']);
     });
 
     it('leaves an ordinary word alone - its spelling is authored, not derived', async () => {

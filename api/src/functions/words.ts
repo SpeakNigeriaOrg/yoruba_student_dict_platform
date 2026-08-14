@@ -13,6 +13,7 @@ import { createWord, WordIdAlreadyExistsError, type CreateWordInput } from '../h
 // Error -> 400 branch below, which is the right status and carries the handler's
 // own message.
 import { EntryAlreadyCitedError, parseCitationInput } from '../handlers/upstreamCitations.js';
+import { parsePublicationFields } from '../handlers/publicationFields.js';
 
 function parseCreateWordInput(body: unknown): CreateWordInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
@@ -31,6 +32,7 @@ function parseCreateWordInput(body: unknown): CreateWordInput {
     syllables: b.syllables as string[],
     definition: (b.definition as string | null | undefined) ?? null,
     citation: parseCitationInput(b.citation),
+    ...parsePublicationFields(b),
   };
 }
 
