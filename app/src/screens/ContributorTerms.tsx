@@ -3,34 +3,27 @@
 // The one-time question, asked after login and not again until the wording changes.
 //
 // ---------------------------------------------------------------------------
-// It interrupts, and it does not trap
+// It interrupts, because the answer decides whether anything can be saved
 // ---------------------------------------------------------------------------
-// Interrupts, because a consent question tucked into a settings page is one nobody
-// finds, and the answer is needed before anything can be published rather than after.
-// Does not trap, because both answers let someone straight through: declining records
-// a real answer (0019's 'declined') and changes nothing about their work here. Consent
-// obtained by withholding a paid contributor's job is not consent, and the material
-// stays usable internally either way - that is what the engagement was for.
-//
-// So there is no "later" button. Not because the answer is compulsory, but because
-// "later" is the one response that would keep reappearing forever - and a prompt that
-// reappears is how a no becomes a yes by attrition.
+// A consent question tucked into a settings page is one nobody finds, and every write
+// endpoint refuses an account that declined - so putting the queue in front of someone
+// who has not answered would be showing them work they cannot keep. There is no "later"
+// button for the same reason.
 //
 // ---------------------------------------------------------------------------
-// The open-release half is asked separately, because the terms promise it is
+// One agreement, one button
 // ---------------------------------------------------------------------------
-// CONTRIBUTOR_TERMS says "You can say no to this part and yes to the rest", so it is a
-// real choice on this screen rather than a line in a paragraph with one Accept button
-// under it. The server refuses an acceptance that leaves it unanswered.
+// This screen used to carry a checkbox for open publication and a radio group for how
+// someone wanted to be credited. Both are gone: the terms now assign everything created
+// in the portal to Speak Nigeria, so there is no per-person permission left to collect,
+// and crediting on Wikimedia Commons is carried by the uploaded file's own metadata
+// rather than by anything recorded here. What is left is the thing actually being asked.
 
 import { useState } from 'react';
 import { CONTRIBUTOR_TERMS, CONTRIBUTOR_TERMS_VERSION } from '@yoruba-student-dict-platform/shared';
 import { recordMyGrant, type GrantStatus } from '../api.js';
 
 export interface ContributorTermsProps {
-  /** The name we would credit them under if they choose their own name - their account
-   * display name, so the choice is concrete rather than hypothetical. */
-  displayName: string;
   /** Set when this account has already declined or withdrawn, so the screen is being shown
    * again rather than for the first time. Only changes what is SAID: the state it explains
    * is one the server is enforcing either way, and a screen that stayed silent about it
@@ -39,10 +32,7 @@ export interface ContributorTermsProps {
   onAnswered: (status: GrantStatus) => void;
 }
 
-export function ContributorTerms({ displayName, paused = false, onAnswered }: ContributorTermsProps) {
-  const [openRelease, setOpenRelease] = useState(true);
-  const [attributionMode, setAttributionMode] = useState<'real_name' | 'pseudonym' | 'anonymous'>('real_name');
-  const [attributionName, setAttributionName] = useState(displayName);
+export function ContributorTerms({ paused = false, onAnswered }: ContributorTermsProps) {
   const [declining, setDeclining] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [saving, setSaving] = useState(false);
@@ -67,32 +57,31 @@ export function ContributorTerms({ displayName, paused = false, onAnswered }: Co
         <>
           <h2>Contributions are paused</h2>
           <div role="alert" aria-label="Contributions paused" className="warning-banner">
-            <p>
-              This account declined the contributor agreement, so recording and submitting work are turned off. Nothing
-              you contributed before is affected, and it is all still here.
-            </p>
+            <p>This account declined the contributor agreement, so recording and submitting work are turned off.</p>
             <p className="field-note">
-              You can agree below to start again. If you would rather not, you can close this page or{' '}
-              <a href="/logout">log out</a> - nobody will ask you again in this session.
+              You can agree below to start again, or <a href="/logout">log out</a>.
             </p>
           </div>
         </>
       ) : (
         <>
           <h2>Before you start</h2>
-          <p className="field-note">
-            One question, once. It is about what may be done with the recordings you make and the examples you write.
-          </p>
+          <p className="field-note">One question, once.</p>
         </>
       )}
 
-      <ul className="plain-list">
+      <ul className="plain-list" aria-label="Contributor agreement terms">
         {CONTRIBUTOR_TERMS.map((point) => (
-          <li key={point.records}>
-            <p>{point.text}</p>
+          <li key={point.slice(0, 40)}>
+            <p>{point}</p>
           </li>
         ))}
       </ul>
+
+      <p className="field-note">
+        If you do not agree, you can still sign in and read the dictionary, but you will not be able to record or
+        submit work.
+      </p>
 
       {declining ? (
         <div className="field">
@@ -111,7 +100,7 @@ export function ContributorTerms({ displayName, paused = false, onAnswered }: Co
               disabled={saving}
               onClick={() => send({ termsVersion: CONTRIBUTOR_TERMS_VERSION, declineReason })}
             >
-              Confirm - do not publish my work outside Speak Nigeria
+              Confirm
             </button>{' '}
             <button type="button" className="btn btn-secondary" onClick={() => setDeclining(false)}>
               Back
@@ -120,63 +109,11 @@ export function ContributorTerms({ displayName, paused = false, onAnswered }: Co
         </div>
       ) : (
         <>
-          <div className="field">
-            <p>
-              <label>
-                <input type="checkbox" checked={openRelease} onChange={(e) => setOpenRelease(e.target.checked)} />{' '}
-                Speak Nigeria may also publish some of my work openly, for anyone to use.
-              </label>
-            </p>
-            <p className="field-note">
-              Unchecking this keeps everything else the same. Your work is still used in Speak Nigeria&apos;s own
-              materials; it is simply never published outside them.
-            </p>
-          </div>
-
-          <div className="field">
-            <p>If my work is published, credit me as:</p>
-            {(
-              [
-                ['real_name', `My own name (${displayName})`],
-                ['pseudonym', 'Another name'],
-                ['anonymous', 'Do not credit me'],
-              ] as const
-            ).map(([mode, label]) => (
-              <div key={mode} className="field-inline">
-                <label>
-                  <input
-                    type="radio"
-                    name="attribution-mode"
-                    checked={attributionMode === mode}
-                    onChange={() => setAttributionMode(mode)}
-                  />
-                  {label}
-                </label>
-              </div>
-            ))}
-            {attributionMode === 'pseudonym' ? (
-              <input
-                aria-label="Name to credit"
-                type="text"
-                value={attributionName}
-                onChange={(e) => setAttributionName(e.target.value)}
-              />
-            ) : null}
-            <p className="field-note">You can change this later; it is a preference, not part of the agreement.</p>
-          </div>
-
           <button
             type="button"
             className="btn btn-primary"
             disabled={saving}
-            onClick={() =>
-              send({
-                termsVersion: CONTRIBUTOR_TERMS_VERSION,
-                openReleasePermitted: openRelease,
-                attributionMode,
-                attributionName: attributionMode === 'pseudonym' ? attributionName : null,
-              })
-            }
+            onClick={() => send({ termsVersion: CONTRIBUTOR_TERMS_VERSION })}
           >
             I agree
           </button>{' '}

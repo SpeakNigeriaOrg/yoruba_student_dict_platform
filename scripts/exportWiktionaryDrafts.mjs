@@ -53,11 +53,12 @@
 //                  from `o` + `ṣe`) is flagged rather than decomposed, because the
 //                  real relation there is a clipping and this schema cannot yet say
 //                  so - see the note at the bottom of this file.
-//   {{uxi}}        word_examples, live rows only, and ONLY where their AUTHOR's grant
-//                  permits open release. The sentence and its translation are that
+//   {{uxi}}        word_examples, live rows only, and ONLY where their AUTHOR agreed to
+//                  the contributor terms. The sentence and its translation are that
 //                  person's writing, not a fact about the word.
-//   {{audio}}      utterances, and ONLY from a speaker whose grant permits open
-//                  release (0019).
+//   {{audio}}      utterances, and ONLY from a speaker who agreed (0019). Its `a=` is an
+//                  ACCENT qualifier, so it carries speakers.dialect_region, never a
+//                  credit - Commons credits through the uploaded file's own metadata.
 //
 // Both rights checks report rather than filter: anything withheld is named per entry
 // with the state that withheld it, because a silently shorter draft looks finished.
@@ -216,8 +217,7 @@ async function loadExamples(pool) {
  * and why is the report's most actionable line, and a filtered query could not say it. */
 async function loadAudio(pool) {
   const { rows } = await pool.query(
-    `select u.word_id, r.speaker_id, r.display_name, r.release_state,
-            r.attribution_mode, r.attribution_name, r.attribution_required
+    `select u.word_id, r.speaker_id, r.display_name, r.release_state, r.dialect_region
        from utterances u
        join golden_record w on w.word_id = u.word_id
        join speaker_release_rights r on r.speaker_id = u.speaker_id
@@ -234,9 +234,7 @@ async function loadAudio(pool) {
       speakerId: row.speaker_id,
       speaker: row.display_name,
       releaseState: row.release_state,
-      attributionMode: row.attribution_mode,
-      attributionName: row.attribution_name,
-      attributionRequired: row.attribution_required,
+      dialectRegion: row.dialect_region,
     });
   }
   return byWord;
@@ -287,10 +285,10 @@ function buildDraft(entry, components, examples, audio) {
     }
   }
 
-  const permitted = audio.filter((a) => a.releaseState === 'open_permitted');
+  const permitted = audio.filter((a) => a.releaseState === 'agreed');
   for (const a of audio) {
-    if (a.releaseState !== 'open_permitted') {
-      notes.push(`audio by ${a.speaker} withheld: recording rights are '${a.releaseState}' (see 0019)`);
+    if (a.releaseState !== 'agreed') {
+      notes.push(`audio by ${a.speaker} withheld: contributor agreement is '${a.releaseState}' (see 0019)`);
     }
   }
   if (audio.length === 0) notes.push('no publishable recording of this word yet');
@@ -298,10 +296,10 @@ function buildDraft(entry, components, examples, audio) {
   // Written contributions gate on their author's grant for the same reason audio does:
   // the sentence and its translation are that person's writing, and this script would
   // publish them.
-  const publishableExamples = examples.filter((e) => e.releaseState === 'open_permitted');
+  const publishableExamples = examples.filter((e) => e.releaseState === 'agreed');
   for (const e of examples) {
-    if (e.releaseState !== 'open_permitted') {
-      notes.push(`example by ${e.author} withheld: contribution rights are '${e.releaseState}' (see 0019)`);
+    if (e.releaseState !== 'agreed') {
+      notes.push(`example by ${e.author} withheld: contributor agreement is '${e.releaseState}' (see 0019)`);
     }
   }
 
@@ -354,11 +352,14 @@ function buildDraft(entry, components, examples, audio) {
     lines.push('===Pronunciation===');
     if (!cited) lines.push('* {{yo-IPA}}');
     for (const a of permitted) {
-      const credit =
-        a.attributionRequired === false
-          ? ''
-          : `|a=${wikiArg(a.attributionMode === 'anonymous' ? 'Yoruba' : (a.attributionName ?? a.speaker))}`;
-      lines.push(`* {{audio|yo|${commonsAudioName(entry.display_text, a.speaker)}${credit}}}`);
+      // `a=` is an ACCENT qualifier, not a credit line - see Template:audio's own
+      // documentation. This used to put the speaker's name there, which would have
+      // labelled every recording as if the person's name were a dialect. Crediting on
+      // Commons is carried by the uploaded file's metadata, not by this template, so the
+      // right value here is the speaker's dialect region when we know it and nothing when
+      // we do not.
+      const accent = a.dialectRegion ? `|a=${wikiArg(a.dialectRegion)}` : '';
+      lines.push(`* {{audio|yo|${commonsAudioName(entry.display_text, a.speaker)}${accent}}}`);
     }
     lines.push('');
   }

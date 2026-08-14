@@ -51,13 +51,11 @@ describe('getGrantStatus', () => {
 });
 
 describe('recordContributorGrant', () => {
-  it('accepting covers open release and stops the app asking again', async () => {
+  it('accepting records the agreement and stops the app asking again', async () => {
     const status = await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
       termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: true,
-      attributionMode: 'real_name',
     });
-    expect(status.releaseState).toBe('open_permitted');
+    expect(status.releaseState).toBe('agreed');
     expect(status.acceptedVersion).toBe(CONTRIBUTOR_TERMS_VERSION);
     expect(status.needsAcceptance).toBe(false);
   });
@@ -68,7 +66,6 @@ describe('recordContributorGrant', () => {
     // still being right years later.
     await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
       termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: true,
     });
     const speaker = await pool.query<{ speaker_id: string; release_state: string }>(
       `select r.speaker_id, r.release_state
@@ -78,24 +75,13 @@ describe('recordContributorGrant', () => {
       [userId],
     );
     expect(speaker.rowCount).toBe(1);
-    expect(speaker.rows[0].release_state).toBe('open_permitted');
+    expect(speaker.rows[0].release_state).toBe('agreed');
 
     const row = await pool.query<{ speaker_id: string | null }>(
       'select speaker_id from contribution_grants where user_id = $1',
       [userId],
     );
     expect(row.rows[0].speaker_id).toBe(speaker.rows[0].speaker_id);
-  });
-
-  it('accepting the rest but not open release is internal_only, not a refusal', async () => {
-    // The terms promise this half can be answered separately, so it has to be a real,
-    // distinguishable outcome rather than collapsing into "declined".
-    const status = await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
-      termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: false,
-    });
-    expect(status.releaseState).toBe('internal_only');
-    expect(status.needsAcceptance).toBe(false);
   });
 
   it('declining is recorded as an answer, and is not asked again', async () => {
@@ -112,7 +98,6 @@ describe('recordContributorGrant', () => {
   it('a later answer supersedes an earlier one, without erasing it', async () => {
     await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
       termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: true,
     });
     const after = await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
       termsVersion: CONTRIBUTOR_TERMS_VERSION,
@@ -131,7 +116,6 @@ describe('recordContributorGrant', () => {
     await expect(
       recordContributorGrant(pool, userId, `${NS}A Teacher`, {
         termsVersion: 'contributor-terms-v0',
-        openReleasePermitted: true,
       }),
     ).rejects.toThrow(TermsVersionMismatchError);
     expect((await getGrantStatus(pool, userId)).releaseState).toBe('unknown');
@@ -147,30 +131,27 @@ describe('recordContributorGrant', () => {
     );
     await pool.query(
       `insert into contribution_grants
-         (user_id, speaker_id, instrument, instrument_ref, stated_on, rights_basis,
-          internal_use_permitted, open_release_permitted, attribution_required)
-       values ($1, $2, 'in_app_acceptance', 'contributor-terms-v0', current_date, 'assigned', true, true, true)`,
+         (user_id, speaker_id, instrument, instrument_ref, stated_on, agreed)
+       values ($1, $2, 'in_app_acceptance', 'contributor-terms-v0', current_date, true)`,
       [userId, speaker.rows[0].speaker_id],
     );
     const status = await getGrantStatus(pool, userId);
-    expect(status.releaseState).toBe('open_permitted');
+    // Still agreed - to something. The prompt returns because the VERSION differs, not
+    // because the agreement is missing, which is the distinction the whole mechanism rests
+    // on: their old answer stays valid for what it was an answer to.
+    expect(status.releaseState).toBe('agreed');
     expect(status.needsAcceptance).toBe(true);
   });
 
-  it('records the credit preference on the speaker, and anonymity means no attribution', async () => {
-    await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
-      termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: true,
-      attributionMode: 'anonymous',
-    });
-    const row = await pool.query<{ attribution_mode: string; attribution_name: string | null; attribution_required: boolean }>(
-      `select s.attribution_mode, s.attribution_name, g.attribution_required
-         from speakers s join contribution_grants g on g.speaker_id = s.speaker_id
-        where s.user_id = $1`,
-      [userId],
-    );
-    expect(row.rows[0].attribution_mode).toBe('anonymous');
-    expect(row.rows[0].attribution_name).toBeNull();
-    expect(row.rows[0].attribution_required).toBe(false);
+  it('refuses to record an agreement with no version attached', async () => {
+    // The constraint behind "asked once per version": a row claiming assent without saying
+    // to what would silence the prompt forever and record nothing anyone agreed to.
+    await expect(
+      pool.query(
+        `insert into contribution_grants (user_id, instrument, stated_on, agreed)
+         values ($1, 'in_app_acceptance', current_date, true)`,
+        [userId],
+      ),
+    ).rejects.toThrow(/contribution_grants_agreement_is_complete/);
   });
 });

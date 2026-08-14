@@ -89,15 +89,14 @@ export interface RecordGrantInput {
    * different page from the one now current - which is exactly what the version exists
    * to catch, so accepting it would defeat the mechanism. */
   termsVersion: string;
-  /** The open-release half is the one someone can answer separately (the terms say so),
-   * so it comes off the wire. Everything else about an acceptance is fixed by the
-   * wording they just read, and is therefore set here rather than trusted from a
-   * client that could claim any permission it liked. */
-  openReleasePermitted?: boolean;
-  attributionMode?: 'real_name' | 'pseudonym' | 'anonymous';
-  attributionName?: string | null;
   /** Present means declined. The reason is free text so someone can say why, but a
-   * blank one is still a valid answer - the fact of declining is the record. */
+   * blank one is still a valid answer - the fact of declining is the record.
+   *
+   * Absent means agreed, and there is nothing else to send: the agreement assigns
+   * everything, so what it permits is fixed by the wording someone just read rather than
+   * chosen per person. This used to carry an open-release flag and an attribution
+   * preference, which is a client claiming its own permissions - the narrower the wire
+   * shape, the less there is to trust. */
   declineReason?: string;
 }
 
@@ -135,28 +134,10 @@ export async function recordContributorGrant(
 
   await client.query(
     `insert into contribution_grants
-       (user_id, speaker_id, instrument, instrument_ref, stated_on, rights_basis,
-        internal_use_permitted, open_release_permitted, attribution_required, recorded_by)
-     values ($1, $2, 'in_app_acceptance', $3, current_date, 'assigned', true, $4, $5, $1)`,
-    [
-      userId,
-      speakerId,
-      CONTRIBUTOR_TERMS_VERSION,
-      input.openReleasePermitted ?? false,
-      // Attribution is required unless they asked to be anonymous. Derived from the
-      // choice rather than sent as its own flag, so the credit line and the preference
-      // cannot disagree about whether anyone needs crediting.
-      input.attributionMode !== 'anonymous',
-    ],
+       (user_id, speaker_id, instrument, instrument_ref, stated_on, agreed, recorded_by)
+     values ($1, $2, 'in_app_acceptance', $3, current_date, true, $1)`,
+    [userId, speakerId, CONTRIBUTOR_TERMS_VERSION],
   );
-
-  if (input.attributionMode) {
-    await client.query('update speakers set attribution_mode = $1, attribution_name = $2 where speaker_id = $3', [
-      input.attributionMode,
-      input.attributionMode === 'anonymous' ? null : (input.attributionName?.trim() || displayName),
-      speakerId,
-    ]);
-  }
 
   return getGrantStatus(client, userId);
 }

@@ -120,17 +120,6 @@ describe('requireUser and the contributor agreement', () => {
     await decline();
     await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
       termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: true,
-    });
-    await expect(requireUser(request('POST', EMAIL))).resolves.toMatchObject({ email: EMAIL });
-  });
-
-  it('does not block someone who agreed to everything except open release', async () => {
-    // 'internal_only' is a complete answer, and the material it produces is exactly what
-    // the engagement is for. Only a refusal blocks.
-    await recordContributorGrant(pool, userId, `${NS}A Teacher`, {
-      termsVersion: CONTRIBUTOR_TERMS_VERSION,
-      openReleasePermitted: false,
     });
     await expect(requireUser(request('POST', EMAIL))).resolves.toMatchObject({ email: EMAIL });
   });

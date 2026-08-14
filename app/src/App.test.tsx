@@ -198,13 +198,25 @@ describe('App - the contributor agreement is asked once', () => {
         }
         if (url.includes('/grants/me')) {
           if (init?.method === 'POST') {
-            post(JSON.parse(String(init.body)));
+            const body = JSON.parse(String(init.body));
+            post(body);
+            // Answers the way the server actually would, which matters here: a decline comes
+            // back with canContribute false, and the app is supposed to keep the screen up
+            // rather than open a queue whose every save would 403.
+            const declined = body.declineReason !== undefined;
             return Promise.resolve({
               ok: true,
-              json: async () => ({ releaseState: 'open_permitted', needsAcceptance: false }),
+              json: async () => ({
+                releaseState: declined ? 'declined' : 'agreed',
+                needsAcceptance: false,
+                canContribute: !declined,
+              }),
             });
           }
-          return Promise.resolve({ ok: true, json: async () => ({ releaseState: 'unknown', needsAcceptance }) });
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ releaseState: 'unknown', needsAcceptance, canContribute: true }),
+          });
         }
         if (url.includes('/assignments/me')) return Promise.resolve({ ok: true, json: async () => assignmentsFixture });
         return Promise.resolve({ ok: true, json: async () => ({}) });
@@ -237,14 +249,15 @@ describe('App - the contributor agreement is asked once', () => {
     await user.click(screen.getByRole('button', { name: 'I agree' }));
 
     await waitFor(() => screen.getByLabelText('Queue progress'));
-    expect(post).toHaveBeenCalledWith(
-      expect.objectContaining({ openReleasePermitted: true, attributionMode: 'real_name' }),
-    );
+    // The whole payload: which wording was on screen, and nothing else. An acceptance has no
+    // per-person permissions to carry, so there is nothing here for a client to assert.
+    expect(post).toHaveBeenCalledWith({ termsVersion: expect.any(String) });
   });
 
-  it('declining also opens the app - it is an answer, not a refusal to work', async () => {
-    // The property that makes this consent rather than coercion. A contributor who says
-    // no keeps working exactly as before; only external publication is affected.
+  it('declining records the answer and leaves contributions paused', async () => {
+    // Not "opens the app", which is what this asserted before declining began blocking
+    // writes. Letting someone through to a queue where every save 403s would be worse than
+    // saying so on this screen.
     const post = installGrantMock(true);
     const user = userEvent.setup();
     render(<App />);
@@ -253,23 +266,20 @@ describe('App - the contributor agreement is asked once', () => {
     await user.click(screen.getByRole('button', { name: 'I do not agree' }));
     await user.click(screen.getByRole('button', { name: /Confirm/ }));
 
-    await waitFor(() => screen.getByLabelText('Queue progress'));
+    await waitFor(() => expect(screen.getByLabelText('Contributions paused')).toBeInTheDocument());
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ declineReason: expect.any(String) }));
+    expect(screen.queryByLabelText('Queue progress')).not.toBeInTheDocument();
   });
 
-  it('lets someone accept the rest while refusing open release', async () => {
-    // The terms promise this half can be answered separately, so it has to be reachable
-    // without declining everything.
-    const post = installGrantMock(true);
-    const user = userEvent.setup();
+  it('shows the terms themselves, not just the buttons', async () => {
+    // The agreement is the point of the screen; a version that renders two buttons and no
+    // wording would still pass every other test here.
+    installGrantMock(true);
     render(<App />);
     await waitFor(() => screen.getByLabelText('Contributor agreement'));
-
-    await user.click(screen.getByRole('checkbox'));
-    await user.click(screen.getByRole('button', { name: 'I agree' }));
-
-    await waitFor(() => screen.getByLabelText('Queue progress'));
-    expect(post).toHaveBeenCalledWith(expect.objectContaining({ openReleasePermitted: false }));
+    const terms = screen.getByLabelText('Contributor agreement terms');
+    expect(terms).toHaveTextContent('transfer to Speak Nigeria');
+    expect(terms).toHaveTextContent('including but not limited to');
   });
 });
 
@@ -315,11 +325,11 @@ describe('App - a declined account cannot contribute', () => {
     expect(screen.queryByLabelText('Queue progress')).not.toBeInTheDocument();
   });
 
-  it('offers the way back, and says the earlier work is kept', async () => {
+  it('offers the way back', async () => {
     installDeclinedMock();
     render(<App />);
     await waitFor(() => screen.getByLabelText('Contributions paused'));
     expect(screen.getByRole('button', { name: 'I agree' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Contributions paused')).toHaveTextContent('still here');
+    expect(screen.getByLabelText('Contributions paused')).toHaveTextContent('turned off');
   });
 });

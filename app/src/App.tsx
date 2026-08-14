@@ -106,7 +106,6 @@ export default function App() {
         // declined, because every write endpoint now refuses it and there is no honest way
         // to present a queue of work that cannot be saved.
         <ContributorTerms
-          displayName={principal.userDetails}
           paused={paused}
           onAnswered={(grant) => {
             setNeedsTerms(false);

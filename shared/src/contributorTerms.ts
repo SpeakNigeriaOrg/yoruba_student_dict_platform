@@ -4,14 +4,44 @@
 // stamp that makes "one time" mean once.
 //
 // ---------------------------------------------------------------------------
-// THE WORDING BELOW IS A DRAFT AND HAS NOT BEEN THROUGH LEGAL REVIEW
+// Adapted from two established templates, and still not legal advice
 // ---------------------------------------------------------------------------
-// It is written to match the permissions 0019 actually records, so that what someone
-// reads and what the database stores are the same claim - which is the part that
-// software can get right. Whether an assignment is the correct instrument for paid
-// contractors in the relevant jurisdiction, and whether this phrasing achieves one,
-// is a question for Speak Nigeria's own advice. Replace the text, keep the shape, and
-// bump VERSION when you do.
+// The earlier draft here was written from scratch, which is the wrong way to resolve
+// legal doubt without a lawyer. This one is adapted from two documents that exist to
+// be reused:
+//
+//   Duke's basic oral history release
+//     https://sites.duke.edu/archivox/2015/01/29/oral-history-basic-release-template/
+//     Chosen for the domain fit - a person records their voice, an institution takes
+//     the rights - and for plain language aimed at people who are not lawyers. Its
+//     Option 2 is the operative model, including the licence BACK to the contributor:
+//     "I hereby transfer copyright to the Library, which grants me a non-exclusive
+//     license for the complete and unrestricted right to reproduce, publish,
+//     broadcast, transmit, perform or adapt the interview."
+//
+//   Project Harmony's individual contributor ASSIGNMENT agreement (HA-CAA-I)
+//     https://www.harmonyagreements.org/  (templates are CC-BY-3.0)
+//     Two ideas taken from it: the same licence back (its 2.1(d)), and the fallback in
+//     2.1(b-c) for jurisdictions that do not permit copyright to be assigned, where
+//     the agreement operates as an exclusive licence instead. That single sentence is
+//     the most valuable thing either template contributes, and it is the reason to
+//     start from one rather than from a blank page.
+//
+// It is still adapted rather than reviewed. Speak Nigeria's own advice governs.
+//
+// ---------------------------------------------------------------------------
+// Three drafting rules, each of which the first attempt broke
+// ---------------------------------------------------------------------------
+//   1. The verb list in point 2 is Duke's almost verbatim. An established template
+//      already solved "name the uses without naming a destination".
+//   2. "including but not limited to" in point 3 is load-bearing, not padding. An
+//      illustrative list needs an explicit non-exhaustive marker or ejusdem generis
+//      lets it be read as the LIMIT of the general phrase before it. The first draft
+//      named only Wikimedia Commons, which would have read as the boundary of what was
+//      agreed to; the courses and the games are neither of them Commons.
+//   3. No em dashes. They read as an aside, and these documents are written with
+//      commas, semicolons and parentheses. This file only - the repo's code comments
+//      keep their existing " - " house style.
 //
 // ---------------------------------------------------------------------------
 // Why the version is in the code and the acceptance is in the database
@@ -22,90 +52,63 @@
 //   the same wording, forever   asked once, at the first login after this shipped.
 //   the wording changes         VERSION changes, and everyone is asked once more.
 //
-// That second half is the honest part, and it is the reason the version is not just a
-// timestamp: consent to v1 is not consent to v2, and a re-ask is what a changed
-// agreement is owed. It also means editing this text WITHOUT bumping VERSION is a
-// real mistake - it silently attributes new wording to people who agreed to the old.
+// That second half is the honest part: consent to v1 is not consent to v2, and a
+// re-ask is what a changed agreement is owed.
 
 /** Bump on any substantive change to the wording below. Stored in
  * contribution_grants.instrument_ref, and compared against there - so it must be
  * stable, short, and never reused.
  *
- * The wording of the final point HAS changed once, without a bump, while v1 was still
- * unreleased: contributions from someone who declined are now refused, so the sentence
- * promising that declining changed nothing had become false, and a consent screen that
- * misstates the consequence is worse than no screen. Editing in place was safe for exactly
- * one reason - no grant row existed anywhere, in production or locally, so there was nobody
- * whose agreement could be misattributed. That stops being true the moment one person
- * accepts, after which this constant is the only honest way to change any of it. */
+ * Still v1 despite this file being rewritten, and safe for exactly one reason: no grant
+ * row exists anywhere. Production does not yet have the table, so there is nobody whose
+ * agreement could be misattributed to wording they never read. That stops being true the
+ * moment one person accepts, after which this constant is the only honest way to change
+ * any of the text below. */
 export const CONTRIBUTOR_TERMS_VERSION = 'contributor-terms-v1';
 
-export interface ContributorTermsPoint {
-  /** Which stored permission this sentence is the human-readable half of. Present so a
-   * reviewer can check the two against each other without reading the SQL, and so a
-   * point that corresponds to nothing recorded is visibly odd. */
-  records: string;
-  text: string;
-}
-
-/** What the agreement says, one point per thing the database will record.
+/** What the agreement says.
  *
- * Structured rather than one prose blob because the two have to stay in step: every
- * point below names the column it produces, and 0019 stores nothing this list does not
- * mention. Prose can drift from the schema silently; this cannot, without the drift
- * being visible on the line. */
-export const CONTRIBUTOR_TERMS: ContributorTermsPoint[] = [
-  {
-    records: 'rights_basis = assigned',
-    text:
-      'The recordings you make and the examples and translations you write through this platform are ' +
-      'work you are being paid for, and the rights in them are assigned to Speak Nigeria, a non-profit ' +
-      'organisation building Yoruba language resources.',
-  },
-  {
-    records: 'internal_use_permitted',
-    text:
-      'Speak Nigeria may use them in its own work indefinitely - in learning games, in classes, in the ' +
-      'dictionary itself, and in future projects of the same kind.',
-  },
-  {
-    records: 'open_release_permitted',
-    text:
-      'Speak Nigeria may also publish some of them for anyone to use, under an open licence that cannot ' +
-      'be withdrawn once given. The likely first case is contributing one recording per word to Wikimedia ' +
-      'Commons, so that Wiktionary entries for Yoruba words can be heard as well as read. You can say no ' +
-      'to this part and yes to the rest.',
-  },
-  {
-    records: 'attribution_required + speakers.attribution_mode',
-    text:
-      'If your work is published that way, you will be credited by the name you choose - your own name, ' +
-      'another name, or none. You can change that choice at any time.',
-  },
-  {
-    records: 'revoked_at',
-    text:
-      'You can withdraw this at any time. Withdrawing stops anything further being published, and applies ' +
-      'to all of your work, not only to what comes after. It cannot recall something already published ' +
-      'under an open licence, because an open licence given to the public cannot be taken back.',
-  },
-  {
-    records: 'no_grant_reason',
-    text:
-      'If you do not agree, you can still sign in and read the dictionary, but you will not be able to ' +
-      'record or submit work while that stands. You can change your answer at any time, and everything ' +
-      'you have already contributed is kept.',
-  },
+ * A plain list of sentences. It used to carry a `records` annotation per point, naming the
+ * column that point produced, so the text and the schema could be checked against each
+ * other. That was worth having when a contributor answered four separate permission
+ * questions; now that everything is assigned outright there is one boolean behind the whole
+ * list, and the annotation was describing a complexity that no longer exists. */
+export const CONTRIBUTOR_TERMS: string[] = [
+  'This agreement covers everything you record or write in this portal, including recordings, ' +
+    'example sentences, translations and definitions.',
+
+  'You transfer to Speak Nigeria, a non-profit organisation building Yoruba language resources, ' +
+    'the copyright in that material, together with permission to reproduce, publish, broadcast, ' +
+    'transmit, perform and adapt your voice in it.',
+
+  'Speak Nigeria may use that material for any purpose, including but not limited to its courses, ' +
+    'the learning games it builds, and freely licensed reference works such as Wiktionary. Speak ' +
+    'Nigeria may release it to the public under an open licence that anyone is free to reuse.',
+
+  'Speak Nigeria grants you a non-exclusive licence to use your own contributions for any purpose, ' +
+    'without restriction.',
+
+  'Where the law does not permit copyright to be transferred, this agreement operates instead as an ' +
+    'exclusive licence to Speak Nigeria for the full term of copyright.',
 ];
+
+/** Whether an account has to be asked. True when there is no grant, or when the one
+ * there is answered a different version of the wording.
+ *
+ * Exported rather than inlined at each call site because both sides ask it: the API
+ * reports it, and the app decides whether to interrupt on it, and the two disagreeing
+ * would mean a prompt that reappears forever or one that never appears at all. */
+export function needsContributorTerms(acceptedVersion: string | null | undefined): boolean {
+  return acceptedVersion !== CONTRIBUTOR_TERMS_VERSION;
+}
 
 /** The release states that stop someone contributing.
  *
  * Both are answers, and both say the same thing about publication - 'declined' before any
  * work, 'revoked' after some. Neither is 'unknown', which is deliberate and is the whole
- * reason this is a list rather than a `!== open_permitted` test: nobody who has simply not
- * been asked yet should be blocked from working, and that includes anyone whose grant
- * lookup failed. Nor is 'internal_only' - agreeing to everything except open publication is
- * a full answer, and the material it produces is exactly what the engagement is for.
+ * reason this is a list rather than a `!== agreed` test: nobody who has simply not been
+ * asked yet should be blocked from working, and that includes anyone whose grant lookup
+ * failed.
  */
 export const BLOCKING_RELEASE_STATES = ['declined', 'revoked'] as const;
 
@@ -117,14 +120,4 @@ export const BLOCKING_RELEASE_STATES = ['declined', 'revoked'] as const;
  * mismatch - a screen that lets you record and a server that will not keep it. */
 export function blocksContribution(releaseState: string | null | undefined): boolean {
   return (BLOCKING_RELEASE_STATES as readonly string[]).includes(releaseState ?? '');
-}
-
-/** Whether an account has to be asked. True when there is no grant, or when the one
- * there is answered a different version of the wording.
- *
- * Exported rather than inlined at each call site because both sides ask it: the API
- * reports it, and the app decides whether to interrupt on it, and the two disagreeing
- * would mean a prompt that reappears forever or one that never appears at all. */
-export function needsContributorTerms(acceptedVersion: string | null | undefined): boolean {
-  return acceptedVersion !== CONTRIBUTOR_TERMS_VERSION;
 }

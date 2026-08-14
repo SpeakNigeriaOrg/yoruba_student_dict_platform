@@ -84,9 +84,18 @@ update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';
 
 ## After 0019: the app asks, and nobody has been asked yet
 
-`0019_contribution_grants.sql` adds `contribution_grants`, the `grant_release_state` function, the
-`speaker_release_rights` and `contributor_release_rights` views, and two attribution columns on
-`speakers`. It backfills **nothing**, so every existing person reads as `release_state = 'unknown'`.
+`0019_contribution_grants.sql` adds `contribution_grants`, the `grant_release_state` function, and
+the `speaker_release_rights` and `contributor_release_rights` views. It backfills **nothing**, so
+every existing person reads as `release_state = 'unknown'`.
+
+A grant records four things: who, which version of the wording, when, and whether they agreed. It
+carried more when first written - separate internal-use and open-release permissions, whether the
+instrument assigned or licensed, and an attribution preference on `speakers` - and all of that came
+out before it was ever applied anywhere. The terms
+(`shared/src/contributorTerms.ts`) assign the copyright in everything created in the portal to Speak
+Nigeria outright, so there is no per-person permission left to answer, and Wikimedia Commons carries
+crediting in the uploaded file's own metadata rather than in anything here. Columns with one possible
+value are furniture, not optionality.
 
 That is not a gap to close in SQL, and mostly it closes itself: the app now asks once, after login
 (`app/src/screens/ContributorTerms.tsx`, `POST /api/grants/me`), and records the answer against both
@@ -114,7 +123,7 @@ Three things follow, all deliberate:
   written later. `unknown` deliberately does **not** block: someone nobody has asked yet is not
   someone who said no, and neither is someone whose grant lookup just failed.
 - **External release is gated.** `scripts/exportWiktionaryDrafts.mjs` emits an `{{audio}}` line only
-  for a speaker whose `release_state` is `open_permitted`, and a `{{uxi}}` example only where its
+  for a speaker whose `release_state` is `agreed`, and a `{{uxi}}` example only where its
   **author's** is - example text and translations are volunteer writing, and the export publishes
   them. Everything withheld is named per entry with the state that withheld it.
 

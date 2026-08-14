@@ -764,7 +764,7 @@ export function base64ToAudioUrl(base64: string, mimeType = 'audio/wav'): string
 // Mirrors api/src/handlers/contributionGrants.ts's GrantStatus - what this account has
 // agreed to about its own contributions, and whether the app should ask.
 export interface GrantStatus {
-  releaseState: 'unknown' | 'declined' | 'revoked' | 'internal_only' | 'open_permitted';
+  releaseState: 'unknown' | 'declined' | 'revoked' | 'agreed';
   acceptedVersion: string | null;
   currentVersion: string;
   needsAcceptance: boolean;
@@ -779,9 +779,9 @@ export function getMyGrant(): Promise<GrantStatus> {
 
 export interface RecordGrantInput {
   termsVersion: string;
-  openReleasePermitted?: boolean;
-  attributionMode?: 'real_name' | 'pseudonym' | 'anonymous';
-  attributionName?: string | null;
+  /** Present means declined; absent means agreed. An acceptance carries nothing else,
+   * because the agreement assigns everything and there is no per-person permission to
+   * assert. */
   declineReason?: string;
 }
 
