@@ -48,7 +48,6 @@
 import { useEffect, useState } from 'react';
 import {
   classifyToneMatch,
-  isMultiWord,
   syllabifySpans,
   type KaikkiSearchResult,
 } from '@yoruba-student-dict-platform/shared';
@@ -200,15 +199,25 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         // contains a word whose two disagree (agunfon_giraffe, 'àgùnfon' vs
         // ['à','gùn','fọn']), and seeding from the column would silently apply that
         // discrepancy to whatever the reviewer submitted.
-        // A phrase takes the composer, a single word the syllable row. Keyed on the
-        // SPELLING rather than on entry_type, because what the syllabifier chokes on is the
-        // space - and a word_id typed as a phrase whose spelling is one word still has a
-        // usable syllable row, while an ordinary word that turned out to be two words does
-        // not. isMultiWord is the same test the Add Word screen routes on.
-        if (isMultiWord(result.displayText)) {
+        // Routed on what the tone grid can actually take, not on how many words this is.
+        //
+        // Three cases, in order of how much can be edited:
+        //
+        //   syllabifySpans represents the WHOLE spelling   -> the syllable row.
+        //   it cannot, but the pieces between separators
+        //   can be represented                             -> the composer, one grid per piece.
+        //   nothing can be represented                     -> read-only.
+        //
+        // One predicate covering the space and the hyphen together, where the isMultiWord test
+        // it replaces covered only the space - leaving every hyphenated entry (`ilé-ìwé`,
+        // `aárùn-ún`) on a branch that says a curator must fix it. The last case is still real
+        // and still refuses: an Ajami spelling like `شعِ` has no syllable model at all, and a
+        // text box with no grids would let it be silently mangled.
+        const spans = syllabifySpans(result.displayText);
+        if (spans) {
+          setSyllables(spans);
+        } else if (splitPhrase(result.displayText).words.some((w) => w.syllables !== null)) {
           setPhraseText(result.displayText);
-        } else {
-          setSyllables(syllabifySpans(result.displayText));
         }
         setDefinitionText(result.definitionCurrent ?? result.definitionProposed ?? '');
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);

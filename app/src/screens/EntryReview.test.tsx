@@ -778,9 +778,75 @@ describe('a phrase can be respelled here, because nothing else can respell it', 
   });
 
   it('still refuses a single word the syllabifier cannot represent', async () => {
-    // The read-only branch is not gone, it is just no longer where phrases land. A
-    // hyphenated or Ajami single word still cannot be edited safely here.
-    mockFetch({ ...entryFixture, displayText: 'gan-an', matchedForm: 'gan-an', canonicalForm: 'gan-an' });
+    // The read-only branch is not gone, it is just no longer where phrases land. This used to
+    // use `gan-an`, which now splits on its hyphen and gets the composer - so the example has to
+    // be a form with no syllable model at all, and `شعِ` is a real corpus alternate of `ṣe`.
+    mockFetch({ ...entryFixture, displayText: 'شعِ', matchedForm: 'شعِ', canonicalForm: 'شعِ' });
+    render(<EntryReview wordId="w" isCurator />);
+    await waitFor(() => expect(screen.getByText(/can only be changed by a curator/)).toBeInTheDocument());
+    expect(screen.queryByLabelText('Phrase composer')).not.toBeInTheDocument();
+  });
+});
+
+describe('a hyphenated entry is editable, and its hyphen is a separator', () => {
+  // Hyphenated forms used to share the phrase dead end: syllabifySpans refuses anything with a
+  // hyphen, so `ilé-ìwé` and `aárùn-ún` landed on the read-only branch that says a curator must
+  // fix it. The composer handles them for the same reason it handles a phrase - the pieces
+  // between separators are what a tone grid can work on.
+  function hyphenated(displayText: string, syllables: string[]) {
+    return {
+      ...entryFixture,
+      displayText,
+      matchedForm: displayText,
+      canonicalForm: displayText,
+      adoptionTarget: displayText,
+      syllables,
+      syllableSplitStatus: 'match',
+    };
+  }
+
+  async function loadedWith(fixture: unknown) {
+    const fetchMock = mockFetch(fixture);
+    render(<EntryReview wordId="w" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Phrase composer')).toBeInTheDocument());
+    return fetchMock;
+  }
+
+  it('offers the composer for a compound, one grid per hyphen-part', async () => {
+    // `ilé-ìwé` ("school") is ilé + ìwé: the hyphen joins two words.
+    await loadedWith(hyphenated('ilé-ìwé', ['i', 'lé', 'ì', 'wé']));
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('ilé-ìwé');
+    expect(screen.getByLabelText('Tone of syllable 2 of word 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tone of syllable 2 of word 2')).toBeInTheDocument();
+  });
+
+  it('offers it for an elongated nasal too, where the hyphen is phonological', async () => {
+    // `aárùn-ún` is ONE word; the hyphen says where the nasal attaches. Same editing need,
+    // different linguistic fact, and the screen does not have to know which.
+    await loadedWith(hyphenated('aárùn-ún', ['a', 'á', 'rùn', 'ún']));
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('aárùn-ún');
+  });
+
+  it('round-trips the hyphen into the respelling', async () => {
+    const fetchMock = await loadedWith(hyphenated('ile-iwe', ['i', 'le', 'i', 'we']));
+    const user = userEvent.setup();
+    const field = screen.getByLabelText('The phrase, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'ilé-ìwé');
+    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+    const body = postedBody(fetchMock);
+    expect(body.newDisplayText).toBe('ilé-ìwé');
+    // The hyphen is in the spelling and in none of the syllables. The server's respell check
+    // strips separators from the spelling before comparing, for exactly this shape.
+    expect(body.newSyllables).toEqual(['i', 'lé', 'ì', 'wé']);
+  });
+
+  it('leaves a form with no syllable model at all on the read-only branch', async () => {
+    // `شعِ` is a real corpus alternate spelling of `ṣe`. No piece of it can be represented, so a
+    // text box would only let it be mangled.
+    mockFetch(hyphenated('شعِ', ['شعِ']));
     render(<EntryReview wordId="w" isCurator />);
     await waitFor(() => expect(screen.getByText(/can only be changed by a curator/)).toBeInTheDocument());
     expect(screen.queryByLabelText('Phrase composer')).not.toBeInTheDocument();

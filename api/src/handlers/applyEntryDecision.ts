@@ -139,14 +139,19 @@ export function validateEntryDecisionInput(input: ApplyEntryDecisionInput): void
     // create another. Compared NFC-normalized and case-insensitively, since the
     // syllabifier lowercases and a proper noun keeps its capital in display_text.
     //
-    // Whitespace is stripped from the spelling before comparing, because a space is
-    // orthography and a syllable is a tone-bearing unit - `fi sílẹ̀` is three syllables,
-    // ['fi','sí','lẹ̀'], and no space belongs in any of them. This is how createPhrase
-    // has always stored a phrase (see the syllables column for any existing phrase), so
-    // without it the check refused every phrase respelling and a phrase's spelling could
-    // not be corrected at all once created.
+    // SEPARATORS are stripped from the spelling before comparing - whitespace and hyphens
+    // both - because a separator is orthography and a syllable is a tone-bearing unit.
+    // `fi sílẹ̀` is three syllables, ['fi','sí','lẹ̀'], and `ilé-ìwé` is four,
+    // ['i','lé','ì','wé']; no space and no hyphen belongs inside any of them. This is how
+    // createPhrase has always stored a phrase, and it is what app/src/screens/phraseWords.ts
+    // treats as a separator, so the two agree by construction.
+    //
+    // Without the whitespace half, a phrase's spelling could not be corrected at all once
+    // created. Without the hyphen half, `ilé-ìwé` and `aárùn-ún` could not either - and the
+    // hyphenated form is the LEMMA for an elongated nasal under Wiktionary's Yoruba policy,
+    // so refusing it would refuse the spelling we most want to be able to record.
     const joined = input.newSyllables.join('').normalize('NFC').toLowerCase();
-    const whole = input.newDisplayText.replace(/\s+/g, '').normalize('NFC').toLowerCase();
+    const whole = input.newDisplayText.replace(/[\s-]+/g, '').normalize('NFC').toLowerCase();
     if (joined !== whole) throw new RespellMismatchError(input.newDisplayText, input.newSyllables.join(''));
   }
   if (input.definitionAction === 'custom' && !input.definitionText) throw new MissingDefinitionTextError();

@@ -348,8 +348,47 @@ could change an existing phrase's spelling, and the entry axis could not take ov
 - `validateEntryDecisionInput`'s respell check compared `newSyllables.join('')` against the whole
   spelling, so every phrase failed it: `fi sílẹ̀` is `['fi','sí','lẹ̀']`, which joins to `fisílẹ̀`.
   That is a space, not a disagreement — a space is orthography and a syllable is a tone-bearing unit,
-  which is how `createPhrase` has always stored a phrase. Whitespace is now stripped from the
+  which is how `createPhrase` has always stored a phrase. **Separators** are now stripped from the
   spelling before comparing, and the check still catches a real mismatch.
+
+### A hyphen is a separator too, and a phrase must have parts
+
+Two follow-ons, both narrowing the gap between a word and a phrase rather than widening it.
+
+**A hyphen behaves like a space** wherever a spelling is split into tone-editable pieces
+(`splitPhrase`, `checkPhraseSpelling`, the respell check). Not because the two mean the same thing —
+a hyphen either joins words into a compound (`ilé-ìwé`) or marks an elongated nasal (`aárùn-ún`),
+and only a human can say which — but because both are orthography between tone-bearing units, and
+both make `syllabifySpans` refuse the whole string. Splitting on it is load-bearing rather than
+cosmetic: `aárùn-ún` split on its hyphen gives `a·á·rùn·ún` where the unhyphenated `aárùnún` gives
+`a·á·rù·nún`, so the hyphen is what says where the nasal attaches — which is why Wiktionary's Yoruba
+policy lemmatises the hyphenated form. `EntryReview` now routes on whether `syllabifySpans` can take
+the whole spelling rather than on how many words it is, so both hyphen cases get the composer and
+only a genuinely unrepresentable form (Ajami) stays read-only.
+
+Which of the two rules applies needs no new schema: a compound has components, an elongated nasal
+does not. `phraseTokens`/`isMultiWord` deliberately still split on whitespace only — a hyphenated
+form is one orthographic word and one page title, which is what routes Add Word versus Add Phrase.
+
+**A phrase's composition is required**, enforced on every write path rather than in the UI alone
+(`PhraseNeedsComponentsError`). A phrase is composed of words by definition, so `confirm_atomic` on
+one — or any decision leaving it with zero components — is a record contradicting itself.
+`EntryReview` already hid the button; the server accepted it from anyone, which is the advisory-check
+shape `0017` exists to remove. No database trigger: Postgres cannot express "at least one child row",
+this repo has none, and `applyEtymologyDecision` legitimately deletes every component row and
+reinserts, so a row trigger would fire mid-edit on a valid operation. Note this is *not* a claim that
+only phrases have components — a hyphenated compound has them too.
+
+### Two kinds of name
+
+`word_id` is the machine-facing name and the spelling is the human-facing one, and confusing them is
+how a combining tone mark ends up in somebody else's filesystem. `assertWordIdShape`
+(`handlers/wordIdShape.ts`) makes `^[a-z0-9_]+$` a rule at creation rather than a convention — it was
+already true of all 106 production ids, because `AddWord` derives them through
+`orthographyInsensitiveForm`, but nothing enforced it. Everything external is built from the id:
+R2 keys, game assets, Commons filenames. The spelling, with its underdots and hyphens, goes in
+`display_text` and in `wiktionaryPageTitle` output, which is the one place those characters are
+*required*.
 
 `getEtymologyReview` also reports `entryType`, because the screen has to ask a phrase a different
 question, and it no longer returns `usedInProposal`/`usedAsComponentOf` - nothing on that screen could

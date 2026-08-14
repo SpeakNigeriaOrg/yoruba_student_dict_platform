@@ -35,8 +35,27 @@
 // A curator seeing "this is not its parts joined" either knows why or has just caught
 // their own mistake.
 
-import { phraseTokens } from './phraseTokens.js';
 import { formsEqualKey } from './toneMatching.js';
+
+/** The pieces of a spelling for comparison purposes: separated by whitespace OR by a hyphen.
+ *
+ * Deliberately NOT phraseTokens, which splits on whitespace only. That function answers "did a
+ * human write this as separate words", which decides whether something is a phrase and what its
+ * page title is, and a hyphenated compound is one word by both of those measures. This one
+ * answers a different question - "which pieces should line up against which components" - and
+ * there a hyphen behaves exactly like a space.
+ *
+ * The difference is the whole reason both exist. `ilé-ìwé` built from `ilé` + `ìwé` is an
+ * ordinary compound and must NOT be reported as a spelling its parts cannot produce, or the
+ * warning fires on every compound in the dictionary and stops being read. `muti` from `mu` +
+ * `ọtí` still reports, correctly: that one really is a contraction. */
+function comparablePieces(text: string): string[] {
+  return text
+    .trim()
+    .split(/[\s-]+/)
+    .filter((piece) => piece !== '')
+    .map((piece) => piece.normalize('NFC'));
+}
 
 export interface PhraseSpellingCheck {
   /** True when the authored spelling is exactly the components joined by single spaces. */
@@ -57,8 +76,8 @@ export interface PhraseSpellingCheck {
  * Tone marks and underdots are NOT normalised away - they are the whole point, since a
  * tone difference between `ṣe` and `ṣé` is exactly the fact worth reporting. */
 export function checkPhraseSpelling(displayText: string, componentSpellings: string[]): PhraseSpellingCheck {
-  const authored = phraseTokens(displayText);
-  const parts = componentSpellings.flatMap((spelling) => phraseTokens(spelling));
+  const authored = comparablePieces(displayText);
+  const parts = componentSpellings.flatMap((spelling) => comparablePieces(spelling));
   const joined = parts.join(' ');
 
   const words: PhraseSpellingCheck['words'] = [];

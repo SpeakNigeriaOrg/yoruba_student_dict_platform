@@ -207,9 +207,23 @@ describe('writing it without a Yoruba keyboard', () => {
     const user = userEvent.setup();
     await loaded();
     await user.click(screen.getByRole('button', { name: /A short phrase using it/ }));
-    await user.type(screen.getByLabelText(/in Yoruba/), 'gan-an');
+    // `شعِ` rather than `gan-an`: the splitter now treats a hyphen as a separator, so `gan-an`
+    // is two tone-editable pieces and no longer unsupported. An Ajami spelling still is.
+    await user.type(screen.getByLabelText(/in Yoruba/), 'شعِ');
 
     expect(screen.getByLabelText('Unsupported words')).toBeInTheDocument();
+  });
+
+  it('gives a hyphenated word a grid per part instead of refusing it', async () => {
+    // The improvement that came with it: a hyphenated word in an example sentence used to get no
+    // tone grid at all, because the whole word refused.
+    const user = userEvent.setup();
+    await loaded();
+    await user.click(screen.getByRole('button', { name: /A short phrase using it/ }));
+    await user.type(screen.getByLabelText(/in Yoruba/), 'gan-an');
+
+    expect(screen.queryByLabelText('Unsupported words')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Tone of syllable 1 of word 2')).toBeInTheDocument();
   });
 });
 

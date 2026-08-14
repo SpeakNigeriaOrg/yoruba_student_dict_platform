@@ -11,7 +11,11 @@ import {
   ContributionNotFoundError,
   LegacyAxisNotApprovableError,
 } from '../handlers/approveContribution.js';
-import { ComponentsNotFoundError, ComponentsRequiredError } from '../handlers/applyEtymologyDecision.js';
+import {
+  ComponentsNotFoundError,
+  ComponentsRequiredError,
+  PhraseNeedsComponentsError,
+} from '../handlers/applyEtymologyDecision.js';
 import {
   IncompleteEntryDecisionError,
   KaikkiVerificationMismatchError,
@@ -41,6 +45,7 @@ export async function approveContributionFunction(
       err instanceof MissingDefinitionTextError ||
       err instanceof ComponentsRequiredError ||
       err instanceof ComponentsNotFoundError ||
+      err instanceof PhraseNeedsComponentsError ||
       err instanceof NewDisplayTextRequiredError ||
       err instanceof IncompleteEntryDecisionError ||
       err instanceof KaikkiVerificationMismatchError ||

@@ -17,6 +17,7 @@ import {
   applyEtymologyDecision,
   ComponentsNotFoundError,
   ComponentsRequiredError,
+  PhraseNeedsComponentsError,
 } from '../handlers/applyEtymologyDecision.js';
 import {
   applyEntryDecision,
@@ -60,6 +61,7 @@ export async function decisionsFunction(request: HttpRequest, _context: Invocati
       err instanceof MissingDefinitionTextError ||
       err instanceof ComponentsRequiredError ||
       err instanceof ComponentsNotFoundError ||
+      err instanceof PhraseNeedsComponentsError ||
       err instanceof NewDisplayTextRequiredError ||
       err instanceof IncompleteEntryDecisionError ||
       err instanceof KaikkiVerificationMismatchError

@@ -1,10 +1,10 @@
 // screens/phraseWords.ts
 //
-// Splitting an authored phrase into tone-editable pieces.
+// Splitting an authored spelling into tone-editable pieces.
 //
-// A phrase is not a word, and syllabifySpans deliberately refuses anything it cannot
-// reproduce exactly - which includes every space, full stop and hyphen. So a phrase is
-// handled word by word, and each word is handled in three parts:
+// syllabifySpans deliberately refuses anything it cannot reproduce exactly - which includes
+// every space, full stop and hyphen. So a spelling is handled piece by piece, and each piece
+// is handled in three parts:
 //
 //     Ọ̀pọ̀lọ́   ń   fò.
 //                    ^^ ^   core `fò`, trailing `.`
@@ -13,10 +13,37 @@
 // people write full stops. Without it `fò.` would refuse and lose its tone grid - the one
 // word in the phrase most likely to carry a meaningful tone.
 //
-// If the core still refuses after peeling (an Ajami spelling, a hyphenated form like
-// `gan-an`), that word's typed text stands VERBATIM and simply gets no grid. The composed
-// phrase is therefore always exactly what the contributor can see, never a lossy
-// re-rendering of it.
+// If the core still refuses after peeling (an Ajami spelling), that piece's typed text stands
+// VERBATIM and simply gets no grid. The composed spelling is therefore always exactly what the
+// contributor can see, never a lossy re-rendering of it.
+//
+// ---------------------------------------------------------------------------
+// A HYPHEN is a separator here, exactly like a space
+// ---------------------------------------------------------------------------
+// Not because the two mean the same thing - they do not - but because both are orthography
+// sitting between tone-bearing units, and both make syllabifySpans refuse the whole string. A
+// hyphen has two equally valid uses in Yoruba and this splitter serves both without needing to
+// know which it is looking at:
+//
+//   compound          `ilé-ìwé` joins two words. The entry has components.
+//   elongated nasal   `aárùn-ún` is one word; the hyphen is phonological. No components.
+//
+// Splitting on it is not cosmetic. The hyphen carries syllabification information that is
+// otherwise ambiguous, which is why Wiktionary's Yoruba policy lemmatises the hyphenated form:
+//
+//   aárùn-ún   split on the hyphen  ->  a · á · rùn · ún
+//   aárùnún    as one word          ->  a · á · rù · nún
+//
+// Different nasal attachment, and the hyphenated form is the one that says which. That is the
+// same ambiguity 0016 exists to check against Wiktionary's IPA, so honouring the hyphen makes
+// our split agree with the lemma instead of guessing.
+//
+// Measured before relying on it: 177 of 6,272 corpus headwords contain a hyphen, and 33 of
+// those contain a space as well - so the two have to be handled together, not either/or.
+//
+// A trailing hyphen (a bound affix like `oní-`) yields an empty final piece. It gets no grid
+// and contributes no syllables, and joinPhrase renders it as the empty string, so the hyphen
+// still round-trips.
 
 import { syllabifySpans } from '@yoruba-student-dict-platform/shared';
 
@@ -27,6 +54,9 @@ import { syllabifySpans } from '@yoruba-student-dict-platform/shared';
  * punctuation fails visibly instead, by leaving the word verbatim. */
 const PEELABLE = new Set(['.', ',', '!', '?', ';', ':', '"', "'", '(', ')', '’', '“', '”']);
 
+/** One piece of a spelling: what lies between two separators, or the whole thing when there are
+ * none. Still called a "word" because that is what it usually is - the hyphen cases are the
+ * exception, and renaming the type would touch every caller for no gain in clarity. */
 export interface PhraseWord {
   /** Everything before the syllabifiable core - usually empty, an opening quote at most. */
   leading: string;
@@ -50,10 +80,11 @@ function peel(word: string): { leading: string; core: string; trailing: string }
   };
 }
 
-/** Splits on runs of whitespace, keeping the separators so the phrase can be rebuilt with
- * the contributor's own spacing rather than a normalised single space. */
+/** Splits on runs of whitespace AND on hyphens, keeping the separators so the spelling can be
+ * rebuilt with the contributor's own spacing and their own hyphens rather than a normalised
+ * guess at either. See the header for why a hyphen belongs in the same rule as a space. */
 export function splitPhrase(phrase: string): { words: PhraseWord[]; separators: string[] } {
-  const pieces = phrase.split(/(\s+)/);
+  const pieces = phrase.split(/(\s+|-)/);
   const words: PhraseWord[] = [];
   const separators: string[] = [];
 

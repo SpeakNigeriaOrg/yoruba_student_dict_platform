@@ -44,6 +44,31 @@ export class ComponentsNotFoundError extends Error {
   }
 }
 
+/** A phrase's composition is a fact about it, not an optional annotation.
+ *
+ * A word and a phrase are the same kind of thing - a spelling, plus the possibility of an
+ * etymology. What makes something a phrase is that its etymology is already KNOWN: it is these
+ * words, in this order. So a phrase with no components is not an entry awaiting review, it is a
+ * record contradicting itself.
+ *
+ * createPhrase has always refused an empty list, and EtymologyReview has always hidden the "It
+ * has no parts" button for a phrase - but the server accepted confirm_atomic from anyone who
+ * asked, so the rule lived entirely in a screen. That is the shape of advisory check 0017 was
+ * written to remove: a read-then-write with nothing behind it is a convention, not an invariant.
+ *
+ * Note what this is NOT: a claim that only phrases have components. A hyphenated compound
+ * (`ilé-ìwé` from `ilé` + `ìwé`) has them too, and none of the 103 ordinary words in production
+ * records any yet. The rule is that a phrase must have them. */
+export class PhraseNeedsComponentsError extends Error {
+  constructor(public readonly wordId: string) {
+    super(
+      `'${wordId}' is a phrase, so it is composed of words by definition and cannot be recorded ` +
+        `as having no parts - name the words it is made of, in order`,
+    );
+    this.name = 'PhraseNeedsComponentsError';
+  }
+}
+
 // Only these two actions replace golden_record_components' content - the
 // other three (confirm_atomic/confirm_existing/reject_proposed) leave
 // whatever's currently there untouched and just record the review.
@@ -71,10 +96,14 @@ export async function applyEtymologyDecisionInTransaction(
   input: ApplyEtymologyDecisionInput,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
+  const existing = await client.query<{ entry_type: 'phrase' | null }>(
+    'select entry_type from golden_record where word_id = $1',
+    [wordId],
+  );
   if ((existing.rowCount ?? 0) === 0) {
     throw new WordNotFoundError(wordId);
   }
+  const isPhrase = existing.rows[0].entry_type === 'phrase';
 
   // Read before any write below, so the fingerprint at the end describes the
   // state this decision was made against - the same freeze-at-observation rule
@@ -84,6 +113,17 @@ export async function applyEtymologyDecisionInTransaction(
     [wordId],
   );
   const observedComponents = observed.rows.map((r) => r.component_word_id);
+
+  // Checked against the OUTCOME rather than against the action, so it cannot be reached by a
+  // route nobody thought of. confirm_atomic is the obvious way to empty a phrase; confirming or
+  // rejecting on a phrase that already has none is the way that does it without saying so, and
+  // that is the state `ẹ jọ̀ọ́` is in today.
+  const resultingComponents = CONTENT_CHANGING_ACTIONS.has(input.componentsAction)
+    ? (input.components ?? [])
+    : observedComponents;
+  if (isPhrase && (input.componentsAction === 'confirm_atomic' || resultingComponents.length === 0)) {
+    throw new PhraseNeedsComponentsError(wordId);
+  }
 
   if (CONTENT_CHANGING_ACTIONS.has(input.componentsAction)) {
     const components = input.components ?? [];
@@ -156,9 +196,19 @@ export async function applyEtymologyOutcomeInTransaction(
   note: string | null,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query('select 1 from golden_record where word_id = $1', [wordId]);
+  const existing = await client.query<{ entry_type: 'phrase' | null }>(
+    'select entry_type from golden_record where word_id = $1',
+    [wordId],
+  );
   if ((existing.rowCount ?? 0) === 0) {
     throw new WordNotFoundError(wordId);
+  }
+
+  // Both write paths, or the rule holds only for whoever came through the front door. A
+  // consensus that agreed a phrase has no parts agreed to something that cannot be true, and
+  // this path writes the component list directly.
+  if (existing.rows[0].entry_type === 'phrase' && (outcome.atomic || outcome.components.length === 0)) {
+    throw new PhraseNeedsComponentsError(wordId);
   }
 
   // Same existence check the action path applies - a consensus can still name a

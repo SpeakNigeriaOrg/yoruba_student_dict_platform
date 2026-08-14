@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
-import { applyEtymologyDecision, ComponentsNotFoundError, ComponentsRequiredError } from './applyEtymologyDecision.js';
+import {
+  applyEtymologyDecision,
+  applyEtymologyOutcomeInTransaction,
+  ComponentsNotFoundError,
+  ComponentsRequiredError,
+  PhraseNeedsComponentsError,
+} from './applyEtymologyDecision.js';
 import { WordNotFoundError } from './errors.js';
 
 const NS = 'testety_';
@@ -227,5 +233,102 @@ describe('applyEtymologyDecision', () => {
     await expect(
       applyEtymologyDecision(pool, `${NS}nonexistent_word`, { componentsAction: 'confirm_atomic' }, curatorUserId),
     ).rejects.toThrow(WordNotFoundError);
+  });
+});
+
+describe("a phrase's composition is required, on every path", () => {
+  // A word and a phrase are the same kind of thing - a spelling plus the possibility of an
+  // etymology. What makes something a phrase is that its etymology is already KNOWN, so a
+  // phrase with no components is a record contradicting itself rather than one awaiting review.
+  //
+  // The rule lived only in the UI (EntryReview hides "It has no parts" for a phrase) while the
+  // server accepted confirm_atomic from anyone. That is the advisory-check shape 0017 removed.
+  async function phraseWith(wordId: string, componentIds: string[]) {
+    await pool.query(
+      "insert into golden_record (word_id, display_text, syllables, entry_type) values ($1, 'x y', array['x','y'], 'phrase')",
+      [wordId],
+    );
+    for (const [position, componentWordId] of componentIds.entries()) {
+      await pool.query(
+        'insert into golden_record_components (word_id, component_position, component_word_id) values ($1, $2, $3)',
+        [wordId, position, componentWordId],
+      );
+    }
+  }
+
+  it('refuses confirm_atomic on a phrase', async () => {
+    const phrase = `${NS}atomic_phrase`;
+    await phraseWith(phrase, [`${NS}comp_a`, `${NS}comp_b`]);
+    await expect(
+      applyEtymologyDecision(pool, phrase, { componentsAction: 'confirm_atomic' }, curatorUserId),
+    ).rejects.toThrow(PhraseNeedsComponentsError);
+    // And it changed nothing: the components it already had are still there.
+    const rows = await pool.query('select 1 from golden_record_components where word_id = $1', [phrase]);
+    expect(rows.rowCount).toBe(2);
+  });
+
+  it('refuses confirming a phrase that has no components yet', async () => {
+    // The route that empties a phrase without saying so, and the state `ẹ jọ̀ọ́` is in today:
+    // confirm_existing on zero components asserts zero components are correct.
+    const phrase = `${NS}confirm_empty_phrase`;
+    await phraseWith(phrase, []);
+    await expect(
+      applyEtymologyDecision(pool, phrase, { componentsAction: 'confirm_existing' }, curatorUserId),
+    ).rejects.toThrow(PhraseNeedsComponentsError);
+    const decision = await pool.query('select 1 from word_decisions where word_id = $1', [phrase]);
+    expect(decision.rowCount).toBe(0);
+  });
+
+  it('refuses a custom decision that empties a phrase', async () => {
+    const phrase = `${NS}empty_custom_phrase`;
+    await phraseWith(phrase, [`${NS}comp_a`]);
+    await expect(
+      applyEtymologyDecision(pool, phrase, { componentsAction: 'custom', components: [] }, curatorUserId),
+    ).rejects.toThrow(ComponentsRequiredError);
+  });
+
+  it('refuses a consensus outcome that leaves a phrase atomic', async () => {
+    // Both write paths, or the rule holds only for whoever came through the front door.
+    const phrase = `${NS}consensus_phrase`;
+    await phraseWith(phrase, [`${NS}comp_a`, `${NS}comp_b`]);
+    await expect(
+      applyEtymologyOutcomeInTransaction(
+        pool,
+        phrase,
+        { kind: 'etymology', components: [], atomic: true },
+        null,
+        curatorUserId,
+      ),
+    ).rejects.toThrow(PhraseNeedsComponentsError);
+  });
+
+  it('still lets a phrase change WHICH words it is made of', async () => {
+    // The rule is "a phrase has parts", not "a phrase's parts are frozen".
+    const phrase = `${NS}recompose_phrase`;
+    await phraseWith(phrase, [`${NS}comp_a`]);
+    await applyEtymologyDecision(
+      pool,
+      phrase,
+      { componentsAction: 'custom', components: [`${NS}comp_b`, `${NS}comp_a`] },
+      curatorUserId,
+    );
+    const rows = await pool.query<{ component_word_id: string }>(
+      'select component_word_id from golden_record_components where word_id = $1 order by component_position',
+      [phrase],
+    );
+    expect(rows.rows.map((r) => r.component_word_id)).toEqual([`${NS}comp_b`, `${NS}comp_a`]);
+  });
+
+  it('leaves an ordinary word free to be atomic', async () => {
+    // Components are not a phrase feature - a hyphenated compound has them too - and most words
+    // genuinely have none. Only a PHRASE is required to have them.
+    const word = `${NS}plain_atomic_word`;
+    await insertWord(word);
+    await applyEtymologyDecision(pool, word, { componentsAction: 'confirm_atomic' }, curatorUserId);
+    const decision = await pool.query<{ decision: { componentsAction: string } }>(
+      "select decision from word_decisions where word_id = $1 and axis = 'etymology'",
+      [word],
+    );
+    expect(decision.rows[0].decision.componentsAction).toBe('confirm_atomic');
   });
 });

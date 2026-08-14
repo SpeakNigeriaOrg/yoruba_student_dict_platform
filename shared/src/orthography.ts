@@ -43,6 +43,30 @@ export function orthographyInsensitiveForm(s: string): string {
   return stripMarks(s, new Set([...TONE_MARKS, ...UNDERDOT_MARKS])).toLowerCase();
 }
 
+/** The Wiktionary page title for a spelling, per that project's Yoruba policy:
+ *
+ *   "The underdot vowels, ẹ and ọ, should be used in page titles, but the tones should be
+ *    marked in the headword line. [...] The consonant ṣ should also be used in page titles."
+ *
+ * So a title keeps ẹ, ọ and ṣ and loses every tone mark, including the macron - a macron marks
+ * an ambiguous mid-tone nasal, which is a tone, and the policy puts tones in the headword line.
+ *
+ *     ọwọ́      -> ọwọ
+ *     gban̄gba  -> gbangba
+ *     Ṣóyínká   -> Ṣoyinka
+ *
+ * Which is toneInsensitiveForm, except for the case: that function lowercases, because it exists
+ * to build a lookup KEY where case is noise. A page title is a name, and `Ṣóyínká` is a person,
+ * so lowercasing it would produce the wrong page. Hence a separate function rather than a flag -
+ * the two have different jobs and one of them must never be used for the other.
+ *
+ * NOT a filename or a storage key. Anything a machine stores or fetches is built from the
+ * `word_id`, which is ASCII by construction; this deliberately returns the special characters
+ * because the policy requires them. */
+export function wiktionaryPageTitle(s: string): string {
+  return stripMarks(s, TONE_MARKS);
+}
+
 export interface AllForms {
   exact: string;
   toneInsensitive: string;

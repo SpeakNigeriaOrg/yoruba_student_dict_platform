@@ -422,6 +422,54 @@ describe('applyEntryDecision', () => {
       ).rejects.toThrow(RespellMismatchError);
     });
 
+    it('accepts a HYPHENATED respelling, whose syllables carry no hyphen either', async () => {
+      // Same rule as the space, and needed for the same reason: a hyphen is a separator between
+      // tone-bearing units, not part of one. `ilé-ìwé` is four syllables and none contains the
+      // hyphen. Wiktionary's Yoruba policy lemmatises the hyphenated form for an elongated nasal
+      // (`aárùn-ún`), so refusing this would refuse the spelling we most need to record.
+      const wordId = `${NS}respell_hyphen`;
+      await insertWord(wordId, 'ile-iwe', ['i', 'le', 'i', 'we'], 'school');
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'ilé-ìwé',
+          newSyllables: ['i', 'lé', 'ì', 'wé'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+      const { rows } = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('ilé-ìwé');
+      expect(rows[0].syllables).toEqual(['i', 'lé', 'ì', 'wé']);
+    });
+
+    it('accepts a spelling carrying both a space and a hyphen', async () => {
+      // 33 corpus headwords have both, so the separator rule cannot be either/or.
+      const wordId = `${NS}respell_both`;
+      await insertWord(wordId, 'ile-iwe giga', ['i', 'le', 'i', 'we', 'gi', 'ga'], 'high school');
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'ilé-ìwé gíga',
+          newSyllables: ['i', 'lé', 'ì', 'wé', 'gí', 'ga'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+      const { rows } = await pool.query<{ display_text: string }>(
+        'select display_text from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('ilé-ìwé gíga');
+    });
+
     it('accepts a capitalised respelling, since the syllabifier lowercases', async () => {
       const wordId = `${NS}respell_proper`;
       await insertWord(wordId, 'agemo', ['a', 'ge', 'mo'], 'July');

@@ -18,6 +18,7 @@
 import type pg from 'pg';
 import { isUniqueViolation, withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
+import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
 
 export interface CreateWordInput {
@@ -60,6 +61,10 @@ export async function createWord(pool: pg.Pool, input: CreateWordInput, createdB
 /** Exported so approveContribution.ts's 'new_entry' path can compose this into
  * its own single transaction, rather than opening a second one. */
 export async function createWordInTransaction(client: Queryable, input: CreateWordInput, createdBy: string): Promise<void> {
+  // Before the existence check, so a badly shaped id is named as such rather than reported as
+  // available. See wordIdShape.ts: this id becomes a filename and a storage key.
+  assertWordIdShape(input.wordId);
+
   const existing = await client.query('select 1 from golden_record where word_id = $1', [input.wordId]);
   if ((existing.rowCount ?? 0) > 0) {
     throw new WordIdAlreadyExistsError(input.wordId);

@@ -38,9 +38,40 @@ describe('splitPhrase', () => {
   it('leaves a word it cannot represent verbatim, with no grid', () => {
     // Peeling is an explicit punctuation list, NOT "anything the syllabifier rejects" -
     // so an unmodelled form fails visibly here instead of being silently trimmed.
-    const { words } = splitPhrase('gan-an');
+    // `شعِ` is a real corpus alternate spelling of `ṣe`, and genuinely has no syllable model.
+    const { words } = splitPhrase('شعِ');
     expect(words[0].syllables).toBeNull();
-    expect(words[0].core).toBe('gan-an');
+    expect(words[0].core).toBe('شعِ');
+  });
+
+  it('splits on a hyphen, because a hyphen is a separator between tone-bearing units', () => {
+    // This used to be the example of an unrepresentable form, which is what made every
+    // hyphenated entry uneditable. Both of the hyphen's valid uses split the same way.
+    expect(splitPhrase('gan-an').words.map((w) => w.core)).toEqual(['gan', 'an']);
+    // A compound: the hyphen joins two words, and the entry has components.
+    expect(splitPhrase('ilé-ìwé').words.map((w) => w.syllables)).toEqual([
+      ['i', 'lé'],
+      ['ì', 'wé'],
+    ]);
+    // An elongated nasal: one word, and the hyphen is what says where the nasal attaches.
+    // Compare the unhyphenated spelling, which attaches it the other way.
+    expect(splitPhrase('aárùn-ún').words.flatMap((w) => w.syllables ?? [])).toEqual(['a', 'á', 'rùn', 'ún']);
+    expect(splitPhrase('aárùnún').words.flatMap((w) => w.syllables ?? [])).toEqual(['a', 'á', 'rù', 'nún']);
+  });
+
+  it('handles a hyphen and a space together, which 33 corpus headwords need', () => {
+    const { words, separators } = splitPhrase('ilé-ìwé gíga');
+    expect(words.map((w) => w.core)).toEqual(['ilé', 'ìwé', 'gíga']);
+    expect(separators).toEqual(['-', ' ']);
+  });
+
+  it('gives a bound affix an empty trailing piece rather than losing its hyphen', () => {
+    // `oní-` and `-kí-` are morphemes rather than words and should not become entries, but the
+    // splitter must not mangle one if it meets it.
+    const { words } = splitPhrase('oní-');
+    expect(words.map((w) => w.core)).toEqual(['oní', '']);
+    expect(words[1].syllables).toBeNull();
+    expect(joinPhrase(words, splitPhrase('oní-').separators)).toBe('oní-');
   });
 });
 

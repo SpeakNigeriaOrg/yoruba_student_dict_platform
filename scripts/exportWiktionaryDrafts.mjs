@@ -83,7 +83,12 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { checkPhraseSpelling, describePhraseSpelling, etymidLabelFromWordId } from '../shared/dist/index.js';
+import {
+  checkPhraseSpelling,
+  describePhraseSpelling,
+  etymidLabelFromWordId,
+  wiktionaryPageTitle,
+} from '../shared/dist/index.js';
 
 const OUT_DEFAULT = 'out/wiktionary';
 
@@ -242,12 +247,23 @@ async function loadAudio(pool) {
 
 /** The Commons filename a recording would be uploaded under.
  *
- * Commons convention for pronunciation files is `<Lang code>-<word>.wav`. The file does
- * not exist yet - nothing has been uploaded - so this is what the draft REFERS to and
- * what the upload step would have to produce. Named here so the two cannot disagree
- * later. */
-function commonsAudioName(displayText, speaker) {
-  return `Yo-${displayText.normalize('NFC').replace(/ /g, '_')}-${speaker.replace(/[^A-Za-z0-9]+/g, '')}.wav`;
+ * Built from the WORD_ID, never from the spelling. The spelling is `ọwọ́`, `o ṣé`, `aárùn-ún` -
+ * underdots, combining tone marks, hyphens - and this string becomes a filename in somebody
+ * else's system, fetched by URL, stored in a bucket. A previous version interpolated
+ * display_text and produced `Yo-o_ṣé-….wav`, which is the class of thing that works everywhere
+ * you test it and breaks months later in a tool you do not control.
+ *
+ * word_id is ASCII by construction (AddWord derives it through orthographyInsensitiveForm) and
+ * now by enforcement (api/src/handlers/wordIdShape.ts), so this is safe rather than hopeful.
+ *
+ * The shape follows what the publish pipeline already uses for word audio -
+ * `words/{speaker}/{word_id}.wav` in scripts/publishToR2.mjs and scripts/exportGameContent.mjs -
+ * rather than inventing a third scheme. The speaker is included because two speakers may record
+ * one word, and falls back to the speaker_id when a display name sanitises to nothing, so a
+ * filename can never collapse to `Yo-owo_hand-.wav`. */
+function commonsAudioName(wordId, speaker, speakerId) {
+  const speakerPart = speaker.replace(/[^A-Za-z0-9]+/g, '') || speakerId.replace(/[^A-Za-z0-9]+/g, '');
+  return `Yo-${wordId}-${speakerPart}.wav`;
 }
 
 function buildDraft(entry, components, examples, audio) {
@@ -310,7 +326,15 @@ function buildDraft(entry, components, examples, audio) {
     notes.push('nothing to contribute to this entry yet - it is cited, with no releasable audio and no examples');
   }
 
+  // WHICH PAGE this belongs at, which is not the spelling. Wiktionary's Yoruba policy puts
+  // underdots and ṣ in the title and tone marks in the headword line, so `ọwọ́` is edited at
+  // `ọwọ` with `head=ọwọ́`. Stated in the draft because a wikitext file with no title is an
+  // instruction with the destination missing, and guessing it is how a toned page gets created
+  // alongside the untoned one that should have been edited instead.
+  const pageTitle = wiktionaryPageTitle(entry.display_text);
+
   const lines = [];
+  lines.push(`<!-- PAGE: ${pageTitle}   (tones live in the headword line, not the title) -->`);
   // An additions draft is not a page to create - the entry is already there. Said at the top,
   // in the file, because a directory of .wiki files all looking like new pages is exactly how
   // someone would paste one over an existing entry and wipe what upstream already has.
@@ -359,7 +383,7 @@ function buildDraft(entry, components, examples, audio) {
       // right value here is the speaker's dialect region when we know it and nothing when
       // we do not.
       const accent = a.dialectRegion ? `|a=${wikiArg(a.dialectRegion)}` : '';
-      lines.push(`* {{audio|yo|${commonsAudioName(entry.display_text, a.speaker)}${accent}}}`);
+      lines.push(`* {{audio|yo|${commonsAudioName(entry.word_id, a.speaker, a.speakerId)}${accent}}}`);
     }
     lines.push('');
   }
@@ -375,9 +399,21 @@ function buildDraft(entry, components, examples, audio) {
     lines.push(`#: {{uxi|yo|${wikiArg(ex.text)}|${wikiArg(ex.translation)}}}`);
   }
 
+  // A hyphenated lemma implies pages we cannot record. Wiktionary's policy: "For elongated nasal
+  // vowels, the standard form with a dash should be the lemmatized one, with the alternative
+  // forms linking to it" - so `aárùn-ún` implies `aárùnún` and `aárùn` as alt-form pages.
+  // golden_record has no alternative-forms field, so this is named rather than emitted.
+  if (entry.display_text.includes('-')) {
+    notes.push(
+      'hyphenated lemma: if the hyphen marks an elongated nasal, the unhyphenated spellings need ' +
+        'alt-form pages linking here, and nothing records those yet',
+    );
+  }
+
   return {
     wordId: entry.word_id,
     displayText: entry.display_text,
+    pageTitle,
     kind: cited ? 'additions' : entry.exempt_reason ? 'new' : 'unknown',
     citedEntryId: entry.entry_id,
     blockers,
@@ -438,6 +474,7 @@ function report(drafts) {
   for (const d of drafts) {
     const state = d.blockers.length === 0 ? 'ready' : `blocked (${d.blockers.length})`;
     lines.push(`### ${d.wordId} — ${d.displayText} [${d.kind}, ${state}]`);
+    lines.push(`- page: \`${d.pageTitle}\``);
     if (d.citedEntryId) lines.push(`- cites \`${d.citedEntryId}\``);
     for (const b of d.blockers) lines.push(`- **blocker:** ${b}`);
     for (const n of d.notes) lines.push(`- note: ${n}`);
@@ -483,6 +520,10 @@ async function main() {
       // to say it is stale.
       rmSync(outDir, { recursive: true, force: true });
       mkdirSync(outDir, { recursive: true });
+      // Named by word_id, deliberately, NOT by page title. A filename is machine-facing, and the
+      // page title is exactly the string that carries ẹ, ọ, ṣ and hyphens - the characters that
+      // survive a local filesystem and then break in the next one. The title is stated inside
+      // each file, where it is read rather than resolved.
       for (const d of drafts) {
         writeFileSync(path.join(outDir, `${d.wordId}.wiki`), d.wikitext, 'utf8');
       }
@@ -495,24 +536,21 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------------
-// The gap this script cannot close, stated where it will be read
+// What an etymology section here can and cannot say
 // ---------------------------------------------------------------------------
-// An etymology here can only ever say "composed of these words, in this order".
-// Wiktionary's own data for Yoruba says much more, and the corpus we already ingest
-// carries it: 3,843 of 6,272 entries have at least one etymology template, and among
-// them are 172 contractions, 107 blends, 93 reduplications, 58 doublets and 40
-// clippings - none of which is a composition, and all of which land nowhere, because
-// ingest keeps only the morpheme FORMS and drops the template NAME.
+// An entry records the words it is composed of, in order, and that is the whole vocabulary.
+// So an etymology section states a composition or states nothing.
 //
-// `o ṣé` is the case to hold in mind. Its parts are `o` and `ṣe`, but its real
-// etymology is {{clipping|yo|o ṣeun|t=thank you}}, and `o ṣeun` is itself an entry we
-// may not hold. So a faithful draft needs a typed relation whose target may be a word
-// we have, an upstream entry we do not, or a form in another language - none of which
-// golden_record_components can express, since it is untyped, ordered, and a foreign
-// key into our own vocabulary.
+// For most entries that is the right answer and the only answer needed. Where it is not, the
+// relation is something other than composition - `o ṣé` is a clipping of `o ṣeun`, and `o ṣeun`
+// may not be an entry we hold at all - and the draft will say `{{af|yo|o|ṣe}}`, which is true
+// about the parts and not the etymology a Wiktionary editor would write.
 //
-// Until that exists, every draft above states composition or nothing, and the report
-// names each entry where that is known to be the wrong answer.
+// This is a limitation, not a bug, and it is reported rather than papered over: every entry
+// whose spelling its components cannot produce is named in the report above, which is the
+// population where composition is most likely to be the wrong claim. A human editing the draft
+// can write the real etymology in prose, which is what upstream mostly does for Yoruba anyway -
+// `o ṣeun` itself carries etymology prose and zero structured templates.
 
 // Only when run as a script. Importing this file - to test the draft builder without a
 // database, or to reuse the report from another script the way upstreamPublishCheck.mjs is

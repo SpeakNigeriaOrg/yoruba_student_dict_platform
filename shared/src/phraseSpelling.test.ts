@@ -52,6 +52,23 @@ describe('checkPhraseSpelling', () => {
     expect(check.words).toHaveLength(3);
   });
 
+  it('treats a hyphen like a space, so an ordinary compound is not reported', () => {
+    // `ilé-ìwé` ("school") is `ilé` + `ìwé` written as one orthographic word. Reporting that as
+    // a spelling its parts cannot produce would fire the warning on every compound in the
+    // dictionary, and a warning that fires constantly is one people stop reading.
+    expect(checkPhraseSpelling('ilé-ìwé', ['ilé', 'ìwé']).matches).toBe(true);
+    // A component that is itself hyphenated lines up the same way.
+    expect(checkPhraseSpelling('ilé-ìwé gíga', ['ilé-ìwé', 'gíga']).matches).toBe(true);
+  });
+
+  it('still reports a contraction, which a hyphen is not', () => {
+    // The check has to keep working through the hyphen exemption. `muti` is genuinely written
+    // differently from its parts - a vowel is elided, not a separator dropped.
+    const check = checkPhraseSpelling('muti', ['mu', 'ọtí']);
+    expect(check.matches).toBe(false);
+    expect(describePhraseSpelling(check)).toBe('mu is written muti here; ọtí is not written out');
+  });
+
   it('does not match a phrase with no components at all', () => {
     // A phrase always has at least one component (createPhrase refuses otherwise), so an
     // empty list is a caller bug rather than a matching phrase.

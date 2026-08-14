@@ -19,6 +19,7 @@
 import type pg from 'pg';
 import { withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
+import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
 
 export interface CreatePhraseInput {
@@ -74,6 +75,8 @@ export async function createPhrase(pool: pg.Pool, input: CreatePhraseInput, crea
  * compose this into its own single transaction, rather than calling
  * createPhrase (which would open a second, separate transaction). */
 export async function createPhraseInTransaction(client: Queryable, input: CreatePhraseInput, createdBy: string): Promise<void> {
+  assertWordIdShape(input.wordId);
+
   const existingWord = await client.query('select 1 from golden_record where word_id = $1', [input.wordId]);
   if ((existingWord.rowCount ?? 0) > 0) {
     throw new WordIdAlreadyExistsError(input.wordId);

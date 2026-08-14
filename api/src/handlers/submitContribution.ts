@@ -34,7 +34,7 @@ import {
 } from '@yoruba-student-dict-platform/shared';
 import { WordNotFoundError } from './errors.js';
 import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
-import type { ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
+import { PhraseNeedsComponentsError, type ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
 import type { UpstreamCitationInput } from './upstreamCitations.js';
 
 export interface NewEntryProposedValue {
@@ -94,6 +94,7 @@ async function loadObservedState(
   definition: string | null;
   citedEntryId: string | null;
   components: string[];
+  isPhrase: boolean;
 }> {
   // Left-joined rather than a second query: the cited etymology is part of the
   // state a contributor is looking at, so it must be read in the SAME snapshot
@@ -104,9 +105,10 @@ async function loadObservedState(
     display_text: string;
     syllables: string[];
     definition: string | null;
+    entry_type: 'phrase' | null;
     entry_id: string | null;
   }>(
-    `select g.display_text, g.syllables, g.definition, c.entry_id
+    `select g.display_text, g.syllables, g.definition, g.entry_type, c.entry_id
      from golden_record g
      left join upstream_citations c on c.word_id = g.word_id
      where g.word_id = $1`,
@@ -126,6 +128,7 @@ async function loadObservedState(
     definition: row.definition,
     citedEntryId: row.entry_id,
     components: components.rows.map((r) => r.component_word_id),
+    isPhrase: row.entry_type === 'phrase',
   };
 }
 
@@ -146,7 +149,15 @@ function resolveOutcome(
       input.proposedValue,
     );
   }
-  return resolveEtymologyOutcome({ components: observed.components }, input.proposedValue);
+  const outcome = resolveEtymologyOutcome({ components: observed.components }, input.proposedValue);
+  // Refused at submission, not left for approval. A phrase is composed of words by definition
+  // (see PhraseNeedsComponentsError), so a proposal that it has none can never be applied - and
+  // accepting it here would put a permanently unapprovable row in the curator queue, which is
+  // the same failure 0017 describes for a duplicate component request.
+  if (observed.isPhrase && (outcome.atomic || outcome.components.length === 0)) {
+    throw new PhraseNeedsComponentsError(input.wordId);
+  }
+  return outcome;
 }
 
 /** Transactional because the supersede and the insert must land together: on a
