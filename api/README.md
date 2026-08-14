@@ -336,6 +336,21 @@ duplicate check on the same screen: a mismatch is usually a real linguistic fact
 typo, and nothing in the data tells them apart. The staleness bug does not return, because nothing
 derives the spelling for anything to go stale against.
 
+**Correcting a phrase afterwards needed two more fixes**, both found by trying it on a real entry
+(`fi sílẹ̀`) rather than by reading the code. Removing the re-derivation closed the only route that
+could change an existing phrase's spelling, and the entry axis could not take over:
+
+- `syllabifySpans` returns null for anything with a space in it, so `EntryReview` fell to its
+  read-only branch and told the reviewer the spelling "can only be changed by a curator" — which by
+  then no curator could either. That branch now belongs to single words the syllabifier cannot model
+  (Ajami, hyphenated); a multi-word spelling gets `PhraseComposer`, the same component the Add Phrase
+  tab authors with, and submits a `respell`.
+- `validateEntryDecisionInput`'s respell check compared `newSyllables.join('')` against the whole
+  spelling, so every phrase failed it: `fi sílẹ̀` is `['fi','sí','lẹ̀']`, which joins to `fisílẹ̀`.
+  That is a space, not a disagreement — a space is orthography and a syllable is a tone-bearing unit,
+  which is how `createPhrase` has always stored a phrase. Whitespace is now stripped from the
+  spelling before comparing, and the check still catches a real mismatch.
+
 `getEtymologyReview` also reports `entryType`, because the screen has to ask a phrase a different
 question, and it no longer returns `usedInProposal`/`usedAsComponentOf` - nothing on that screen could
 ever act on the reverse direction, since decisions only write component rows for the word under

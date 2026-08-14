@@ -374,6 +374,54 @@ describe('applyEntryDecision', () => {
       expect(rows[0].display_text).toBe('adiye');
     });
 
+    it('accepts a PHRASE respelling, whose syllables carry no space', async () => {
+      // The check compared the joined syllables against the whole spelling, so every phrase
+      // failed it: `fi sílẹ̀` is three syllables, ['fi','sí','lẹ̀'], and joining them gives
+      // `fisílẹ̀`. That is not a disagreement, it is a space - orthography rather than a
+      // tone-bearing unit - and it is how createPhrase has always stored a phrase. Until
+      // whitespace was stripped here, a phrase's spelling could not be corrected at all
+      // once created, because this is the only endpoint that rewrites display_text.
+      const wordId = `${NS}respell_phrase`;
+      await insertWord(wordId, 'fi sile', ['fi', 'si', 'le'], 'to leave alone');
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'fi sílẹ̀',
+          newSyllables: ['fi', 'sí', 'lẹ̀'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+      const { rows } = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(rows[0].display_text).toBe('fi sílẹ̀');
+      expect(rows[0].syllables).toEqual(['fi', 'sí', 'lẹ̀']);
+    });
+
+    it('still refuses a phrase whose syllables disagree with more than the spaces', async () => {
+      // The check has to keep working through the whitespace exemption, or it stops being a
+      // check: this differs in a vowel, not a space.
+      const wordId = `${NS}respell_phrase_bad`;
+      await insertWord(wordId, 'fi sile', ['fi', 'si', 'le'], 'to leave alone');
+      await expect(
+        applyEntryDecision(
+          pool,
+          wordId,
+          {
+            action: 'respell',
+            newDisplayText: 'fi sílẹ̀',
+            newSyllables: ['fi', 'sí', 'lò'],
+            definitionAction: 'confirm',
+          },
+          curatorUserId,
+        ),
+      ).rejects.toThrow(RespellMismatchError);
+    });
+
     it('accepts a capitalised respelling, since the syllabifier lowercases', async () => {
       const wordId = `${NS}respell_proper`;
       await insertWord(wordId, 'agemo', ['a', 'ge', 'mo'], 'July');

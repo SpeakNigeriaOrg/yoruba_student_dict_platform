@@ -715,3 +715,74 @@ describe('failures', () => {
     expect(screen.getByLabelText('Tone editor')).toBeInTheDocument();
   });
 });
+
+describe('a phrase can be respelled here, because nothing else can respell it', () => {
+  // The gap this closes, found by trying to correct a real production phrase. A multi-word
+  // spelling makes syllabifySpans return null, so this screen fell to its read-only branch
+  // and said the spelling "can only be changed by a curator" - while the route a curator had
+  // used, re-deriving the spelling from the components on the etymology axis, had just been
+  // removed for being wrong. Nobody could change it, and the screen said otherwise.
+  const PHRASE = {
+    ...entryFixture,
+    wordId: 'fi_sile_leave_alone',
+    displayText: 'fi sílẹ̀',
+    matchedForm: 'fi sílẹ̀',
+    canonicalForm: 'fi sílẹ̀',
+    adoptionTarget: 'fi sílẹ̀',
+    syllables: ['fi', 'sí', 'lẹ̀'],
+    syllableSplitStatus: 'match',
+  };
+
+  async function loadedPhrase() {
+    const fetchMock = mockFetch(PHRASE);
+    render(<EntryReview wordId="fi_sile_leave_alone" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Phrase composer')).toBeInTheDocument());
+    return fetchMock;
+  }
+
+  it('offers the composer rather than "only a curator can change this"', async () => {
+    await loadedPhrase();
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('fi sílẹ̀');
+    expect(screen.queryByText(/can only be changed by a curator/)).not.toBeInTheDocument();
+  });
+
+  it('gives each word its own tone grid, since the phrase has no single syllable row', async () => {
+    await loadedPhrase();
+    // `fi` is one syllable, `sílẹ̀` is two, so the grids are per word rather than per phrase.
+    expect(screen.getByLabelText('Tone of syllable 1 of word 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tone of syllable 2 of word 2')).toBeInTheDocument();
+  });
+
+  it('submits a respell whose syllables are the composed text, spaces and all', async () => {
+    const fetchMock = await loadedPhrase();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByLabelText('The phrase, spelled as it is said'));
+    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'fi sile');
+    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+    const body = postedBody(fetchMock);
+    expect(body.newDisplayText).toBe('fi sile');
+    // Three syllables across two words, and no space in any of them - a space is
+    // orthography, a syllable is a tone-bearing unit. The server's respell check strips
+    // whitespace from the spelling before comparing for exactly this reason.
+    expect(body.newSyllables).toEqual(['fi', 'si', 'le']);
+  });
+
+  it('an untouched phrase is keep_ours, not a respelling of itself', async () => {
+    const fetchMock = await loadedPhrase();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
+  });
+
+  it('still refuses a single word the syllabifier cannot represent', async () => {
+    // The read-only branch is not gone, it is just no longer where phrases land. A
+    // hyphenated or Ajami single word still cannot be edited safely here.
+    mockFetch({ ...entryFixture, displayText: 'gan-an', matchedForm: 'gan-an', canonicalForm: 'gan-an' });
+    render(<EntryReview wordId="w" isCurator />);
+    await waitFor(() => expect(screen.getByText(/can only be changed by a curator/)).toBeInTheDocument());
+    expect(screen.queryByLabelText('Phrase composer')).not.toBeInTheDocument();
+  });
+});

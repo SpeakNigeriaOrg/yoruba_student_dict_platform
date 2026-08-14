@@ -138,8 +138,15 @@ export function validateEntryDecisionInput(input: ApplyEntryDecisionInput): void
     // (agunfon_giraffe: 'àgùnfon' vs ['à','gùn','fọn']). Nothing should be able to
     // create another. Compared NFC-normalized and case-insensitively, since the
     // syllabifier lowercases and a proper noun keeps its capital in display_text.
+    //
+    // Whitespace is stripped from the spelling before comparing, because a space is
+    // orthography and a syllable is a tone-bearing unit - `fi sílẹ̀` is three syllables,
+    // ['fi','sí','lẹ̀'], and no space belongs in any of them. This is how createPhrase
+    // has always stored a phrase (see the syllables column for any existing phrase), so
+    // without it the check refused every phrase respelling and a phrase's spelling could
+    // not be corrected at all once created.
     const joined = input.newSyllables.join('').normalize('NFC').toLowerCase();
-    const whole = input.newDisplayText.normalize('NFC').toLowerCase();
+    const whole = input.newDisplayText.replace(/\s+/g, '').normalize('NFC').toLowerCase();
     if (joined !== whole) throw new RespellMismatchError(input.newDisplayText, input.newSyllables.join(''));
   }
   if (input.definitionAction === 'custom' && !input.definitionText) throw new MissingDefinitionTextError();

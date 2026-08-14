@@ -48,6 +48,7 @@
 import { useEffect, useState } from 'react';
 import {
   classifyToneMatch,
+  isMultiWord,
   syllabifySpans,
   type KaikkiSearchResult,
 } from '@yoruba-student-dict-platform/shared';
@@ -60,6 +61,8 @@ import {
   type EntryReviewResult,
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { PhraseComposer } from './PhraseComposer.js';
+import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
 import { ToneEditor } from './ToneEditor.js';
 
@@ -116,6 +119,30 @@ function writtenFormFromSyllables(currentDisplayText: string, syllables: string[
   return { action: 'respell', newDisplayText: proposed, newSyllables: syllables };
 }
 
+/** The same thing for a PHRASE, whose spelling is composed rather than assembled from a
+ * single syllable row.
+ *
+ * A multi-word spelling has no syllable row at all - syllabifySpans refuses anything with a
+ * space in it - so this screen used to say the spelling "can only be changed by a curator"
+ * and offer only Confirm. That was already awkward and became untrue: a phrase's spelling
+ * used to be re-derived from its components on the etymology axis, and once that stopped
+ * (correctly - see api/src/handlers/applyEntryDecision.ts's note) there was no route left
+ * for anyone, curator or not, to correct `fi sílẹ̀`.
+ *
+ * The syllables come from the composed text rather than from the stored column, exactly as
+ * the single-word path derives them from display_text: production holds a word whose two
+ * disagree, and seeding from the column would apply that discrepancy to whatever the
+ * reviewer submits. */
+function writtenFormFromPhrase(currentDisplayText: string, phraseText: string | null): SpellingChoice | null {
+  if (phraseText === null) return null;
+  const trimmed = phraseText.trim();
+  if (!trimmed) return null;
+  if (trimmed.normalize('NFC') === currentDisplayText.normalize('NFC')) return { action: 'keep_ours' };
+  const newSyllables = phraseSyllables(splitPhrase(trimmed).words);
+  if (newSyllables.length === 0) return null;
+  return { action: 'respell', newDisplayText: trimmed, newSyllables };
+}
+
 export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true }: EntryReviewProps) {
   const [review, setReview] = useState<EntryReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +157,14 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   // spellings, hyphenated forms). Editing it IS disagreeing; there is no separate
   // yes/no, which is what stops the screen from only being able to record agreement.
   const [syllables, setSyllables] = useState<string[] | null>(null);
+  /** The composed spelling, for a multi-word entry only.
+   *
+   * A phrase gets this instead of `syllables`, never as well: syllabifySpans refuses a
+   * spelling with a space in it, so there is no single syllable row for the tone editor to
+   * work on, and the composer holds the whole phrase and grids each word separately. Null
+   * for a single word, which is what keeps the two paths from both claiming to decide the
+   * spelling. */
+  const [phraseText, setPhraseText] = useState<string | null>(null);
   const [editingLetters, setEditingLetters] = useState(false);
   /** The syllables as they stood when the letters editor was opened, so Discard can put
    * them back. Snapshotted on OPEN rather than on load, so tone choices made carefully
@@ -152,6 +187,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     setStatus(null);
     setSpelling(null);
     setSyllables(null);
+    setPhraseText(null);
     setEditingLetters(false);
     setLettersSnapshot(null);
     setSyllableAction(undefined);
@@ -164,7 +200,16 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         // contains a word whose two disagree (agunfon_giraffe, 'àgùnfon' vs
         // ['à','gùn','fọn']), and seeding from the column would silently apply that
         // discrepancy to whatever the reviewer submitted.
-        setSyllables(syllabifySpans(result.displayText));
+        // A phrase takes the composer, a single word the syllable row. Keyed on the
+        // SPELLING rather than on entry_type, because what the syllabifier chokes on is the
+        // space - and a word_id typed as a phrase whose spelling is one word still has a
+        // usable syllable row, while an ordinary word that turned out to be two words does
+        // not. isMultiWord is the same test the Add Word screen routes on.
+        if (isMultiWord(result.displayText)) {
+          setPhraseText(result.displayText);
+        } else {
+          setSyllables(syllabifySpans(result.displayText));
+        }
         setDefinitionText(result.definitionCurrent ?? result.definitionProposed ?? '');
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);
         setNote(result.note ?? '');
@@ -201,7 +246,10 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     // that resolves WHICH etymology the word is - a different question from how it is
     // spelled. Otherwise the syllable row decides it: unchanged means keep_ours,
     // changed means the reviewer wrote this spelling themselves.
-    const written = spelling ?? writtenFormFromSyllables(review.displayText, syllables);
+    const written =
+      spelling ??
+      writtenFormFromSyllables(review.displayText, syllables) ??
+      writtenFormFromPhrase(review.displayText, phraseText);
     if (!written) {
       setStatus('Answer the spelling question first - an entry is decided as a whole.');
       return;
@@ -255,9 +303,12 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const upstreamForm = pin?.canonicalForm ?? null;
   const upstreamGlosses = pin?.glosses ?? [];
   const isExempt = Boolean(review.citation?.exemptReason);
-  const written = spelling ?? writtenFormFromSyllables(review.displayText, syllables);
+  const written =
+    spelling ??
+    writtenFormFromSyllables(review.displayText, syllables) ??
+    writtenFormFromPhrase(review.displayText, phraseText);
   const readyToSubmit = Boolean(written) && definitionText.trim().length > 0;
-  const proposed = syllables ? syllables.join('') : review.displayText;
+  const proposed = syllables ? syllables.join('') : (phraseText?.trim() ?? review.displayText);
   // The specific kind of difference, not a bare "differs". classifyToneMatch already
   // separates a tone disagreement from a letters one, and that distinction is the
   // whole point of this screen - it was previously computed and thrown away.
@@ -334,11 +385,38 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
             )}
           </p>
         </>
+      ) : phraseText !== null ? (
+        // A phrase. Composed rather than assembled from a syllable row, because
+        // syllabifySpans refuses a spelling with a space in it - the composer splits on
+        // whitespace itself and grids each word separately, which is the same component the
+        // Add Phrase tab authors with, so a phrase is corrected here the way it was written.
+        <>
+          <p aria-label="Spelling question">
+            We have <strong>{review.displayText}</strong>. It is more than one word, so each word gets its own tone
+            grid. Edit it if the spelling or the tone is wrong.
+          </p>
+          <PhraseComposer
+            id="entry-phrase-spelling"
+            label="The phrase, spelled as it is said"
+            value={phraseText}
+            onChange={setPhraseText}
+          />
+          <p aria-label="Spelling comparison">
+            Reads: <strong>{proposed}</strong>
+            {proposed.normalize('NFC') !== review.displayText.normalize('NFC') ? (
+              <>
+                {' '}
+                <span className="badge not-started">changed from {review.displayText}</span>
+              </>
+            ) : null}
+          </p>
+        </>
       ) : (
-        // syllabifySpans could not represent this word - an Ajami spelling, a
-        // hyphenated or multi-word form. Editing it here would silently drop the
-        // characters the syllabifier does not model, so it is left alone and the
-        // reviewer can only confirm or skip.
+        // syllabifySpans could not represent this SINGLE word - an Ajami spelling or a
+        // hyphenated form. Editing it here would silently drop the characters the
+        // syllabifier does not model, so it is left alone and the reviewer can only confirm
+        // or skip. Multi-word forms took this branch too until the phrase path above
+        // existed, which is how a phrase became uncorrectable.
         <>
           <p aria-label="Spelling question">
             We have <strong>{review.displayText}</strong>. This word cannot be broken into syllables here, so its
