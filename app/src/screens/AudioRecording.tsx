@@ -40,6 +40,8 @@
 import { useEffect, useState } from 'react';
 import { syllabifySpans, toneOf } from '@yoruba-student-dict-platform/shared';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
+import { PhraseComposer } from './PhraseComposer.js';
+import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { ToneGrid } from './ToneGrid.js';
 import { sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
@@ -138,12 +140,29 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   //
   // Consequence worth knowing: the syllable COUNT is now a function of the spelling. Changing it
   // means editing the spelling or using the nasal control on the grid, not retyping a list.
-  const [recordedSyllables, setRecordedSyllables] = useState<string[]>([]);
+  const [wordSyllables, setWordSyllables] = useState<string[]>([]);
+  /** The composed spelling, for a phrase - anything syllabifySpans refuses as a WHOLE but whose
+   * pieces it can represent.
+   *
+   * This screen used to have no such branch, and syllabifySpans refuses every space and every
+   * hyphen, so EVERY phrase in the dictionary fell into the unsplittable fallback below and was
+   * told its tones "can't be shown as a grid". That is the population most in need of one: a
+   * phrase's tone is exactly what a component's stored spelling gets wrong (`o ṣé` is not `ṣe`
+   * at mid tone), and the fallback's comma-separated box is the retyped-list input this screen
+   * was rebuilt to remove. Same three-way routing EntryReview already does, for the same reason
+   * and off the same splitter, so the two screens agree about what a phrase is. */
+  const [phraseText, setPhraseText] = useState<string | null>(null);
   /** Set when syllabifySpans refuses the word - Ajami, hyphenated forms, interjections (805 of
    * 5,580 corpus forms). Those must stay recordable, so they fall back to plain text fields, the
    * same branch and the same reason EntryReview already has. */
   const [unsplittableText, setUnsplittableText] = useState<string | null>(null);
-  const pronunciationText = unsplittableText ?? recordedSyllables.join('');
+  /** Derived on the phrase path rather than held, so the composed text stays the one source of
+   * truth there exactly as the syllable row is on the word path - the two can no longer disagree
+   * about what is being recorded. Separators are not syllables, so they do not appear here (see
+   * phraseSyllables), while pronunciationText keeps them: `o ṣé` is recorded as two syllables
+   * and written with its space. */
+  const recordedSyllables = phraseText === null ? wordSyllables : phraseSyllables(splitPhrase(phraseText).words);
+  const pronunciationText = unsplittableText ?? phraseText ?? wordSyllables.join('');
   // The word's spelling as golden_record currently holds it. Kept separate from
   // pronunciationText, which the speaker may edit before recording - the
   // divergence warning is about the RECORD, so quoting the editable field would
@@ -181,6 +200,7 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
     setPreviousRecordings(null);
     setPreviousRecordingsError(null);
     setUnsplittableText(null);
+    setPhraseText(null);
     getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -189,13 +209,21 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
         // render. golden_record.syllables can disagree with its own display_text (one production
         // word does), and seeding from the stored split would carry that disagreement into a
         // recording that then freezes it.
+        //
+        // Three cases, most editable first, exactly as EntryReview routes them:
+        //
+        //   the WHOLE spelling is syllabifiable  -> one syllable row.
+        //   only the pieces between separators   -> the composer, one grid per piece.
+        //   nothing is                           -> the text fallback below.
         const spans = syllabifySpans(result.displayText);
-        if (spans === null) {
+        if (spans) {
+          setWordSyllables(spans);
+        } else if (splitPhrase(result.displayText).words.some((w) => w.syllables !== null)) {
+          setPhraseText(result.displayText);
+        } else {
           setUnsplittableText(result.displayText);
           setFallbackSyllablesText(result.syllables.join(','));
-          setRecordedSyllables(result.syllables);
-        } else {
-          setRecordedSyllables(spans);
+          setWordSyllables(result.syllables);
         }
         setLoaded(true);
       })
@@ -321,8 +349,17 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
           say it differently: the recording is tied to the pronunciation you actually produce, not to this word's current
           spelling.
         </p>
-        {unsplittableText === null ? (
-          <ToneGrid syllables={recordedSyllables} onChange={setRecordedSyllables} />
+        {phraseText !== null ? (
+          // A phrase: one grid per word, off the same composer the Add Phrase tab and the entry
+          // axis use, so the tones are chosen here the way they are chosen everywhere else.
+          <PhraseComposer
+            id="pronunciation-phrase"
+            label="The phrase, spelled as you are going to say it"
+            value={phraseText}
+            onChange={setPhraseText}
+          />
+        ) : unsplittableText === null ? (
+          <ToneGrid syllables={wordSyllables} onChange={setWordSyllables} />
         ) : (
           // syllabifySpans refused this word, so there is no grid to draw and it must not be
           // silently rewritten into one. Same branch EntryReview takes, for the same reason.
@@ -348,7 +385,7 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
                 value={fallbackSyllablesText}
                 onChange={(e) => {
                   setFallbackSyllablesText(e.target.value);
-                  setRecordedSyllables(
+                  setWordSyllables(
                     e.target.value
                       .split(',')
                       .map((s) => s.trim())

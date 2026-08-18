@@ -87,8 +87,30 @@ export interface EntryReviewProps {
 type SpellingChoice =
   | { action: 'keep_ours' }
   | { action: 'adopt_kaikki'; newDisplayText: string }
-  | { action: 'respell'; newDisplayText: string; newSyllables: string[] }
+  | { action: 'respell'; newDisplayText: string; newSyllables: string[]; senseEntryId?: string }
   | { action: 'select_candidate'; candidateForm: string; senseEntryId?: string };
+
+/** Which etymology, and how it is spelled, are TWO questions - and answering one must not
+ * silently discard the other.
+ *
+ * This used to be a plain `pick ?? edited`, on the reasoning that a curator's Kaikki pick
+ * "resolves WHICH etymology the word is - a different question from how it is spelled". That
+ * is exactly the argument for not letting it win: `select_candidate` never writes display_text
+ * (see applyEntryDecision), so a curator who corrected the tone AND linked the record got the
+ * link and lost the tone, with the "Reads:" line still showing the correction they had made.
+ * Silent, and unrecoverable without noticing and redoing it.
+ *
+ * The etymology half of a pick is `senseEntryId`, which is already an independent field on
+ * ApplyEntryDecisionInput and applies regardless of `action`. So an edited spelling keeps the
+ * action and carries the pick's etymology along with it, and both halves land.
+ *
+ * A pick still wins outright when the spelling was NOT edited: `keep_ours` says nothing the
+ * pick does not say better, and `select_candidate` is then the more specific claim. */
+function resolveWrittenForm(pick: SpellingChoice | null, edited: SpellingChoice | null): SpellingChoice | null {
+  if (edited?.action !== 'respell') return pick ?? edited;
+  const senseEntryId = pick && 'senseEntryId' in pick ? pick.senseEntryId : undefined;
+  return senseEntryId ? { ...edited, senseEntryId } : edited;
+}
 
 /** Compared NFC-normalized, for the same reason writtenFormFromSyllables is: a
  * difference of Unicode composition alone is not an edit, and five production words
@@ -251,14 +273,15 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
 
   async function submit() {
     if (!review) return;
-    // The written-form half. A curator-only candidate/search pick still wins, because
-    // that resolves WHICH etymology the word is - a different question from how it is
-    // spelled. Otherwise the syllable row decides it: unchanged means keep_ours,
-    // changed means the reviewer wrote this spelling themselves.
-    const written =
-      spelling ??
+    // The written-form half. The syllable row (or the phrase composer) decides it:
+    // unchanged means keep_ours, changed means the reviewer wrote this spelling
+    // themselves. A curator-only candidate/search pick contributes the etymology to
+    // that rather than replacing it - see resolveWrittenForm.
+    const written = resolveWrittenForm(
+      spelling,
       writtenFormFromSyllables(review.displayText, syllables) ??
-      writtenFormFromPhrase(review.displayText, phraseText);
+        writtenFormFromPhrase(review.displayText, phraseText),
+    );
     if (!written) {
       setStatus('Answer the spelling question first - an entry is decided as a whole.');
       return;
@@ -312,10 +335,11 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const upstreamForm = pin?.canonicalForm ?? null;
   const upstreamGlosses = pin?.glosses ?? [];
   const isExempt = Boolean(review.citation?.exemptReason);
-  const written =
-    spelling ??
+  const written = resolveWrittenForm(
+    spelling,
     writtenFormFromSyllables(review.displayText, syllables) ??
-    writtenFormFromPhrase(review.displayText, phraseText);
+      writtenFormFromPhrase(review.displayText, phraseText),
+  );
   const readyToSubmit = Boolean(written) && definitionText.trim().length > 0;
   const proposed = syllables ? syllables.join('') : (phraseText?.trim() ?? review.displayText);
   // The specific kind of difference, not a bare "differs". classifyToneMatch already
@@ -418,6 +442,51 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
                 <span className="badge not-started">changed from {review.displayText}</span>
               </>
             ) : null}
+            {/* What Wiktionary has, said out loud - which this branch did not do at all.
+                Only the single-word branch above showed it, so a phrase whose citation was
+                pinned to a record spelled `o ṣé` while we held `o ṣe` displayed nothing:
+                the right answer was sitting in the pin, invisible, on the one screen whose
+                job is to settle the spelling. The pin already carries it for a phrase as
+                readily as for a word - buildPin copies canonicalForm whatever the entry is -
+                so this is the same two lines, not a new comparison. */}
+            {upstreamForm ? (
+              <>
+                <br />
+                {vsUpstream === 'match'
+                  ? `Wiktionary has ${upstreamForm} - the same.`
+                  : vsUpstream === 'tone_mismatch'
+                    ? `Wiktionary has ${upstreamForm} - same letters, different tone.`
+                    : `Wiktionary has ${upstreamForm} - the letters differ, not just the tone.`}
+                {vsUpstream === 'match' ? null : (
+                  <>
+                    {' '}
+                    {/* Loads the composer, rather than submitting. Upstream's spelling is a
+                        strong proposal and not an authority - it travels as a `respell`, the
+                        same action a hand-typed correction takes, so a curator still reads the
+                        grids and can disagree with any one syllable before confirming. There is
+                        no adopt_kaikki route here in any case: diagnoseEntry returns early for a
+                        phrase and computes no adoptionTarget, so the server would reject one. */}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setPhraseText(upstreamForm)}
+                    >
+                      Use Wiktionary&apos;s spelling
+                    </button>
+                  </>
+                )}
+              </>
+            ) : isExempt ? (
+              <>
+                <br />
+                This phrase has no Wiktionary entry, so there is nothing to compare against.
+              </>
+            ) : (
+              <>
+                <br />
+                This phrase is not linked to a Wiktionary etymology yet.
+              </>
+            )}
           </p>
         </>
       ) : (

@@ -582,6 +582,88 @@ describe('AddWord - the phrase path can finish the job', () => {
     spellingMatches: [],
   };
 
+  const UPSTREAM_PHRASE = {
+    form: 'o ṣé',
+    pos: 'intj',
+    glosses: ['thank you (non-honorific, to a singular person)'],
+    matchedVia: 'yoruba_exact',
+    altOfTargets: [],
+    standardForms: ['o ṣé'],
+    entryId: 'en-o-ṣe-yo-intj-NEW',
+    etymologyNumber: null,
+    claim: null,
+    spellingMatches: [],
+  };
+
+  it('adopts a Wiktionary phrase in place, rather than refusing it as "not one word of this one"', async () => {
+    // Upstream holds 480 multi-word entries and spells them with the tones we would otherwise
+    // guess at - `o ṣé`, not `o ṣe`. This search refused every one of them, because it was written
+    // to find a missing COMPONENT and a phrase is not one. True, and the wrong outcome: the only
+    // route to adopting one ran through the Word tab, which refuses it too and hands it back here.
+    const fetchMock = mockFetch({ kaikkiResults: [UPSTREAM_PHRASE] });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    // A component picked before finding the whole entry is kept, not reset.
+    const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dict.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+
+    const upstream = within(
+      screen.getByRole('search', { name: 'Search Wiktionary for this phrase, or for a missing word' }),
+    );
+    await user.click(upstream.getByRole('button', { name: 'Search' }));
+    await waitFor(() => upstream.getByRole('button', { name: 'Use as this phrase' }));
+    await user.click(upstream.getByRole('button', { name: 'Use as this phrase' }));
+
+    // Upstream's own spelling, tone included - the half that was being lost.
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('o ṣé');
+    expect(screen.getByLabelText('Adopted etymology')).toHaveTextContent('o ṣé');
+    expect(screen.getByLabelText('Phrase components')).toHaveTextContent('existingspelling');
+
+    // An adopted phrase cites its own etymology, and does not re-ask for what the pin holds.
+    expect(screen.queryByLabelText('Part of speech')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'));
+    const body = JSON.parse(call![1].body);
+    expect(body.displayText).toBe('o ṣé');
+    expect(body.citation).toEqual({ entryId: 'en-o-ṣe-yo-intj-NEW' });
+    // Two syllables, and the space is in neither - it is orthography, not a tone-bearing unit.
+    expect(body.syllables).toEqual(['o', 'ṣé']);
+  });
+
+  it('offers the part of speech as upstream\'s own tags, not as a blank box', async () => {
+    // The field is collected so a locally composed phrase can be sent upstream one day, which makes
+    // the vocabulary a closed one. Free text could only ever record `interjection` where the sole
+    // accepted value is `intj`, and nothing downstream would notice until publication.
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    const pos = screen.getByLabelText('Part of speech');
+    expect(pos.tagName).toBe('SELECT');
+    await user.selectOptions(pos, 'intj');
+
+    const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dict.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'o ṣé');
+    await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'));
+    expect(JSON.parse(call![1].body).pos).toBe('intj');
+  });
+
   it('routes to the Word tab to add a missing component, then brings it back into the phrase', async () => {
     // This is the 475-of-480 case. It used to be a dead end - the picker only saw golden_record and
     // createPhrase hard-failed - and was briefly a cut-down inline form here. Words are created in ONE
@@ -599,7 +681,7 @@ describe('AddWord - the phrase path can finish the job', () => {
     await user.click(screen.getByRole('button', { name: 'Add as component' }));
     await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
 
-    const upstream = within(screen.getByRole('search', { name: 'Search Wiktionary for a missing word' }));
+    const upstream = within(screen.getByRole('search', { name: 'Search Wiktionary for this phrase, or for a missing word' }));
     await user.click(upstream.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText(/a divination sign/));
     await user.click(upstream.getByRole('button', { name: 'Add it as a word first' }));

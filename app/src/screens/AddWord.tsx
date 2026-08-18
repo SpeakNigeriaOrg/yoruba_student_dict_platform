@@ -30,8 +30,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
 import {
+  PARTS_OF_SPEECH,
   checkPhraseSpelling,
   describePhraseSpelling,
+  isKnownPartOfSpeech,
   isMultiWord,
   orthographyInsensitiveForm,
   phraseTokens,
@@ -159,6 +161,37 @@ function EtymologyLabel({ result }: { result: KaikkiSearchResult }) {
       <strong>{result.form}</strong> ({result.pos}
       {result.etymologyNumber ? `, etymology ${result.etymologyNumber}` : ''}) - {result.glosses.join('; ')}
     </>
+  );
+}
+
+/** The part of speech, as a choice from upstream's own tags rather than as free text.
+ *
+ * Both tabs render this - the Word tab's off-path branch and the Phrase tab - and both used to
+ * render their own text input with an `e.g. noun, verb, intj` placeholder. See
+ * shared/src/partsOfSpeech.ts for why the vocabulary is closed: the field is collected so the
+ * entry can be sent upstream one day, and `interjection` is not a value upstream takes.
+ *
+ * A value already stored that is NOT in the list keeps its own option rather than being dropped.
+ * Rows predate this control, and silently re-selecting the placeholder for one would turn "we
+ * recorded something odd" into "we recorded nothing" the next time anybody opened the form. */
+function PartOfSpeechField({ id, value, onChange }: { id: string; value: string; onChange: (next: string) => void }) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>Part of speech</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">(choose one)</option>
+        {value && !isKnownPartOfSpeech(value) ? <option value={value}>{value} (already recorded)</option> : null}
+        {PARTS_OF_SPEECH.map((p) => (
+          <option key={p.value} value={p.value}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      <p className="field-note">
+        Wiktionary&apos;s own categories, because this is the entry we would send there - so it has to be one of
+        theirs, not the word an English grammar lesson would use.
+      </p>
+    </div>
   );
 }
 
@@ -496,16 +529,7 @@ function WordTab({
                   placeholder="e.g. recent loanword; traditional calendar name"
                 />
               </div>
-              <div className="field">
-                <label htmlFor="word-pos-field">Part of speech</label>
-                <input
-                  id="word-pos-field"
-                  type="text"
-                  value={pos}
-                  onChange={(e) => setPos(e.target.value)}
-                  placeholder="e.g. noun, verb, intj"
-                />
-              </div>
+              <PartOfSpeechField id="word-pos-field" value={pos} onChange={setPos} />
               <div className="field">
                 <label htmlFor="word-gloss-field">English gloss</label>
                 <input
@@ -718,6 +742,57 @@ function PhraseTab({
     }
   }
 
+  /** Picking an upstream record, which now means one of two things depending on the record.
+   *
+   * Lifted out of the search box's onSelect so the per-row button can call it too - the two rows
+   * need different verbs, and a shared selectLabel could only name one of the two jobs. */
+  function selectUpstream(r: KaikkiSearchResult) {
+        if (!r.entryId) {
+          setStatus('That Kaikki record carries no etymology id - re-ingest the corpus before citing it.');
+          return;
+        }
+        if (r.claim?.status === 'in_dictionary') {
+          setStatus(`${r.claim.wordId} already holds that etymology - add it from the dictionary search above.`);
+          return;
+        }
+        // A multi-word hit IS this phrase, not a word of it.
+        //
+        // It used to be refused outright - "that is itself a phrase, so it cannot be one word of
+        // this one" - which has the right object and the wrong outcome. Upstream holds 480
+        // multi-word entries and `o ṣé` is one of them, spelled with the tone we would otherwise
+        // guess at; the only route to adopting one was to start on the WORD tab, be refused
+        // there, and be handed over. So a curator who correctly began on the Phrase tab was told
+        // no, with nothing to say the same search one tab away would have worked.
+        //
+        // Adopting in place is the same seeding the hand-off does, minus the reset: components
+        // already picked are kept, because a curator who added `o` before finding the whole
+        // entry has said something true about this phrase and should not have to say it twice.
+        // If those components disagree with upstream's spelling, the spelling report above says
+        // so in its own words rather than this refusing on their behalf.
+        if (isMultiWord(r.standardForms[0] ?? r.form)) {
+          const form = r.standardForms[0] ?? r.form;
+          setDraft({
+            ...draft,
+            displayText: form,
+            hint: hint || hintFromGloss(r.glosses[0]),
+            adopted: r,
+            pos: r.pos,
+            englishGloss: r.glosses[0] ?? '',
+          });
+          setStatus(
+            `Citing ${form} as this phrase, with Wiktionary's own spelling. Add the word behind each part below - ` +
+              `its meaning is not the sum of them, which is why it has an etymology of its own.`,
+          );
+          return;
+        }
+        // Sent to the WORD tab rather than created from a cut-down form here. Words are created in one
+        // place, with the whole form that belongs to that job - spelling choice among standardForms,
+        // syllables, a student definition, the duplicate check - none of which a component picker
+        // should be reimplementing. The phrase draft is held by AddWord, so it survives the trip and
+        // the new word is appended on the way back.
+        onNeedWord(r);
+  }
+
   return (
     <div aria-label="Add phrase tab" ref={topRef}>
       {adopted ? (
@@ -820,7 +895,10 @@ function PhraseTab({
         label="Search words already in the dictionary"
       />
 
-      <p className="field-note">Not in the dictionary yet? Find the word in Wiktionary and it will be added first.</p>
+      <p className="field-note">
+        Not in the dictionary yet? Find it in Wiktionary. A single word is added as a word first and comes back as a
+        component; a multi-word entry is this phrase itself, and picking it fills the spelling in and cites it.
+      </p>
       <SearchBox
         search={searchKaikki}
         renderResult={(r) => (
@@ -829,30 +907,19 @@ function PhraseTab({
             <ClaimBadge result={r} />
           </>
         )}
-        onSelect={(r: KaikkiSearchResult) => {
-          if (!r.entryId) {
-            setStatus('That Kaikki record carries no etymology id - re-ingest the corpus before citing it.');
-            return;
-          }
-          if (r.claim?.status === 'in_dictionary') {
-            setStatus(`${r.claim.wordId} already holds that etymology - add it from the dictionary search above.`);
-            return;
-          }
-          if (isMultiWord(r.standardForms[0] ?? r.form)) {
-            setStatus('That is itself a phrase, so it cannot be one word of this one.');
-            return;
-          }
-          // Sent to the WORD tab rather than created from a cut-down form here. Words are created in one
-          // place, with the whole form that belongs to that job - spelling choice among standardForms,
-          // syllables, a student definition, the duplicate check - none of which a component picker
-          // should be reimplementing. The phrase draft is held by AddWord, so it survives the trip and
-          // the new word is appended on the way back.
-          onNeedWord(r);
-        }}
-        selectLabel="Add it as a word first"
-        placeholder="Search Wiktionary for a missing word..."
+        onSelect={selectUpstream}
+        // Two different jobs on one result list, so the verb is per row rather than one label for
+        // both. A row that says "Add it as a word first" and a row that says "Use as this phrase"
+        // are doing genuinely different things, and a single shared label could only describe one
+        // of them - which is how the multi-word case came to look unavailable here.
+        renderAction={(r: KaikkiSearchResult) => (
+          <button type="button" className="btn btn-secondary" onClick={() => selectUpstream(r)}>
+            {isMultiWord(r.standardForms[0] ?? r.form) ? 'Use as this phrase' : 'Add it as a word first'}
+          </button>
+        )}
+        placeholder="Search Wiktionary for this phrase, or for a missing word..."
         resultsAriaLabel="Kaikki component search results"
-        label="Search Wiktionary for a missing word"
+        label="Search Wiktionary for this phrase, or for a missing word"
       />
 
       <p>
@@ -879,16 +946,11 @@ function PhraseTab({
           both already; asking again would be asking a curator to retype what upstream said. */}
       {adopted ? null : (
         <>
-          <div className="field">
-            <label htmlFor="phrase-pos-field">Part of speech</label>
-            <input
-              id="phrase-pos-field"
-              type="text"
-              value={pos}
-              onChange={(e) => setDraft({ ...draft, pos: e.target.value })}
-              placeholder="e.g. intj, noun, verb"
-            />
-          </div>
+          <PartOfSpeechField
+            id="phrase-pos-field"
+            value={pos}
+            onChange={(next) => setDraft({ ...draft, pos: next })}
+          />
           <div className="field">
             <label htmlFor="phrase-gloss-field">English gloss</label>
             <input

@@ -201,15 +201,77 @@ describe('AudioRecording', () => {
     expect(screen.getByRole('button', { name: 'Submit recording' })).toBeDisabled();
   });
 
-  it('falls back to plain fields for a word that cannot be syllabified, which must stay recordable', async () => {
-    // syllabifySpans returns null for Ajami, hyphenated forms and interjections - 805 of 5,580
-    // corpus forms. There is no grid to draw for those, and rewriting them into one would mangle
-    // the spelling, so they keep the text fields. Same branch EntryReview takes.
-    //
-    // This also replaces the old "edit the syllables field down to 1 syllable" route: for a word
-    // that DOES syllabify, the count is now a function of the spelling.
+  it('falls back to plain fields only for a word nothing can syllabify, which must stay recordable', async () => {
+    // The fallback's population is now what it says: text with no syllable model AT ALL, an Ajami
+    // spelling being the real case. It used to catch hyphenated forms and every phrase as well,
+    // because syllabifySpans refuses each of those as a whole - see the two tests below, which are
+    // the branch those actually belong on.
     installAudioMocks(ONE_SYLLABLE_SAMPLES);
     const user = userEvent.setup();
+    const ajami = { ...entryFixture, displayText: 'شعِ', syllables: ['شعِ'] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => ajami });
+        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<AudioRecording wordId="ajami" isCurator={false} />);
+    await waitFor(() => expect(screen.getByLabelText('Cannot show a tone grid')).toBeInTheDocument());
+
+    expect(screen.getByLabelText('Spelling')).toHaveValue('شعِ');
+    expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('شعِ');
+    expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
+
+    // And the count check still works off that field, so the word remains recordable.
+    const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
+    await user.clear(syllablesField);
+    await user.type(syllablesField, 'شع');
+    await recordBothTakes(user);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Detected 1 syllables, matching the expected count\./)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Submit recording' })).toBeEnabled();
+  });
+
+  it('gives a phrase one tone grid per word, which is the whole population that had none', async () => {
+    // The bug this covers: syllabifySpans refuses every space, so EVERY phrase in the dictionary
+    // took the unsplittable fallback and was told its tones "can't be shown as a grid". A phrase is
+    // where the tone grid matters most - a phrase inherits its parts' spellings, and `o ṣé` is
+    // exactly the case where one of them is wrong at mid tone.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const user = userEvent.setup();
+    const phrase = { ...entryFixture, displayText: 'o ṣé', syllables: ['o', 'ṣé'] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => phrase });
+        if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<AudioRecording wordId="o_se_thank_you" isCurator={false} />);
+    // One grid per word, so the syllable numbering restarts and the word is named in the label.
+    await waitFor(() => expect(screen.getByLabelText('Tone of syllable 1 of word 1')).toBeInTheDocument());
+    expect(screen.getByLabelText('Tone of syllable 1 of word 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Cannot show a tone grid')).not.toBeInTheDocument();
+
+    // The count comes from the syllables, which do NOT include the space - two, not three.
+    await recordBothTakes(user);
+    await waitFor(() => {
+      expect(screen.getByText(/Detected 2 syllables, matching the expected count\./)).toBeInTheDocument();
+    });
+  });
+
+  it('gives a hyphenated word grids too, because a hyphen is a separator like a space', async () => {
+    // `ilé-ìwé` and `aárùn-ún` are the real forms, and the hyphenated spelling is the LEMMA for an
+    // elongated nasal - the one that says which way the nasal attaches. Refusing to grid it sent
+    // the form we most want recorded to the retype-a-list fallback.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
     const hyphenated = { ...entryFixture, displayText: 'gan-an', syllables: ['gan', 'an'] };
     vi.stubGlobal(
       'fetch',
@@ -221,22 +283,12 @@ describe('AudioRecording', () => {
     );
 
     render(<AudioRecording wordId="ganan" isCurator={false} />);
-    await waitFor(() => expect(screen.getByLabelText('Cannot show a tone grid')).toBeInTheDocument());
-
-    expect(screen.getByLabelText('Spelling')).toHaveValue('gan-an');
-    expect(screen.getByLabelText('Syllables (comma-separated)')).toHaveValue('gan,an');
-    expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
-
-    // And the count check still works off that field, so the word remains recordable.
-    const syllablesField = screen.getByLabelText('Syllables (comma-separated)');
-    await user.clear(syllablesField);
-    await user.type(syllablesField, 'ganan');
-    await recordBothTakes(user);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Detected 1 syllables, matching the expected count\./)).toBeInTheDocument();
-    });
-    expect(screen.getByRole('button', { name: 'Submit recording' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByLabelText('Tone of syllable 1 of word 1')).toBeInTheDocument());
+    expect(screen.getByLabelText('Tone of syllable 1 of word 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Cannot show a tone grid')).not.toBeInTheDocument();
+    // The hyphen survives into what gets recorded - it is orthography, not a syllable boundary
+    // we invented, and the spelling submitted has to be the one on screen.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('gan-an');
   });
 
   it('names the syllable and its tone against each detected clip, not the timings', async () => {

@@ -852,3 +852,131 @@ describe('a hyphenated entry is editable, and its hyphen is a separator', () => 
     expect(screen.queryByLabelText('Phrase composer')).not.toBeInTheDocument();
   });
 });
+
+describe('linking an etymology must not swallow the spelling that was corrected alongside it', () => {
+  // The bug, from a real session on `o ṣe`. A curator opened the entry axis, corrected the tone to
+  // `o ṣé` in the composer, then used curator tools to link the Kaikki record - and the tone was
+  // gone from every later screen. Nothing had failed: the two answers were resolved with a plain
+  // `pick ?? edited`, so the pick won, and `select_candidate` writes no display_text at all. The
+  // spelling correction was discarded on the client with the "Reads:" line still showing it.
+  //
+  // The two are separate questions and land in separate fields - `action` says how it is spelled,
+  // `senseEntryId` says which etymology it is - so both belong in the one submission.
+  const O_SE = {
+    ...entryFixture,
+    wordId: 'o_se_thank_you',
+    displayText: 'o ṣe',
+    matchedForm: 'o ṣe',
+    canonicalForm: 'o ṣe',
+    syllables: ['o', 'ṣe'],
+    syllableSplitStatus: 'match',
+    citation: {
+      entryId: 'en-o-ṣe-yo-intj-OLD',
+      exemptReason: null,
+      pin: { pos: 'intj', glosses: ['thank you'], canonicalForm: 'o ṣé', etymologyText: null, etymologyNumber: null },
+    },
+  };
+
+  const UPSTREAM_RESULT = [
+    {
+      form: 'o ṣé',
+      pos: 'intj',
+      glosses: ['thank you (non-honorific, to a singular person)'],
+      matchedVia: 'yoruba_exact',
+      altOfTargets: [],
+      standardForms: ['o ṣé'],
+      entryId: 'en-o-ṣe-yo-intj-NEW',
+      etymologyNumber: null,
+    },
+  ];
+
+  it('keeps the respelling AND records the etymology, in one submission', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(O_SE, UPSTREAM_RESULT);
+    render(<EntryReview wordId="o_se_thank_you" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Phrase composer')).toBeInTheDocument());
+
+    // Correct the tone first, exactly as the curator did.
+    const field = screen.getByLabelText('The phrase, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'o ṣé');
+
+    // Then link the record.
+    await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
+    await user.click(screen.getByRole('button', { name: 'Use this record' }));
+
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+    expect(postedBody(fetchMock)).toMatchObject({
+      action: 'respell',
+      newDisplayText: 'o ṣé',
+      senseEntryId: 'en-o-ṣe-yo-intj-NEW',
+    });
+    expect(postedBody(fetchMock).newSyllables).toEqual(['o', 'ṣé']);
+  });
+
+  it('does the same for a single word, where the correction comes off the syllable row', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(entryFixture, UPSTREAM_RESULT);
+    render(<EntryReview wordId="w" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
+
+    // dùjẹ̀kù -> the first syllable at high tone. Any tone edit is a respell.
+    await user.click(screen.getByLabelText('Syllable 1 high tone'));
+    await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
+    await user.click(screen.getByRole('button', { name: 'Use this record' }));
+
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+    expect(postedBody(fetchMock).senseEntryId).toBe('en-o-ṣe-yo-intj-NEW');
+  });
+
+  it('still lets the pick decide on its own when the spelling was left alone', async () => {
+    // keep_ours says nothing select_candidate does not say better, so an untouched spelling must
+    // not demote the pick to a no-op.
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(O_SE, UPSTREAM_RESULT);
+    render(<EntryReview wordId="o_se_thank_you" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Phrase composer')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
+    await user.click(screen.getByRole('button', { name: 'Use this record' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({
+        action: 'select_candidate',
+        senseEntryId: 'en-o-ṣe-yo-intj-NEW',
+      }),
+    );
+  });
+
+  it('says what Wiktionary has for a phrase, and offers it - which this branch never did', async () => {
+    // The pinned canonicalForm was `o ṣé` the whole time. Only the single-word branch rendered the
+    // comparison, so on a phrase the right answer sat in the citation, invisible, on the one screen
+    // whose job is to settle the spelling.
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(O_SE);
+    render(<EntryReview wordId="o_se_thank_you" isCurator />);
+    await waitFor(() => expect(screen.getByLabelText('Phrase composer')).toBeInTheDocument());
+
+    expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent(
+      'Wiktionary has o ṣé - same letters, different tone.',
+    );
+
+    await user.click(screen.getByRole('button', { name: "Use Wiktionary's spelling" }));
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('o ṣé');
+
+    // Loaded into the composer, not submitted from under the curator - and it travels as a
+    // respell, since a phrase has no adopt_kaikki route (diagnoseEntry returns early for one).
+    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
+    expect(postedBody(fetchMock).newDisplayText).toBe('o ṣé');
+  });
+});

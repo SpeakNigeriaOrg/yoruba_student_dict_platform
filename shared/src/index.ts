@@ -20,3 +20,4 @@ export * from './nasalSplit.js';
 export * from './phraseTokens.js';
 export * from './phraseSpelling.js';
 export * from './contributorTerms.js';
+export * from './partsOfSpeech.js';
