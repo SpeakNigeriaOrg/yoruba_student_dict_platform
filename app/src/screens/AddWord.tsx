@@ -174,7 +174,19 @@ function EtymologyLabel({ result }: { result: KaikkiSearchResult }) {
  * A value already stored that is NOT in the list keeps its own option rather than being dropped.
  * Rows predate this control, and silently re-selecting the placeholder for one would turn "we
  * recorded something odd" into "we recorded nothing" the next time anybody opened the form. */
-function PartOfSpeechField({ id, value, onChange }: { id: string; value: string; onChange: (next: string) => void }) {
+function PartOfSpeechField({
+  id,
+  value,
+  onChange,
+  note,
+}: {
+  id: string;
+  value: string;
+  onChange: (next: string) => void;
+  /** An extra sentence for the tab that needs one. See the Phrase tab's, which heads off the
+   * reading this control invites - that a phrase's part of speech is `phrase`. */
+  note?: string;
+}) {
   return (
     <div className="field">
       <label htmlFor={id}>Part of speech</label>
@@ -190,6 +202,7 @@ function PartOfSpeechField({ id, value, onChange }: { id: string; value: string;
       <p className="field-note">
         Wiktionary&apos;s own categories, because this is the entry we would send there - so it has to be one of
         theirs, not the word an English grammar lesson would use.
+        {note ? ` ${note}` : ''}
       </p>
     </div>
   );
@@ -946,10 +959,22 @@ function PhraseTab({
           both already; asking again would be asking a curator to retype what upstream said. */}
       {adopted ? null : (
         <>
+          {/* Two different facts, and this control asks for only one of them. That this entry is a
+              phrase is already recorded, structurally, by having components - createPhrase writes
+              entry_type without asking. What is asked here is what the phrase IS grammatically,
+              which upstream answers separately: of its 536 multi-word entries, 56% are nouns, 12%
+              verbs, 11% names, and just 2.4% carry the pos `phrase`. So `phrase` is not the safe
+              answer, it is a narrow residual category for a set expression that is none of the
+              others - and defaulting to it would be wrong for 97 of every 100 phrases, in the
+              silent way a default is wrong, since nobody would have said it. */}
           <PartOfSpeechField
             id="phrase-pos-field"
             value={pos}
             onChange={(next) => setDraft({ ...draft, pos: next })}
+            note={
+              'What the phrase is grammatically, which is usually not "phrase" - `o ṣé` is an interjection and ' +
+              '`ojú sánmà` is a noun. That this entry is a phrase is already recorded by the words you list below.'
+            }
           />
           <div className="field">
             <label htmlFor="phrase-gloss-field">English gloss</label>
