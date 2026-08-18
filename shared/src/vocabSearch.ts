@@ -11,15 +11,16 @@ import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.j
 import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
 import type { Vocab } from './types.js';
 
-export type VocabSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'word_id' | 'english';
+export type VocabSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'yoruba_substring' | 'word_id' | 'english';
 
 const TIER_RANK: Record<VocabSearchTier, number> = {
   yoruba_exact: 0,
   yoruba_tone: 1,
   yoruba_ortho: 2,
   yoruba_prefix: 3,
-  word_id: 4,
-  english: 5,
+  yoruba_substring: 4,
+  word_id: 5,
+  english: 6,
 };
 
 export interface VocabSearchResult {
@@ -60,6 +61,20 @@ export function searchVocab(vocab: Vocab, query: string, limit = 15): VocabSearc
     else if (qTone && fTone === qTone) tier = 'yoruba_tone';
     else if (qOrtho && fOrtho === qOrtho) tier = 'yoruba_ortho';
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
+    // A fragment from anywhere in the spelling, ranked below every form of prefix match.
+    //
+    // The one deliberate divergence from vocab_search.py, added when the browse screen stopped
+    // filtering with a private `includes` of its own and started asking this function instead. A
+    // browse box narrows a list the reader is looking at, so `sílẹ̀` has to find `fi sílẹ̀` - the
+    // fragment is a whole word of the phrase, just not the first one. Without this tier the only
+    // thing that answered such a query was the word_id tier, which works by accident (ids embed
+    // the spelling) and stops working the moment an id is named for its meaning instead.
+    //
+    // Free with respect to the parity corpus: none of the recorded fixture queries gains a result
+    // from it, so the ported behaviour is unchanged everywhere it was ever measured. Ranked after
+    // the prefix tier so it can only ADD results below the ones Python already ordered, never
+    // reorder them.
+    else if (qOrtho && qOrtho.length >= 2 && fOrtho.includes(qOrtho)) tier = 'yoruba_substring';
     else if (qExact && wordId.toLowerCase().includes(qExact)) tier = 'word_id';
 
     if (tier) results.set(wordId, { tier, score: 0 });
