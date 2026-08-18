@@ -382,7 +382,7 @@ function WordTab({
       await createWord({
         wordId: wordIdPreview,
         displayText: selectedForm,
-        syllables: syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
+        syllables: offPath ? composedSyllables : syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
         definition: definitionText.trim() || null,
         citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
         // Off-path only: a cited word reads both from its pin, and 0018 keeps these as overrides
@@ -390,7 +390,7 @@ function WordTab({
         ...(offPath ? { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null } : {}),
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
-      const syllablesOut = syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
+      const syllablesOut = offPath ? composedSyllables : syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
       // Clear the form and go back to the top. Adding words is a repeated action, and the confirmation
       // used to appear at the bottom of a long form with the just-submitted values still in it - so the
       // next word meant scrolling back up past everything, and the enabled button re-POSTed a duplicate.
@@ -413,6 +413,12 @@ function WordTab({
     }
   }
 
+  // The syllables of a spelling the contributor authored themselves, read back off the composer
+  // rather than typed beside it - the same one-source-of-truth rule the Phrase tab and the audio
+  // screen already follow. Only the off-path branch uses it; a cited word's split still has its own
+  // editable field, because there the spelling was authored upstream and this is a split of
+  // somebody else's text.
+  const composedSyllables = phraseSyllables(splitPhrase(selectedForm).words);
   const showDetails = offPath || selected !== null;
 
   return (
@@ -472,15 +478,28 @@ function WordTab({
             </p>
           ) : null}
           {offPath ? (
-            <div className="field">
-              <label htmlFor="word-spelling-field">Spelling</label>
-              <input
-                id="word-spelling-field"
-                type="text"
-                value={selectedForm}
-                onChange={(e) => chooseSpelling(e.target.value)}
-              />
-            </div>
+            // The one branch on this screen where a human AUTHORS the spelling, and it was the one
+            // with no tone grid.
+            //
+            // A cited word arrives spelled by upstream, tones included, and the radios below only
+            // choose between forms Wiktionary already wrote. This branch had a bare text box, so
+            // the tone marks had to be typed - the single thing this app is built so that nobody
+            // ever has to do, because no phone keyboard produces them and `ẹ` `ọ` `ṣ` are not on
+            // one either. Whatever came out became golden_record, and this is precisely the
+            // population where that is permanent: an exempt word has no upstream form to be checked
+            // against, ever. So a word entered here toneless stays toneless until a human notices.
+            //
+            // Same composer the Phrase tab and the entry axis use, so a word is authored the way
+            // everything else is: type the letters, tap the six the keyboard lacks, choose the tone
+            // on a grid and the mark is generated. It grids a hyphenated form too, which a
+            // loanword or a compound may well be.
+            <PhraseComposer
+              id="word-spelling"
+              label="Spelling"
+              placeholder="e.g. rédíò"
+              value={selectedForm}
+              onChange={setSelectedForm}
+            />
           ) : null}
 
           {selected && selected.standardForms.length > 1 ? (
@@ -502,15 +521,24 @@ function WordTab({
             </div>
           ) : null}
 
-          <div className="field">
-            <label htmlFor="word-syllables-field">Syllables (comma-separated)</label>
-            <input
-              id="word-syllables-field"
-              type="text"
-              value={syllablesText}
-              onChange={(e) => setSyllablesText(e.target.value)}
-            />
-          </div>
+          {offPath ? (
+            // Read, not typed. The grids above produced these, so a second box to retype them in
+            // could only ever disagree with the spelling - and a split that disagrees with its own
+            // display_text is a real production defect (agunfon_giraffe), not a hypothetical one.
+            <p>
+              Syllables: <strong>{composedSyllables.join(' · ')}</strong>
+            </p>
+          ) : (
+            <div className="field">
+              <label htmlFor="word-syllables-field">Syllables (comma-separated)</label>
+              <input
+                id="word-syllables-field"
+                type="text"
+                value={syllablesText}
+                onChange={(e) => setSyllablesText(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="word-definition-field">Student definition</label>

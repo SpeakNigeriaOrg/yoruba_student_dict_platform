@@ -199,6 +199,50 @@ describe('AddWord - Word tab', () => {
       expect(body.citation).toEqual({ exemptReason: 'recent loanword' });
     });
 
+    it('gives the authored spelling a tone grid, which is the one branch that had none', async () => {
+      // The gap: a cited word arrives spelled by upstream, tones included, and the radios only
+      // choose between forms Wiktionary already wrote. This branch is where a human authors the
+      // spelling - and it was a bare text box, so the tone marks had to be typed. No phone keyboard
+      // produces them, and an exempt word has no upstream form to be corrected against later, so
+      // whatever was typed became golden_record permanently.
+      vi.stubGlobal('fetch', mockFetch());
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+      await user.type(screen.getByLabelText('Spelling'), 'redio');
+
+      // Three syllables, each with its own tone control - re · di · o.
+      expect(screen.getByLabelText('Tone of syllable 1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Tone of syllable 3')).toBeInTheDocument();
+      // And the six letters no keyboard has, without which `ẹ` `ọ` `ṣ` cannot be entered at all.
+      expect(screen.getByRole('group', { name: 'Yoruba letters' })).toBeInTheDocument();
+    });
+
+    it('records the tone the grid produced, never a mark anyone typed', async () => {
+      const fetchMock = mockFetch();
+      vi.stubGlobal('fetch', fetchMock);
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+      await user.type(screen.getByLabelText('Spelling'), 'redio');
+      // High on the second syllable: re · dí · o.
+      await user.click(screen.getByLabelText('Syllable 2 high tone'));
+      await user.type(screen.getByLabelText('Why is this word not in Wiktionary?'), 'recent loanword');
+      await user.type(screen.getByLabelText(/Word ID hint/), 'radio');
+      await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('to vocabulary'));
+      const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+      expect(body.displayText).toBe('redío');
+      // Derived from the same grids that produced the spelling, so the two cannot disagree - which
+      // is a real production defect (agunfon_giraffe: 'àgùnfon' against ['à','gùn','fọn']), not a
+      // hypothetical one. There is no comma-separated box on this branch to disagree from.
+      expect(body.syllables).toEqual(['re', 'dí', 'o']);
+      expect(screen.queryByLabelText('Syllables (comma-separated)')).not.toBeInTheDocument();
+    });
+
     it('leaving the off-path branch clears it, so the two paths cannot be half-entered', async () => {
       vi.stubGlobal('fetch', mockFetch());
       const user = userEvent.setup();
