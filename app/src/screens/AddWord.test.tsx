@@ -199,6 +199,25 @@ describe('AddWord - Word tab', () => {
       expect(body.citation).toEqual({ exemptReason: 'recent loanword' });
     });
 
+    it('opens with the word that was just searched for, not an empty box', async () => {
+      // Reaching this branch means "I looked for this and it is not there", so the spelling is the
+      // query. It used to clear the field and ask for it again, at the one moment the answer was
+      // already on screen - the query was private to SearchBox and nothing carried it across.
+      vi.stubGlobal('fetch', mockFetch({ kaikkiResults: [] }));
+      const user = userEvent.setup();
+
+      render(<AddWord />);
+      await user.type(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...'), 'redio');
+      await user.click(screen.getByRole('button', { name: 'Search' }));
+      await waitFor(() => screen.getByText('No results.'));
+
+      await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+
+      expect(screen.getByLabelText('Spelling')).toHaveValue('redio');
+      // And it arrives with its grids, so the tone is one tap rather than a retype.
+      expect(screen.getByLabelText('Tone of syllable 1')).toBeInTheDocument();
+    });
+
     it('gives the authored spelling a tone grid, which is the one branch that had none', async () => {
       // The gap: a cited word arrives spelled by upstream, tones included, and the radios only
       // choose between forms Wiktionary already wrote. This branch is where a human authors the

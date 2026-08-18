@@ -246,6 +246,11 @@ function WordTab({
   /** The off-path branch: a real word with no Wiktionary entry. Separate state
    * rather than a null selection, so the two paths cannot be half-entered. */
   const [offPath, setOffPath] = useState(false);
+  /** The last thing typed into the Kaikki search, kept so the off-path branch can open with it.
+   *
+   * Held here rather than read out of SearchBox on demand because the box unmounts when that branch
+   * opens - by then the only copy of the query would be gone. */
+  const [lastQuery, setLastQuery] = useState('');
   const [exemptReason, setExemptReason] = useState('');
   /** 0018's publication fields, asked for on the off-path branch only.
    *
@@ -342,6 +347,19 @@ function WordTab({
   function startOffPath() {
     resetForm();
     setOffPath(true);
+    // Opened with the word they were just searching for.
+    //
+    // Reaching this branch means "I looked for this and it is not there", so the spelling in
+    // question is precisely the query - and the old form cleared the field and asked for it a
+    // second time, at the one moment the answer was already on screen.
+    //
+    // Seeded whatever the query looked like, rather than only when it looks Yoruba. looksLikeYoruba
+    // tests for ẹ ọ ṣ and tone marks, so it is false for `redio` - a real loanword spelling, and
+    // exactly the kind of word this branch exists for, since a contributor cannot type those
+    // characters in the first place. Gating on it would withhold the seeding from the common case
+    // to guard against a rarer one that is visible and one edit away: the field is the first thing
+    // under the warning banner, with its tone grids underneath.
+    setSelectedForm(lastQuery.trim());
   }
 
   function backToSearch() {
@@ -449,6 +467,7 @@ function WordTab({
               </>
             )}
             onSelect={pickResult}
+            onQueryChange={setLastQuery}
             selectLabel="Select"
             placeholder="Search Kaikki by spelling or meaning..."
             resultsAriaLabel="Kaikki search results"

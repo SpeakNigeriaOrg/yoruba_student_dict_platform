@@ -34,6 +34,13 @@ export interface SearchBoxProps<T> {
    * For a result the caller cannot accept: offering "Select" on something that will be refused is
    * worse than offering nothing, because the refusal arrives after the form is filled in. */
   renderAction?: (result: T) => React.ReactNode;
+  /** Reports what the reader has typed, for a caller that needs the QUERY rather than a result.
+   *
+   * Add Word's off-path branch is the case: someone searches for a word, does not find it, and says
+   * so - and the spelling they want is the thing they just typed. The query was private to this
+   * component, so that branch opened with an empty field and asked them to type it again. Optional,
+   * because it is the only caller that has anything to do with a query that matched nothing. */
+  onQueryChange?: (query: string) => void;
   /** Names this search box, for a screen that has more than one.
    *
    * The Phrase tab has two - one over the dictionary, one over Wiktionary - and unlabelled they present
@@ -52,6 +59,7 @@ export function SearchBox<T>({
   initialQuery,
   isSelected,
   renderAction,
+  onQueryChange,
   label,
 }: SearchBoxProps<T>) {
   const [query, setQuery] = useState(initialQuery ?? '');
@@ -82,7 +90,10 @@ export function SearchBox<T>({
           type="text"
           value={query}
           placeholder={placeholder}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onQueryChange?.(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') runSearch();
           }}
