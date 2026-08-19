@@ -34,12 +34,29 @@ describe('assertWordIdShape', () => {
     }
   });
 
+  it('accepts a hyphen, which the deriver has always produced', () => {
+    // `rẹ́rìn-ín` derives `rerin-in_to_laugh`, and this refused it - a contradiction rather than a
+    // policy, since orthographyInsensitiveForm strips tone marks and underdots and nothing else.
+    // Leading and trailing forms included: the interfix `-kí-` and the `i-` prefixes are real
+    // corpus entries, and the hyphen is the only thing telling a bound affix from the free word.
+    for (const id of ['rerin-in_to_laugh', 'ile-iwe_school', 'aarun-un_illness', '-ola_wealth', 'i-_prefix']) {
+      expect(() => assertWordIdShape(id)).not.toThrow();
+    }
+  });
+
   it('agrees with orthographyInsensitiveForm, which is where ids come from', () => {
-    // The guarantee is only real if the deriving function cannot produce something this
-    // refuses. `ọwọ́` is the hard case: underdot and tone on the same vowel.
-    for (const spelling of ['ọwọ́', 'ẹ jọ̀ọ́', 'Ṣóyínká', 'gban̄gba', 'ilé-ìwé']) {
+    // The guarantee is only real if the deriving function cannot produce something this refuses.
+    // `ọwọ́` is the hard case: underdot and tone on the same vowel.
+    //
+    // Asserted against WORD_ID_PATTERN itself, NOT against a regex written here. This test had its
+    // own `/^[a-z0-9_-]+$/` - looser than the pattern it was standing in for - so when `ilé-ìwé`
+    // was added and the hyphen was added alongside it to make the line pass, the two rules
+    // disagreed and nothing failed. That is exactly the drift this test exists to prevent, so it
+    // can only ever read the real constant.
+    for (const spelling of ['ọwọ́', 'ẹ jọ̀ọ́', 'Ṣóyínká', 'gban̄gba', 'ilé-ìwé', 'rẹ́rìn-ín', 'aárùn-ún', '-ọlá']) {
       const base = orthographyInsensitiveForm(spelling).replace(/\s+/g, '_');
-      expect(base).toMatch(/^[a-z0-9_-]+$/);
+      expect(base).toMatch(WORD_ID_PATTERN);
+      expect(() => assertWordIdShape(base)).not.toThrow();
     }
   });
 
@@ -51,6 +68,8 @@ describe('assertWordIdShape', () => {
   });
 
   it('refuses uppercase, spaces, slashes and dots', () => {
+    // The hyphen is admitted, the path characters are not - `../etc/passwd` still has both a dot
+    // and a slash, which is what made it dangerous.
     for (const id of ['Owo_hand', 'owo hand', 'owo/hand', 'owo.hand', '../etc/passwd', '']) {
       expect(() => assertWordIdShape(id)).toThrow(InvalidWordIdError);
     }
