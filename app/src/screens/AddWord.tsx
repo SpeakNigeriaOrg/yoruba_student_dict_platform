@@ -959,42 +959,6 @@ function PhraseTab({
         </p>
       ) : null}
 
-      {/* The phrase itself, first, because it is the thing being authored rather than a read-out of
-          the components - but arriving filled in from them, because in the ordinary case picking the
-          words IS spelling the phrase. The composer gives it a tone grid per word, so a curator
-          correcting it never types a combining mark and `o ṣé` can be written at the tone people
-          actually say. */}
-      <PhraseComposer
-        id="phrase-spelling"
-        label="The phrase, spelled as it is said"
-        placeholder="e.g. o ṣé"
-        value={displayText}
-        onChange={(next) => setDraft({ ...draft, displayText: next, spellingEdited: true })}
-      />
-      {/* Which of the two states the field is in, said only when there is a difference to describe.
-          With no components picked and nothing typed there is nothing to say, and a note that stayed
-          put through both states would be describing the field's history rather than its contents. */}
-      {!draft.spellingEdited && components.length > 0 ? (
-        <p className="field-note" aria-label="Spelled from the components">
-          Spelled from the components below. Correct it above if the phrase is not said that way - a
-          contraction, an elision, a tone change.
-        </p>
-      ) : null}
-      {/* The way back, offered only when it would change something. A default that cannot be
-          restored is one a curator has to be careful around; this makes an experimental correction
-          cheap to undo, which is what makes correcting it the normal thing to do. */}
-      {draft.spellingEdited && components.length > 0 && displayText !== proposedSpelling ? (
-        <p className="field-note">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setDraft({ ...draft, displayText: '', spellingEdited: false })}
-          >
-            Spell it from the components ({proposedSpelling})
-          </button>
-        </p>
-      ) : null}
-
       {components.length === 0 ? (
         <p>No components picked yet.</p>
       ) : (
@@ -1104,6 +1068,60 @@ function PhraseTab({
         resultsAriaLabel="Kaikki component search results"
         label="Search Wiktionary for this phrase, or for a missing word"
       />
+
+      {/* The spelling, after the components, because in the ordinary case picking the words IS
+          spelling the phrase. What the parts spell is shown as a read-out and submitted as it
+          stands; the tone grid opens only for the phrase that is not said that way - a contraction,
+          an elision, a tone change - which makes typing it the branch rather than the entrance.
+
+          The order is load-bearing, not taste. A spelling field at the top of the form is an
+          invitation to fill it in first, and a curator who does that has answered from memory the
+          question the components were about to answer from the dictionary - which is how `o ṣe`
+          came to be entered at a tone nobody says. */}
+      {draft.spellingEdited ? (
+        <>
+          <PhraseComposer
+            id="phrase-spelling"
+            label="The phrase, spelled as it is said"
+            placeholder="e.g. o ṣé"
+            value={displayText}
+            onChange={(next) => setDraft({ ...draft, displayText: next, spellingEdited: true })}
+          />
+          {/* The way back, offered whenever there is a default to return TO - including before the
+              correction has changed anything, which is exactly the state a curator who opened this
+              by mistake is in. A door that unlocks only once you have moved is not a way back. */}
+          {components.length > 0 ? (
+            <p className="field-note">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDraft({ ...draft, displayText: '', spellingEdited: false })}
+              >
+                Spell it from the components ({proposedSpelling})
+              </button>
+            </p>
+          ) : null}
+        </>
+      ) : components.length > 0 ? (
+        <div className="field">
+          <p aria-label="Spelled from the components">
+            The phrase, spelled from the components: <strong>{proposedSpelling}</strong>
+          </p>
+          <p className="field-note">
+            Add or remove words above and this follows. Correct it only if the phrase is not said the
+            way its parts are written.
+          </p>
+          <p className="field-note">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setDraft({ ...draft, displayText: proposedSpelling, spellingEdited: true })}
+            >
+              That is not how it is said - correct the spelling
+            </button>
+          </p>
+        </div>
+      ) : null}
 
       <p>
         Syllables: <strong>{syllables.join(' · ')}</strong>

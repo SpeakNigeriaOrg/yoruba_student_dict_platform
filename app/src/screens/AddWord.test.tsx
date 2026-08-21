@@ -315,11 +315,11 @@ describe('AddWord - Phrase tab', () => {
     expect(componentsList).toHaveTextContent('existingspelling');
     expect(componentsList).not.toHaveTextContent('existing_component');
 
-    // The spelling arrives from the component, so nothing is typed here. It is still SUBMITTED as an
-    // explicit display_text - the default is in the form, not in the storage rule.
-    expect((screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement).value).toBe(
-      'existingspelling',
-    );
+    // The spelling arrives from the component, so nothing is typed here and the tone grid is never
+    // opened. It is still SUBMITTED as an explicit display_text - the default is in the form, not in
+    // the storage rule.
+    expect(spelledFromComponents()).toBe('existingspelling');
+    expect(screen.queryByLabelText('The phrase, spelled as it is said')).toBeNull();
     await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
 
@@ -374,6 +374,10 @@ describe('AddWord - Phrase tab', () => {
 
     // Arrives as `o ṣe` - the components' own spellings - which is exactly the form that is wrong
     // here, so this is the case the default must stay correctable in.
+    expect(spelledFromComponents()).toBe('o ṣe');
+    await openSpelling(user);
+    // The grid opens holding what the parts spell, so correcting one tone is an edit rather than a
+    // retype from nothing - which is the whole reason the components go first.
     const spelling = screen.getByLabelText('The phrase, spelled as it is said');
     expect((spelling as HTMLInputElement).value).toBe('o ṣe');
     await user.clear(spelling);
@@ -488,21 +492,33 @@ async function phraseWithComponents(count: number, fetchMock: ReturnType<typeof 
   return user;
 }
 
+/** The tone grid, which now exists only once a curator has asked to correct the spelling. */
 const spellingField = () => screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement;
+/** What the parts spell, read off the default's read-out.
+ *
+ * Sliced off the prefix rather than matched as a substring: `toHaveTextContent('ojú')` passes just as
+ * happily against `ojú sánmà`, which would have let a component removal go unnoticed. */
+const spelledFromComponents = () =>
+  screen.getByLabelText('Spelled from the components').textContent!.replace(/^.*components: /, '');
+/** Takes the optional branch: the phrase is not said the way its parts are written. */
+const openSpelling = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole('button', { name: /correct the spelling/ }));
 
 describe('AddWord - a phrase is spelled from its components until it is not', () => {
   it('fills the spelling in as each component is added, and says that is where it came from', async () => {
     const user = await phraseWithComponents(1, mockFetch({ vocabResults: TWO_WORDS }));
-    expect(spellingField().value).toBe('ojú');
-    expect(screen.getByLabelText('Spelled from the components')).toBeInTheDocument();
+    expect(spelledFromComponents()).toBe('ojú');
+    // And no tone grid on screen: the default flow reads the spelling off the parts rather than
+    // asking for it.
+    expect(screen.queryByLabelText('The phrase, spelled as it is said')).toBeNull();
 
     // Still following: the second word extends it rather than being ignored.
     await user.click(screen.getAllByRole('button', { name: 'Add as component' })[1]);
-    expect(spellingField().value).toBe('ojú sánmà');
+    expect(spelledFromComponents()).toBe('ojú sánmà');
 
     // And removing one takes it back out, which a copied-on-add spelling would not have done.
     await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);
-    expect(spellingField().value).toBe('ojú');
+    expect(spelledFromComponents()).toBe('ojú');
   });
 
   it('submits the default with no typing at all, as an explicit spelling and syllables', async () => {
@@ -525,6 +541,7 @@ describe('AddWord - a phrase is spelled from its components until it is not', ()
     // The failure mode of copying the default into the draft on every add: `mu` + `ọtí` is written
     // `muti`, and picking the second word must not spell it back out again.
     const user = await phraseWithComponents(1, mockFetch({ vocabResults: TWO_WORDS }));
+    await openSpelling(user);
     await user.clear(spellingField());
     await user.type(spellingField(), 'ojúsánmà');
     await user.click(screen.getAllByRole('button', { name: 'Add as component' })[1]);
@@ -537,26 +554,42 @@ describe('AddWord - a phrase is spelled from its components until it is not', ()
 
   it('offers the components\' spelling back, so a correction is cheap to undo', async () => {
     const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
+    await openSpelling(user);
     await user.clear(spellingField());
     await user.type(spellingField(), 'wrong');
     const undo = screen.getByRole('button', { name: /Spell it from the components/ });
     expect(undo).toHaveTextContent('ojú sánmà');
 
     await user.click(undo);
-    expect(spellingField().value).toBe('ojú sánmà');
-    // Following again, not just holding the same string: a third word would extend it.
-    expect(screen.getByLabelText('Spelled from the components')).toBeInTheDocument();
+    // All the way back, not just back to the same string: the grid closes and the read-out returns,
+    // so a third word would extend it again.
+    expect(screen.queryByLabelText('The phrase, spelled as it is said')).toBeNull();
+    expect(spelledFromComponents()).toBe('ojú sánmà');
     expect(screen.queryByRole('button', { name: /Spell it from the components/ })).toBeNull();
   });
 
-  it('says nothing about either state before a component is picked', async () => {
+  it('lets a curator who opened the grid by mistake close it again, having typed nothing', async () => {
+    // The way back used to appear only once the correction DIFFERED from the default, which is the
+    // one state this curator is not in.
+    const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
+    await openSpelling(user);
+    await user.click(screen.getByRole('button', { name: /Spell it from the components/ }));
+
+    expect(screen.queryByLabelText('The phrase, spelled as it is said')).toBeNull();
+    expect(spelledFromComponents()).toBe('ojú sánmà');
+  });
+
+  it('shows no spelling at all, in either state, before a component is picked', async () => {
     vi.stubGlobal('fetch', mockFetch());
     const user = userEvent.setup();
     render(<AddWord />);
     await user.click(screen.getByRole('button', { name: 'Phrase' }));
 
-    expect(spellingField().value).toBe('');
+    // Nothing to spell and nothing to spell it FROM, so the form opens on the component search -
+    // which is the entrance the flow is meant to have.
+    expect(screen.queryByLabelText('The phrase, spelled as it is said')).toBeNull();
     expect(screen.queryByLabelText('Spelled from the components')).toBeNull();
+    expect(screen.queryByRole('button', { name: /correct the spelling/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Spell it from the components/ })).toBeNull();
   });
 
@@ -994,9 +1027,7 @@ describe('AddWord - the phrase path can finish the job', () => {
     expect(list.querySelectorAll('li')).toHaveLength(2);
     // Both positions show up in the default spelling, which is the components in order - and because
     // that IS the spelling, the check has nothing to report about it.
-    expect((screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement).value).toBe(
-      'existingspelling existingspelling',
-    );
+    expect(spelledFromComponents()).toBe('existingspelling existingspelling');
     expect(screen.queryByLabelText('Spelling differs from components')).toBeNull();
 
     // Removing is by POSITION, so taking one out leaves the other.
