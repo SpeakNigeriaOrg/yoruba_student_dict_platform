@@ -15,7 +15,13 @@ import { createWord, WordIdAlreadyExistsError, type CreateWordInput } from '../h
 import { EntryAlreadyCitedError, parseCitationInput } from '../handlers/upstreamCitations.js';
 import { parsePublicationFields } from '../handlers/publicationFields.js';
 
-function parseCreateWordInput(body: unknown): CreateWordInput {
+/** Exported for its own test.
+ *
+ * This is a WHITELIST: a field the screen sends and this function does not name is dropped
+ * silently, with a 201 back, which is how `components` came to be accepted by the browser, accepted
+ * by the handler, and stored by neither. The handler tests call createWord directly and the screen
+ * tests assert the request body, so nothing exercised this seam between them. */
+export function parseCreateWordInput(body: unknown): CreateWordInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
   const b = body as Record<string, unknown>;
   if (typeof b.wordId !== 'string' || !b.wordId) throw new Error('wordId is required');
@@ -26,12 +32,21 @@ function parseCreateWordInput(body: unknown): CreateWordInput {
   if (b.definition !== undefined && b.definition !== null && typeof b.definition !== 'string') {
     throw new Error('definition must be a string if provided');
   }
+  // Optional here, unlike the phrase route where it is the entry's identity. Absent and empty are
+  // both "this word is atomic" and both reach the handler as no rows - see createWord.ts.
+  if (b.components !== undefined && (!Array.isArray(b.components) || !b.components.every((c) => typeof c === 'string'))) {
+    throw new Error('components must be an array of word_id strings if provided');
+  }
   return {
     wordId: b.wordId,
     displayText: b.displayText,
     syllables: b.syllables as string[],
     definition: (b.definition as string | null | undefined) ?? null,
     citation: parseCitationInput(b.citation),
+    // Spread rather than always-present, so an absent list stays absent all the way down instead of
+    // becoming []. The two mean the same thing to the handler, but only one of them is what the
+    // client actually said.
+    ...(b.components === undefined ? {} : { components: b.components as string[] }),
     ...parsePublicationFields(b),
   };
 }
