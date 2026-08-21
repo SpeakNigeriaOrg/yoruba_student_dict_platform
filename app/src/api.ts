@@ -380,6 +380,9 @@ export interface CreatePhraseInput extends PublicationFields {
   displayText: string;
   syllables: string[];
   components: string[];
+  /** The student-facing meaning. Seeded on the screen from the dictionary-style English gloss and
+   * editable from there - see createPhrase.ts for why they are two columns rather than one. */
+  definition?: string | null;
   /** The phrase's OWN etymology, when upstream has an entry for the whole phrase. Was missing
    * from this type while the screen already sent it - the excess-property check does not fire
    * through a conditional spread, so it compiled and the field was simply undocumented here. */

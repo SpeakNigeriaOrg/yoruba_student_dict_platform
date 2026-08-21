@@ -46,6 +46,44 @@ describe('createPhrase', () => {
     expect(components.rows.map((r) => r.component_word_id)).toEqual([`${NS}comp_a`, `${NS}comp_b`]);
   });
 
+  it('stores the student definition, which this handler used to have no parameter for', async () => {
+    // Every phrase created here landed with definition null - the insert did not name the column -
+    // so a phrase reached students as an entry with no meaning attached, and the only repair was the
+    // entry axis on the finished record. Distinct from english_gloss: same wording often, two
+    // audiences always (0018).
+    await createPhrase(
+      pool,
+      {
+        wordId: `${NS}defined_phrase`,
+        displayText: 'a b',
+        syllables: ['a', 'b'],
+        components: [`${NS}comp_a`],
+        definition: 'the sky',
+        englishGloss: 'the sky, the firmament',
+      },
+      curatorUserId,
+    );
+
+    const { rows } = await pool.query<{ definition: string | null; english_gloss: string | null }>(
+      'select definition, english_gloss from golden_record where word_id = $1',
+      [`${NS}defined_phrase`],
+    );
+    expect(rows[0]).toEqual({ definition: 'the sky', english_gloss: 'the sky, the firmament' });
+  });
+
+  it('leaves the definition null when none is given, rather than inventing one', async () => {
+    await createPhrase(
+      pool,
+      { wordId: `${NS}undefined_phrase`, displayText: 'a b', syllables: ['a', 'b'], components: [`${NS}comp_a`] },
+      curatorUserId,
+    );
+    const { rows } = await pool.query<{ definition: string | null }>(
+      'select definition from golden_record where word_id = $1',
+      [`${NS}undefined_phrase`],
+    );
+    expect(rows[0].definition).toBeNull();
+  });
+
   it('rejects a phrase with zero components', async () => {
     await expect(
       createPhrase(pool, { wordId: `${NS}empty_phrase`, displayText: 'x', syllables: ['x'], components: [] }, curatorUserId),

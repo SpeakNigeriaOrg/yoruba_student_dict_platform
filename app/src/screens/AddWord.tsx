@@ -183,8 +183,8 @@ function PartOfSpeechField({
   id: string;
   value: string;
   onChange: (next: string) => void;
-  /** An extra sentence for the tab that needs one. See the Phrase tab's, which heads off the
-   * reading this control invites - that a phrase's part of speech is `phrase`. */
+  /** An extra sentence for the tab that needs one. See the Phrase tab's, which says what its
+   * default is and when to move off it. */
   note?: string;
 }) {
   return (
@@ -654,16 +654,38 @@ interface PhrasePart {
  * switching tabs unmounts the tab being left. A half-built phrase has to survive that round trip, so the
  * draft lives one level up and the Phrase tab is controlled. */
 interface PhraseDraft {
-  /** The phrase's spelling, AUTHORED on the tone grid rather than computed from the components.
+  /** The phrase's spelling, when it is NOT simply its components separated by spaces.
    *
-   * This used to be `components.map(c => c.displayText).join(' ')`, with no field for it and no way
-   * to correct it - and the server re-derived it the same way on every later etymology edit. So a
-   * phrase whose surface form is not its parts run together could not be entered: `o ṣé` (upstream's
-   * own canonical form for the `o ṣe` entry, IPA /ō ʃé/) came out as `o ṣe`, at a tone nobody says,
-   * because the component `ṣe` is spelled at mid tone in its own right. Minting a second word to
-   * carry the high tone is not available either - that word would cite `ṣe`'s etymology, and 0017
-   * makes one etymology one word. */
+   * Empty means "the components spell it", and componentSpelling below supplies the form. Two
+   * mistakes bracket this field and it has now made both:
+   *
+   *   Derived only  - display_text WAS `components.map(c => c.displayText).join(' ')`, with no field
+   *                   for it and no way to correct it, and the server re-derived it the same way on
+   *                   every later etymology edit. So a phrase whose surface form is not its parts run
+   *                   together could not be entered at all: `o ṣé` (upstream's own canonical form for
+   *                   the `o ṣe` entry, IPA /ō ʃé/) came out as `o ṣe`, at a tone nobody says,
+   *                   because the component `ṣe` is spelled at mid tone in its own right. Minting a
+   *                   second word to carry the high tone is not available either - that word would
+   *                   cite `ṣe`'s etymology, and 0017 makes one etymology one word.
+   *   Authored only - the fix went to the other end: the field became required, on a blank tone grid,
+   *                   for every phrase. But the components ALREADY say how the phrase is spelled in
+   *                   the ordinary case, which is most cases - a curator who has just picked `ojú`
+   *                   and `sánmà` from the dictionary has spelled `ojú sánmà`, and was then asked to
+   *                   spell it again, tone by tone, from nothing. Re-entry is not confirmation: it is
+   *                   a second chance to differ from the words that were just picked.
+   *
+   * So the components propose and the curator disposes. Storage is unchanged - what is submitted is
+   * always an explicit spelling (see createPhrase, which stores what it is given) - and the
+   * difference is only in who has to type it. */
   displayText: string;
+  /** Whether displayText is the curator's own, and therefore no longer follows the components.
+   *
+   * A flag rather than the tempting shortcut of "an empty field means use the components": that
+   * shortcut makes the field refill itself the moment it is emptied, so selecting all and retyping
+   * appends to a default that came back while you were deleting. An explicit flag also lets an empty
+   * spelling be a real answer - a curator who deleted it meant to - and getting the default back is
+   * a button that says so, rather than a side effect of deleting. */
+  spellingEdited: boolean;
   components: PhrasePart[];
   hint: string;
   adopted: KaikkiSearchResult | null;
@@ -671,9 +693,52 @@ interface PhraseDraft {
    * them from - i.e. when it is locally composed rather than adopted from upstream. */
   pos: string;
   englishGloss: string;
+  /** The student definition, when it is NOT the dictionary wording verbatim.
+   *
+   * Same two-field shape as the spelling above, for the same reason: the answer is usually already
+   * on the screen. `ojú sánmà` glossed "the sky, the firmament" for upstream is glossed "the sky"
+   * for a student, and a great many are simply the same sentence - so the dictionary wording is the
+   * default and simplifying it is an edit, rather than the field starting empty and a curator
+   * retyping what they wrote one box up.
+   *
+   * They stay two COLUMNS whatever the wording (0018: one column cannot serve a Wiktionary sense
+   * line and a learner at once). A copy as a starting value is not a claim that they are the same
+   * field - it is a claim that they often begin the same, which is what a default is for. */
+  definition: string;
+  definitionEdited: boolean;
 }
 
-const EMPTY_DRAFT: PhraseDraft = { displayText: '', components: [], hint: '', adopted: null, pos: '', englishGloss: '' };
+/** What the components spell on their own: each one's spelling, in order, separated by a space.
+ *
+ * The default spelling, and also the thing checkPhraseSpelling compares against - deliberately the
+ * same rule in both places, because a default a curator accepts must be a default the warning below
+ * then stays quiet about. */
+function componentSpelling(components: PhrasePart[]): string {
+  return components.map((c) => c.displayText).join(' ');
+}
+
+/** `phrase` for the part of speech, not the blank option.
+ *
+ * The corpus statistic that argued against this default - just 2.4% of upstream's 536 multi-word
+ * entries carry the pos `phrase`, against 56% nouns - is real, and measures the wrong population.
+ * This field is only ever shown for a LOCALLY COMPOSED phrase; an adopted one takes pos from the
+ * entry it cites, and every one of those 536 is adopted. What we compose ourselves is mostly what
+ * upstream has no entry for, which skews hard the other way: set expressions, greetings, whole
+ * sentences from a lesson - things whose grammatical category genuinely is `phrase` or `proverb`,
+ * not a noun. `o ṣé` really is an interjection and `ojú sánmà` really is a noun, so the field stays
+ * editable and its note says to change it; but the blank option is not a neutral starting point,
+ * it is a required answer to a question most of these entries answer the same way. */
+const EMPTY_DRAFT: PhraseDraft = {
+  displayText: '',
+  spellingEdited: false,
+  components: [],
+  hint: '',
+  adopted: null,
+  pos: 'phrase',
+  englishGloss: '',
+  definition: '',
+  definitionEdited: false,
+};
 
 function PhraseTab({
   handoff,
@@ -692,7 +757,24 @@ function PhraseTab({
    * than creating it from a stripped-down form here. */
   onNeedWord: (entry: KaikkiSearchResult) => void;
 }) {
-  const { displayText, components, hint, adopted, pos, englishGloss } = draft;
+  const { components, hint, adopted, pos, englishGloss } = draft;
+  /** The spelling in force: the curator's, once they have touched the field, and the components'
+   * until then.
+   *
+   * Derived on read rather than copied into the draft each time a component is added, so that
+   * "follows the components" is one condition in one place instead of a sync rule that has to fire
+   * on every add, every remove and every hand-off - and cannot be forgotten in one of them. */
+  const proposedSpelling = componentSpelling(components);
+  const displayText = draft.spellingEdited ? draft.displayText : proposedSpelling;
+  /** The dictionary wording this phrase has, from wherever it has one.
+   *
+   * `englishGloss` is populated in both cases and only SUBMITTED in one: a locally composed phrase
+   * has a curator type it, and an adopted one has it seeded from the entry's first gloss (which is
+   * also what its citation pin will hold, so the field is not rendered). Reading the default off one
+   * value rather than two keeps "the student definition starts as the dictionary wording" a single
+   * rule instead of one per path. */
+  const proposedDefinition = englishGloss.trim();
+  const definition = draft.definitionEdited ? draft.definition : proposedDefinition;
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -712,9 +794,16 @@ function PhraseTab({
     setDraft({
       ...EMPTY_DRAFT,
       displayText: handoff.displayText,
+      // Authored, though not by this curator: it is upstream's own canonical form for the entry they
+      // picked, tone marks included. Components added afterwards must not overwrite it - the whole
+      // point of carrying it over is that it is better than what the parts spell.
+      spellingEdited: true,
       hint: hintFromGloss(handoff.entry?.glosses[0]),
       adopted: handoff.entry ?? null,
-      pos: handoff.entry?.pos ?? '',
+      // Upstream's tag when there is an entry behind the hand-off, and otherwise the default rather
+      // than blank - a hand-off with no entry is a locally composed phrase like any other, and it is
+      // the one that will actually show this field.
+      pos: handoff.entry?.pos || EMPTY_DRAFT.pos,
       englishGloss: handoff.entry?.glosses[0] ?? '',
     });
     setStatus(
@@ -768,7 +857,9 @@ function PhraseTab({
       return;
     }
     if (!displayText.trim()) {
-      setStatus('Write the phrase itself first - it is no longer assembled from the components.');
+      // Only reachable if every component's own spelling is blank, which golden_record does not
+      // hold - a backstop against submitting an empty display_text, not a step in the normal flow.
+      setStatus('This phrase has no spelling - write it above, or pick components that have one.');
       return;
     }
     if (!wordIdPreview) {
@@ -783,6 +874,9 @@ function PhraseTab({
         displayText: displayText.trim(),
         syllables,
         components: components.map((c) => c.wordId),
+        // Always sent, cited or not: the student definition is ours in both cases. There is no pin
+        // to fall back to for this one - a phrase created without it was simply meaningless.
+        definition: definition.trim() || null,
         // The phrase's own etymology, when it has one. Upstream has 480 multi-word entries, and their
         // meaning is not the sum of their parts - so recording it is not redundant with the components.
         ...(adopted?.entryId ? { citation: { entryId: adopted.entryId } } : {}),
@@ -834,6 +928,10 @@ function PhraseTab({
           setDraft({
             ...draft,
             displayText: form,
+            // Same as the hand-off: upstream's spelling stands until a human changes it, and the
+            // components already picked stay as they are. The spelling report below is what says so
+            // when the two disagree.
+            spellingEdited: true,
             hint: hint || hintFromGloss(r.glosses[0]),
             adopted: r,
             pos: r.pos,
@@ -861,16 +959,41 @@ function PhraseTab({
         </p>
       ) : null}
 
-      {/* The phrase itself, first, because it is now the thing being authored rather than a
-          read-out of the components. The composer gives it a tone grid per word, so a curator
-          never types a combining mark and `o ṣé` can be written at the tone people actually say. */}
+      {/* The phrase itself, first, because it is the thing being authored rather than a read-out of
+          the components - but arriving filled in from them, because in the ordinary case picking the
+          words IS spelling the phrase. The composer gives it a tone grid per word, so a curator
+          correcting it never types a combining mark and `o ṣé` can be written at the tone people
+          actually say. */}
       <PhraseComposer
         id="phrase-spelling"
         label="The phrase, spelled as it is said"
         placeholder="e.g. o ṣé"
         value={displayText}
-        onChange={(next) => setDraft({ ...draft, displayText: next })}
+        onChange={(next) => setDraft({ ...draft, displayText: next, spellingEdited: true })}
       />
+      {/* Which of the two states the field is in, said only when there is a difference to describe.
+          With no components picked and nothing typed there is nothing to say, and a note that stayed
+          put through both states would be describing the field's history rather than its contents. */}
+      {!draft.spellingEdited && components.length > 0 ? (
+        <p className="field-note" aria-label="Spelled from the components">
+          Spelled from the components below. Correct it above if the phrase is not said that way - a
+          contraction, an elision, a tone change.
+        </p>
+      ) : null}
+      {/* The way back, offered only when it would change something. A default that cannot be
+          restored is one a curator has to be careful around; this makes an experimental correction
+          cheap to undo, which is what makes correcting it the normal thing to do. */}
+      {draft.spellingEdited && components.length > 0 && displayText !== proposedSpelling ? (
+        <p className="field-note">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setDraft({ ...draft, displayText: '', spellingEdited: false })}
+          >
+            Spell it from the components ({proposedSpelling})
+          </button>
+        </p>
+      ) : null}
 
       {components.length === 0 ? (
         <p>No components picked yet.</p>
@@ -1006,21 +1129,19 @@ function PhraseTab({
           both already; asking again would be asking a curator to retype what upstream said. */}
       {adopted ? null : (
         <>
-          {/* Two different facts, and this control asks for only one of them. That this entry is a
-              phrase is already recorded, structurally, by having components - createPhrase writes
-              entry_type without asking. What is asked here is what the phrase IS grammatically,
-              which upstream answers separately: of its 536 multi-word entries, 56% are nouns, 12%
-              verbs, 11% names, and just 2.4% carry the pos `phrase`. So `phrase` is not the safe
-              answer, it is a narrow residual category for a set expression that is none of the
-              others - and defaulting to it would be wrong for 97 of every 100 phrases, in the
-              silent way a default is wrong, since nobody would have said it. */}
+          {/* Still two different facts: that this entry is a phrase is recorded structurally, by
+              having components - createPhrase writes entry_type without asking - while this asks
+              what the phrase is GRAMMATICALLY, which upstream tags separately. What changed is the
+              default. See EMPTY_DRAFT for why the corpus figure that argued for a blank one (2.4%
+              of multi-word entries tagged `phrase`) measures only adopted entries, which never
+              reach this field. */}
           <PartOfSpeechField
             id="phrase-pos-field"
             value={pos}
             onChange={(next) => setDraft({ ...draft, pos: next })}
             note={
-              'What the phrase is grammatically, which is usually not "phrase" - `o ṣé` is an interjection and ' +
-              '`ojú sánmà` is a noun. That this entry is a phrase is already recorded by the words you list below.'
+              'Defaults to `phrase`, which is right for a set expression or a whole sentence. Change it when ' +
+              'this one is grammatically something narrower - `o ṣé` is an interjection, `ojú sánmà` is a noun.'
             }
           />
           <div className="field">
@@ -1033,12 +1154,48 @@ function PhraseTab({
               placeholder="e.g. thank you (non-honorific, to one person)"
             />
             <p className="field-note">
-              Ordinary dictionary wording, for the entry we would send upstream - not the simplified student
-              definition. Nothing else records it for a phrase we composed ourselves.
+              Ordinary dictionary wording, for the entry we would send upstream. Nothing else records it for a
+              phrase we composed ourselves - and the student definition below starts as a copy of it.
             </p>
           </div>
         </>
       )}
+
+      {/* Asked for whatever the citation says, unlike the two fields above. A pin holds the wording
+          upstream uses; it cannot hold the wording we would put in front of a student, because that
+          wording is ours. So an adopted phrase needs this field exactly as much as a composed one -
+          and this screen had it for neither, which is why createPhrase never even named the column. */}
+      <div className="field">
+        <label htmlFor="phrase-definition-field">Student definition</label>
+        {adopted && adopted.glosses.length > 0 ? (
+          <p className="field-note" aria-label="Upstream glosses">
+            Wiktionary says: {adopted.glosses.join('; ')}
+          </p>
+        ) : null}
+        <textarea
+          id="phrase-definition-field"
+          value={definition}
+          onChange={(e) => setDraft({ ...draft, definition: e.target.value, definitionEdited: true })}
+        />
+        <p className="field-note">
+          Plain wording a student will understand. It starts as the dictionary wording{adopted ? '' : ' above'} and
+          simplifying it is expected - it is a simplification, not a correction.
+        </p>
+        {/* The same undo the spelling has, and offered on the same condition: only when the two have
+            actually come apart. A curator who has simplified the wording and then wants the original
+            back should not have to find it in another field and retype it. */}
+        {draft.definitionEdited && proposedDefinition && definition !== proposedDefinition ? (
+          <p className="field-note">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setDraft({ ...draft, definition: '', definitionEdited: false })}
+            >
+              Use the dictionary wording ({proposedDefinition})
+            </button>
+          </p>
+        ) : null}
+      </div>
 
       <div className="field">
         <label htmlFor="phrase-hint-field">Word ID hint</label>

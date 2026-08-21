@@ -38,11 +38,19 @@ function parseCreatePhraseInput(body: unknown): CreatePhraseInput {
   if (!Array.isArray(b.components) || !b.components.every((c) => typeof c === 'string')) {
     throw new Error('components must be an array of word_id strings');
   }
+  // Same shape as functions/words.ts's: optional, and a non-string is a caller bug rather than
+  // something to coerce. Unlike the publication fields, an empty string is NOT collapsed to null -
+  // definition has no pin to fall back to, so '' and null mean the same thing here and the
+  // distinction that matters for english_gloss does not arise.
+  if (b.definition !== undefined && b.definition !== null && typeof b.definition !== 'string') {
+    throw new Error('definition must be a string if provided');
+  }
   return {
     wordId: b.wordId,
     displayText: b.displayText,
     syllables: b.syllables as string[],
     components: b.components as string[],
+    definition: (b.definition as string | null | undefined) ?? null,
     // Optional: upstream has multi-word entries, so a phrase may have an etymology of its own. This
     // field used to be dropped silently here, which meant a curator adopting `ọmọ odù` lost its
     // entry_id with nothing reporting the loss. Absent still means the by-nature exemption.

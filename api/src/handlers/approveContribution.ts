@@ -154,6 +154,10 @@ async function approveNewEntry(client: Queryable, proposedValue: NewEntryPropose
         displayText: proposedValue.displayText,
         syllables: proposedValue.syllables,
         components: proposedValue.components ?? [],
+        // Carried through like the word branch below, which is where it was always carried. A
+        // requested phrase arrived meaningless otherwise - the value was sitting in proposed_value
+        // and this branch had no parameter to put it in.
+        definition: proposedValue.definition ?? null,
         // Carried through when the proposal had one. A phrase may cite its OWN etymology (upstream has
         // multi-word entries); dropping it here would have silently downgraded an approved phrase to
         // the by-nature exemption, which is the same loss the HTTP edge used to enforce.

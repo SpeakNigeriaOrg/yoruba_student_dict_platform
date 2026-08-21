@@ -315,8 +315,11 @@ describe('AddWord - Phrase tab', () => {
     expect(componentsList).toHaveTextContent('existingspelling');
     expect(componentsList).not.toHaveTextContent('existing_component');
 
-    // The spelling is typed, not assembled. This used to be display_text = components joined.
-    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'existingspelling');
+    // The spelling arrives from the component, so nothing is typed here. It is still SUBMITTED as an
+    // explicit display_text - the default is in the form, not in the storage rule.
+    expect((screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement).value).toBe(
+      'existingspelling',
+    );
     await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
 
@@ -335,8 +338,13 @@ describe('AddWord - Phrase tab', () => {
       // rule the composer itself follows, which is what keeps the two in step.
       syllables: ['existingspelling'],
       components: ['existing_component'],
-      pos: null,
+      // The default, not a blank - see EMPTY_DRAFT. A locally composed phrase has no citation pin to
+      // read a pos from, so a blank one leaves it recorded nowhere.
+      pos: 'phrase',
       englishGloss: null,
+      // Null only because this fixture has no gloss to copy from. Sent as a real field now: a phrase
+      // used to be created with definition null unconditionally, the column not even named.
+      definition: null,
     });
   });
 
@@ -364,7 +372,15 @@ describe('AddWord - Phrase tab', () => {
     await user.click(add[0]);
     await user.click(add[1]);
 
-    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'o ṣé');
+    // Arrives as `o ṣe` - the components' own spellings - which is exactly the form that is wrong
+    // here, so this is the case the default must stay correctable in.
+    const spelling = screen.getByLabelText('The phrase, spelled as it is said');
+    expect((spelling as HTMLInputElement).value).toBe('o ṣe');
+    await user.clear(spelling);
+    // Emptying it does NOT hand the field back to the components: an empty box that refills itself
+    // appends the retyped form to a default that came back mid-edit.
+    expect((spelling as HTMLInputElement).value).toBe('');
+    await user.type(spelling, 'o ṣé');
 
     // Reported, not corrected: the difference is a real fact about the phrase.
     const warning = await screen.findByLabelText('Spelling differs from components');
@@ -443,6 +459,185 @@ async function searchWith(result: Record<string, unknown>, props: Record<string,
   await screen.findByRole('listitem');
   return user;
 }
+
+// ---------------------------------------------------------------------------
+// The default flow: the components spell the phrase
+// ---------------------------------------------------------------------------
+// The spelling field was authored-only, on a blank tone grid, for every phrase - including the
+// overwhelming majority whose spelling is exactly the words that were just picked from the
+// dictionary, separated by spaces. That made re-entry mandatory, and re-entry is not confirmation:
+// it is a second chance to differ from the words already listed. The components propose now, and a
+// correction is still a correction.
+
+const TWO_WORDS = [
+  { wordId: 'oju_face', displayText: 'ojú', syllables: ['o', 'jú'], definition: 'eye, face', baseSpelling: 'oju', matchedVia: 'yoruba_exact' },
+  { wordId: 'sanma_sky', displayText: 'sánmà', syllables: ['sán', 'mà'], definition: 'sky', baseSpelling: 'sanma', matchedVia: 'yoruba_exact' },
+];
+
+/** Adds the first n of TWO_WORDS as components and returns the user. */
+async function phraseWithComponents(count: number, fetchMock: ReturnType<typeof mockFetch>) {
+  vi.stubGlobal('fetch', fetchMock);
+  const user = userEvent.setup();
+  render(<AddWord />);
+  await user.click(screen.getByRole('button', { name: 'Phrase' }));
+  const dict = within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+  await user.click(dict.getByRole('button', { name: 'Search' }));
+  await waitFor(() => screen.getByText('sky', { exact: false }));
+  const add = screen.getAllByRole('button', { name: 'Add as component' });
+  for (let i = 0; i < count; i += 1) await user.click(add[i]);
+  return user;
+}
+
+const spellingField = () => screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement;
+
+describe('AddWord - a phrase is spelled from its components until it is not', () => {
+  it('fills the spelling in as each component is added, and says that is where it came from', async () => {
+    const user = await phraseWithComponents(1, mockFetch({ vocabResults: TWO_WORDS }));
+    expect(spellingField().value).toBe('ojú');
+    expect(screen.getByLabelText('Spelled from the components')).toBeInTheDocument();
+
+    // Still following: the second word extends it rather than being ignored.
+    await user.click(screen.getAllByRole('button', { name: 'Add as component' })[1]);
+    expect(spellingField().value).toBe('ojú sánmà');
+
+    // And removing one takes it back out, which a copied-on-add spelling would not have done.
+    await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);
+    expect(spellingField().value).toBe('ojú');
+  });
+
+  it('submits the default with no typing at all, as an explicit spelling and syllables', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await phraseWithComponents(2, fetchMock);
+    await user.type(screen.getByLabelText('Word ID hint'), 'sky');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'))![1].body);
+    // Storage is unchanged by any of this: display_text is sent, not derived server-side. The
+    // default lives in the form.
+    expect(body.displayText).toBe('ojú sánmà');
+    expect(body.syllables).toEqual([...syllabifyWord('ojú'), ...syllabifyWord('sánmà')]);
+    expect(body.components).toEqual(['oju_face', 'sanma_sky']);
+    expect(body.wordId).toBe('oju_sanma_sky');
+  });
+
+  it('keeps a correction when another component is added afterwards', async () => {
+    // The failure mode of copying the default into the draft on every add: `mu` + `ọtí` is written
+    // `muti`, and picking the second word must not spell it back out again.
+    const user = await phraseWithComponents(1, mockFetch({ vocabResults: TWO_WORDS }));
+    await user.clear(spellingField());
+    await user.type(spellingField(), 'ojúsánmà');
+    await user.click(screen.getAllByRole('button', { name: 'Add as component' })[1]);
+
+    expect(spellingField().value).toBe('ojúsánmà');
+    // And now it reports, correctly, that this is not its parts run together.
+    expect(screen.getByLabelText('Spelling differs from components')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Spelled from the components')).toBeNull();
+  });
+
+  it('offers the components\' spelling back, so a correction is cheap to undo', async () => {
+    const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
+    await user.clear(spellingField());
+    await user.type(spellingField(), 'wrong');
+    const undo = screen.getByRole('button', { name: /Spell it from the components/ });
+    expect(undo).toHaveTextContent('ojú sánmà');
+
+    await user.click(undo);
+    expect(spellingField().value).toBe('ojú sánmà');
+    // Following again, not just holding the same string: a third word would extend it.
+    expect(screen.getByLabelText('Spelled from the components')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Spell it from the components/ })).toBeNull();
+  });
+
+  it('says nothing about either state before a component is picked', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    expect(spellingField().value).toBe('');
+    expect(screen.queryByLabelText('Spelled from the components')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Spell it from the components/ })).toBeNull();
+  });
+
+  it('defaults the part of speech to phrase, which is what a composed phrase usually is', async () => {
+    // The corpus figure that argued for a blank default - 2.4% of multi-word entries tagged
+    // `phrase` - counts ADOPTED entries, which take their pos from the pin and never show this
+    // field. What we compose ourselves is what upstream has no entry for.
+    vi.stubGlobal('fetch', mockFetch());
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+
+    expect((screen.getByLabelText('Part of speech') as HTMLSelectElement).value).toBe('phrase');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The student definition starts as the dictionary wording
+// ---------------------------------------------------------------------------
+// The Phrase tab collected no student definition at all, and createPhrase did not even name the
+// column - so every phrase ever added here was a dictionary entry that said nothing about what it
+// meant, and the only way to give it one was to open the finished entry and use the entry axis. The
+// field exists now, and it arrives holding the dictionary wording, because for a great many phrases
+// that IS the student definition.
+
+const definitionField = () => screen.getByLabelText('Student definition') as HTMLTextAreaElement;
+
+describe('AddWord - the student definition of a phrase', () => {
+  it('follows the English gloss as it is typed, and is submitted as its own field', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await phraseWithComponents(2, fetchMock);
+
+    await user.type(screen.getByLabelText('English gloss'), 'the sky, the firmament');
+    expect(definitionField().value).toBe('the sky, the firmament');
+
+    await user.type(screen.getByLabelText('Word ID hint'), 'sky');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'))![1].body);
+    // Two columns holding one wording, which is the ordinary case and still not one column: 0018's
+    // gloss is what we would publish upstream and the definition is what a student reads.
+    expect(body.definition).toBe('the sky, the firmament');
+    expect(body.englishGloss).toBe('the sky, the firmament');
+  });
+
+  it('keeps a simplification, and stops following the gloss once there is one', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await phraseWithComponents(2, fetchMock);
+    await user.type(screen.getByLabelText('English gloss'), 'the sky, the firmament');
+    await user.clear(definitionField());
+    await user.type(definitionField(), 'the sky');
+
+    // Editing the gloss afterwards must not overwrite the simpler wording - that is the whole
+    // difference between a default and a derivation.
+    await user.type(screen.getByLabelText('English gloss'), '; the heavens');
+    expect(definitionField().value).toBe('the sky');
+
+    await user.type(screen.getByLabelText('Word ID hint'), 'sky');
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'))![1].body);
+    expect(body.definition).toBe('the sky');
+    expect(body.englishGloss).toBe('the sky, the firmament; the heavens');
+  });
+
+  it('offers the dictionary wording back once the two differ', async () => {
+    const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
+    await user.type(screen.getByLabelText('English gloss'), 'the firmament');
+    // Nothing to undo while it is still a copy.
+    expect(screen.queryByRole('button', { name: /Use the dictionary wording/ })).toBeNull();
+
+    await user.clear(definitionField());
+    await user.type(definitionField(), 'the sky');
+    await user.click(screen.getByRole('button', { name: /Use the dictionary wording/ }));
+
+    expect(definitionField().value).toBe('the firmament');
+    expect(screen.queryByRole('button', { name: /Use the dictionary wording/ })).toBeNull();
+  });
+});
 
 describe('AddWord - is this etymology already taken?', () => {
   it('marks a result already in the dictionary, and names the word that IS it', async () => {
@@ -687,8 +882,21 @@ describe('AddWord - the phrase path can finish the job', () => {
     expect(screen.getByLabelText('Adopted etymology')).toHaveTextContent('o ṣé');
     expect(screen.getByLabelText('Phrase components')).toHaveTextContent('existingspelling');
 
+    // And a component added AFTER adopting does not spell over it. The default follows the
+    // components only until something better is on the field, and upstream's canonical form is
+    // exactly that - it is the reason for carrying the entry over at all.
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+    expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('o ṣé');
+
     // An adopted phrase cites its own etymology, and does not re-ask for what the pin holds.
     expect(screen.queryByLabelText('Part of speech')).not.toBeInTheDocument();
+
+    // The student definition is asked for anyway, because no pin can hold it - the wording a student
+    // reads is ours, cited or not. Seeded from upstream's gloss, which is what there is to simplify.
+    expect((screen.getByLabelText('Student definition') as HTMLTextAreaElement).value).toBe(
+      'thank you (non-honorific, to a singular person)',
+    );
+    expect(screen.getByLabelText('Upstream glosses')).toHaveTextContent('thank you');
 
     await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
@@ -696,6 +904,7 @@ describe('AddWord - the phrase path can finish the job', () => {
     const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/phrases'));
     const body = JSON.parse(call![1].body);
     expect(body.displayText).toBe('o ṣé');
+    expect(body.definition).toBe('thank you (non-honorific, to a singular person)');
     expect(body.citation).toEqual({ entryId: 'en-o-ṣe-yo-intj-NEW' });
     // Two syllables, and the space is in neither - it is orthography, not a tone-bearing unit.
     expect(body.syllables).toEqual(['o', 'ṣé']);
@@ -719,7 +928,6 @@ describe('AddWord - the phrase path can finish the job', () => {
     await user.click(dict.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText('existingspelling', { exact: false }));
     await user.click(screen.getByRole('button', { name: 'Add as component' }));
-    await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'o ṣé');
     await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
 
@@ -784,11 +992,12 @@ describe('AddWord - the phrase path can finish the job', () => {
 
     const list = screen.getByLabelText('Phrase components');
     expect(list.querySelectorAll('li')).toHaveLength(2);
-    // The spelling is authored now, so what proves both positions are held is the component list
-    // itself - and the spelling check, which knows the phrase should be that word twice.
-    expect(screen.getByLabelText('Spelling differs from components')).toHaveTextContent(
+    // Both positions show up in the default spelling, which is the components in order - and because
+    // that IS the spelling, the check has nothing to report about it.
+    expect((screen.getByLabelText('The phrase, spelled as it is said') as HTMLInputElement).value).toBe(
       'existingspelling existingspelling',
     );
+    expect(screen.queryByLabelText('Spelling differs from components')).toBeNull();
 
     // Removing is by POSITION, so taking one out leaves the other.
     await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);

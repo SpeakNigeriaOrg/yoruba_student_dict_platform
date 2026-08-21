@@ -9,6 +9,10 @@
 // give a clean, specific error instead of a raw FK-violation (mirrors
 // resolve_server.py:249-260's identical rationale).
 //
+// definition is the student-facing meaning and was missing entirely: this insert did not name the
+// column, so a phrase created here was a dictionary entry with no meaning attached. See the field's
+// own note below for why it is not the same value as english_gloss, even when it starts as a copy.
+//
 // displayText and syllables are AUTHORED, not derived from the components. They arrive from the
 // phrase tab's tone grid, and this handler stores what it is given. The Add Phrase screen used to
 // compute both by joining the parts, which made a phrase whose surface form differs from its parts -
@@ -29,6 +33,19 @@ export interface CreatePhraseInput {
   /** word_ids, in order - component_position is each entry's array index. A word_id may REPEAT: a
    * reduplication like `méjì méjì` is two positions holding one word, and the position is the key. */
   components: string[];
+  /** The student-facing meaning, in the plain wording a learner reads.
+   *
+   * This handler had no such parameter, so every phrase ever created here landed with definition
+   * null - a phrase in the dictionary that says nothing about what it means, which is the one thing
+   * a student needs from it. Nothing filled it in afterwards either: the Add Phrase screen had no
+   * field for it, and the only route to one was opening the finished entry and using the entry
+   * axis's `definitionAction: 'custom'`, i.e. a second pass over work that was just done.
+   *
+   * Distinct from englishGloss below, which is 0018's publication field - the ordinary lexicographic
+   * wording we would send upstream. Two audiences, two columns (see 0018 on why one column cannot be
+   * both). The screen seeds this one FROM that one, which is a default a human can edit, not a
+   * derivation. */
+  definition?: string | null;
   /** The phrase's OWN Wiktionary etymology, when upstream has one for the whole phrase.
    *
    * Optional, and absence still means the by-nature exemption below. Wiktionary has multi-word entries
@@ -93,12 +110,13 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
   }
 
   await client.query(
-    `insert into golden_record (word_id, display_text, syllables, entry_type, pos, english_gloss, etymid_label, updated_by)
-     values ($1, $2, $3, 'phrase', $4, $5, $6, $7)`,
+    `insert into golden_record (word_id, display_text, syllables, entry_type, definition, pos, english_gloss, etymid_label, updated_by)
+     values ($1, $2, $3, 'phrase', $4, $5, $6, $7, $8)`,
     [
       input.wordId,
       input.displayText,
       input.syllables,
+      input.definition ?? null,
       input.pos ?? null,
       input.englishGloss ?? null,
       input.etymidLabel ?? null,

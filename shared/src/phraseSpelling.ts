@@ -34,6 +34,12 @@
 // this warns and never blocks, exactly as the duplicate check does on the same screen.
 // A curator seeing "this is not its parts joined" either knows why or has just caught
 // their own mistake.
+//
+// Note what that does NOT make wrong: the Add Phrase tab now SEEDS the spelling field with the
+// components joined by spaces, which is the same string this function computes as `joined`. That is
+// a default, not the rule above - the curator can type over it, and what gets stored is whatever
+// the field says. A default the components propose and this check agrees with is quiet by
+// construction; the old rule was that the same string could not be argued with.
 
 import { formsEqualKey } from './toneMatching.js';
 
