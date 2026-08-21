@@ -26,6 +26,7 @@ import { WordIdAlreadyExistsError } from './errors.js';
 import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
 import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
+import { recordAuthoringVote } from './authoringVote.js';
 
 export interface CreatePhraseInput {
   wordId: string;
@@ -83,7 +84,12 @@ export async function createPhrase(pool: pg.Pool, input: CreatePhraseInput, crea
     throw new NoComponentsError();
   }
 
-  await withTransaction(pool, (client) => createPhraseInTransaction(client, input, createdBy));
+  await withTransaction(pool, async (client) => {
+    await createPhraseInTransaction(client, input, createdBy);
+    // Always both axes for a phrase: it cannot exist without components, so its author has
+    // necessarily answered the etymology question too.
+    await recordAuthoringVote(client, input.wordId, createdBy, { hasComponents: true });
+  });
 }
 
 /** Exported so approveContribution.ts's 'new_entry' (phrase) path can

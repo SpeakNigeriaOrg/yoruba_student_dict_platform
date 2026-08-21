@@ -24,6 +24,7 @@ import { WordIdAlreadyExistsError } from './errors.js';
 import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
 import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
+import { recordAuthoringVote } from './authoringVote.js';
 
 export interface CreateWordInput {
   wordId: string;
@@ -71,7 +72,15 @@ export { WordIdAlreadyExistsError, ComponentsNotFoundError };
  * citation is the state 0014 exists to make unrepresentable, and two inserts on
  * a Pool would run on two different connections. Mirrors createPhrase.ts. */
 export async function createWord(pool: pg.Pool, input: CreateWordInput, createdBy: string): Promise<void> {
-  await withTransaction(pool, (client) => createWordInTransaction(client, input, createdBy));
+  await withTransaction(pool, async (client) => {
+    await createWordInTransaction(client, input, createdBy);
+    // The author's own vote for what they just wrote - see authoringVote.ts. Here rather than
+    // inside createWordInTransaction because approveContribution composes that one to apply a
+    // VOLUNTEER's proposal, where the approving curator is not the author.
+    await recordAuthoringVote(client, input.wordId, createdBy, {
+      hasComponents: (input.components?.length ?? 0) > 0,
+    });
+  });
 }
 
 /** Exported so approveContribution.ts's 'new_entry' path can compose this into
