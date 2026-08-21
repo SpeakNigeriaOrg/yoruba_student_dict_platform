@@ -361,6 +361,29 @@ export interface PublicationFields {
   etymidLabel?: string | null;
 }
 
+// Mirrors functions/maintenance.ts's response. Counts only - the plan is thousands of rows on a
+// real corpus and the screen shows totals.
+export interface AuthoringVoteBackfillResult {
+  applied: boolean;
+  planned: number;
+  plannedEntry: number;
+  plannedEtymology: number;
+  skippedNoComponents: number;
+  skippedAlreadyVoted: number;
+  skippedAlreadyDecided: number;
+  written?: number;
+  failed?: Array<{ wordId: string; axis: string; error: string }>;
+}
+
+/** Plans the authoring-vote backfill, and with apply=true performs it. */
+export function backfillAuthoringVotes(apply: boolean): Promise<AuthoringVoteBackfillResult> {
+  return fetchJson('/api/maintenance/authoring-votes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apply }),
+  });
+}
+
 // Mirrors api/src/handlers/createWord.ts's CreateWordInput.
 export interface CreateWordInput extends PublicationFields {
   wordId: string;

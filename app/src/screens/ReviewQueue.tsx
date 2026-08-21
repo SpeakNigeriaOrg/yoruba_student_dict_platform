@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   approveContribution,
+  backfillAuthoringVotes,
   confirmConsensus,
   excludeContribution,
   getConsensus,
@@ -34,6 +35,7 @@ import {
   type UpstreamDriftResult,
   type ConfirmConsensusResult,
   type ConsensusGroup,
+  type AuthoringVoteBackfillResult,
 } from '../api.js';
 import type { ConsensusBucket, ConsensusTallyEntry, ContributionOutcome } from '@yoruba-student-dict-platform/shared';
 
@@ -369,7 +371,107 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
           }
         }}
       />
+
+      <AuthoringVoteBackfillSection />
     </section>
+  );
+}
+
+/** The one-off backfill, as two buttons instead of a shell and a production connection string.
+ *
+ * Preview first, and Apply does not exist until a preview has been read: the counts ARE the
+ * warning, because what makes this safe or not is entirely how many rows are in each bucket, and
+ * that is not knowable in advance. A single button here would be a button whose effect nobody
+ * could predict before pressing it.
+ *
+ * Once applied it says so and offers nothing further. Re-running is harmless - the second pass
+ * plans nothing - but a button that stays lit after its job is done invites the question of
+ * whether it worked the first time. */
+function AuthoringVoteBackfillSection() {
+  const [preview, setPreview] = useState<AuthoringVoteBackfillResult | null>(null);
+  const [done, setDone] = useState<AuthoringVoteBackfillResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(apply: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await backfillAuthoringVotes(apply);
+      if (apply) setDone(result);
+      else setPreview(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="review-section" aria-label="Authoring vote backfill">
+      <h3>Backfill authoring votes</h3>
+      <p className="field-note">
+        An entry added today records its author's position as one ordinary vote, so a volunteer who
+        later disagrees makes the word <strong>contested</strong> rather than quietly outvoting
+        nobody. Everything created before that holds no such vote. This casts one, attributed to
+        you, for every entry that is missing one.
+      </p>
+      <p className="field-note">
+        It writes <strong>contributions and nothing else</strong> — no spellings, components,
+        citations or decisions are changed, and no audio, speaker or recording is touched. It never
+        replaces a vote you have already cast, and skips any axis already decided. Running it twice
+        does nothing the second time.
+      </p>
+
+      {done ? (
+        <p role="status" className="status-banner">
+          Wrote {done.written} votes.
+          {done.failed && done.failed.length > 0
+            ? ` ${done.failed.length} failed: ${done.failed.map((f) => `${f.wordId} (${f.axis})`).join(', ')}.`
+            : ''}{' '}
+          Words where a volunteer already disagreed with you will now show as contested — that is
+          the point of it, not a problem.
+        </p>
+      ) : (
+        <>
+          {preview ? (
+            <div className="warning-banner" aria-label="Backfill preview">
+              <p>
+                <strong>{preview.planned} votes would be cast</strong> — {preview.plannedEntry} entry,{' '}
+                {preview.plannedEtymology} etymology.
+              </p>
+              <ul className="plain-list">
+                <li>{preview.skippedNoComponents} etymology skipped — nothing on record to vote for</li>
+                <li>{preview.skippedAlreadyVoted} skipped — you have already voted there</li>
+                <li>{preview.skippedAlreadyDecided} skipped — the axis is already decided</li>
+              </ul>
+              <p className="field-note">
+                Check these before applying. The entry count should be roughly your whole word list;
+                a large "already voted" number means those words carry opinions you actually
+                recorded, which this correctly refuses to overwrite.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="btn-row">
+            <button type="button" className="btn btn-secondary" onClick={() => run(false)} disabled={busy}>
+              {preview ? 'Preview again' : 'Preview (writes nothing)'}
+            </button>
+            {/* Only after a preview, and only when it found something to do. */}
+            {preview && preview.planned > 0 ? (
+              <button type="button" className="btn btn-danger" onClick={() => run(true)} disabled={busy}>
+                Cast {preview.planned} votes
+              </button>
+            ) : null}
+          </div>
+          {preview && preview.planned === 0 ? (
+            <p role="status">Nothing to backfill — every entry already has its author's vote.</p>
+          ) : null}
+        </>
+      )}
+
+      {error ? <p role="alert" className="warning-banner">{error}</p> : null}
+    </div>
   );
 }
 

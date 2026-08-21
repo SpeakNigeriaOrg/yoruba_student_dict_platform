@@ -566,3 +566,122 @@ describe('ReviewQueue', () => {
     });
   });
 });
+
+describe('ReviewQueue - the authoring vote backfill', () => {
+  /** The queue's own calls, plus a controllable maintenance endpoint. */
+  function mockWithBackfill(responses: unknown[]) {
+    const queue = [...responses];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/maintenance/authoring-votes')) {
+        return Promise.resolve({ ok: true, json: async () => queue.shift() });
+      }
+      if (init?.method === 'POST') return Promise.resolve({ ok: true, json: async () => ({ confirmed: [], skipped: [] }) });
+      if (url.includes('/upstream-drift')) return Promise.resolve({ ok: true, json: async () => NO_DRIFT });
+      if (url.includes('/contributions')) return Promise.resolve({ ok: true, json: async () => ({ contributions: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({ groups: [] }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  const PREVIEW = {
+    applied: false,
+    planned: 1482,
+    plannedEntry: 1403,
+    plannedEtymology: 79,
+    skippedNoComponents: 1324,
+    skippedAlreadyVoted: 3,
+    skippedAlreadyDecided: 12,
+  };
+
+  const openQueue = async () => {
+    render(<ReviewQueue onOpenWord={() => {}} />);
+    await waitFor(() => screen.getByLabelText('Authoring vote backfill'));
+    return userEvent.setup();
+  };
+
+  it('offers no way to write before a preview has been read', async () => {
+    mockWithBackfill([]);
+    await openQueue();
+
+    // The counts ARE the warning: what makes this safe is entirely how many rows land in each
+    // bucket, which is not knowable before asking. A single button would be one whose effect
+    // nobody could predict before pressing it.
+    expect(screen.getByRole('button', { name: /Preview \(writes nothing\)/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cast \d+ votes/ })).toBeNull();
+  });
+
+  it('says what it will and will not touch, without being asked', async () => {
+    mockWithBackfill([]);
+    await openQueue();
+
+    const section = screen.getByLabelText('Authoring vote backfill');
+    expect(section).toHaveTextContent('contributions and nothing else');
+    expect(section).toHaveTextContent(/no audio, speaker or recording is touched/);
+    expect(section).toHaveTextContent(/never replaces a vote you have already cast/);
+  });
+
+  it('previews without writing, and posts apply:false to do it', async () => {
+    const fetchMock = mockWithBackfill([PREVIEW]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/maintenance/authoring-votes'));
+    expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ apply: false });
+
+    const banner = await screen.findByLabelText('Backfill preview');
+    expect(banner).toHaveTextContent('1482 votes would be cast');
+    expect(banner).toHaveTextContent('1403 entry');
+    expect(banner).toHaveTextContent('3 skipped — you have already voted there');
+  });
+
+  it('only then offers the write, and posts apply:true', async () => {
+    const fetchMock = mockWithBackfill([PREVIEW, { ...PREVIEW, applied: true, written: 1482, failed: [] }]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    const applyCall = fetchMock.mock.calls
+      .filter((c) => String(c[0]).includes('/maintenance/authoring-votes'))
+      .at(-1);
+    expect(JSON.parse((applyCall![1] as RequestInit).body as string)).toEqual({ apply: true });
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Wrote 1482 votes');
+    // Said before it is discovered on the review screen and read as a regression.
+    expect(status).toHaveTextContent(/contested/);
+  });
+
+  it('stops offering the buttons once it has run, so nobody wonders if it took', async () => {
+    mockWithBackfill([PREVIEW, { ...PREVIEW, applied: true, written: 1482, failed: [] }]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    await screen.findByRole('status');
+    expect(screen.queryByRole('button', { name: /Preview/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Cast/ })).toBeNull();
+  });
+
+  it('offers no write button when there is nothing to do', async () => {
+    mockWithBackfill([{ ...PREVIEW, planned: 0, plannedEntry: 0, plannedEtymology: 0 }]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+
+    expect(await screen.findByText(/Nothing to backfill/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cast/ })).toBeNull();
+  });
+
+  it('names the words that failed rather than reporting a bare count', async () => {
+    mockWithBackfill([
+      PREVIEW,
+      { ...PREVIEW, applied: true, written: 1480, failed: [{ wordId: 'oju_face', axis: 'etymology', error: 'boom' }] },
+    ]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('1 failed: oju_face (etymology)');
+  });
+});

@@ -55,6 +55,8 @@
     { "route": "/api/vocab-search", "allowedRoles": ["member"] },
     { "route": "/api/duplicate-check", "allowedRoles": ["curator"] },
 
+    { "route": "/api/maintenance/*", "allowedRoles": ["curator"] },
+
     { "route": "/login", "redirect": "/.auth/login/google" },
     { "route": "/logout", "redirect": "/.auth/logout" },
 
