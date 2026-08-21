@@ -245,6 +245,55 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
   ].join(FIELD_SEP);
 }
 
+/** Which fields two claims about one word can differ on. */
+export type ClaimField = 'spelling' | 'syllables' | 'definition' | 'etymology' | 'components';
+
+/** The entry fingerprint WITHOUT the student definition: what word this is, not what it means.
+ *
+ * The full fingerprint deliberately bundles all four fields, and that stays right - a definition
+ * cannot be judged without knowing which word it belongs to, and two people glossing "to hang,
+ * suspend" while citing different etymologies of `kọ́` are describing different words, not agreeing.
+ *
+ * But the definition is a different KIND of claim from the other three. Spelling, syllables and
+ * cited etymology are identity: one right answer, and disagreement is conflict. A student
+ * definition is a rendering: "the sky" and "the sky above us" can both be correct, and two
+ * volunteers who differ are not necessarily contradicting each other.
+ *
+ * Bundled, those two kinds were indistinguishable. Three volunteers who agreed exactly on the
+ * spelling and wrote three reasonable simplifications produced three fingerprints and a word that
+ * read as a three-way conflict, with nothing recording that its identity was unanimous. This is
+ * that missing view - derived, so nothing stored or frozen changes. */
+export function fingerprintIdentity(outcome: ContributionOutcome): string {
+  if (outcome.kind !== 'entry') return fingerprintOutcome(outcome);
+  return [
+    'identity',
+    normalizeText(outcome.displayText),
+    outcome.syllables.map(normalizeText).join(LIST_SEP),
+    outcome.citedEntryId ?? NULL_MARKER,
+  ].join(FIELD_SEP);
+}
+
+/** The fields on which the given claims actually disagree, in reading order.
+ *
+ * Compared on the SAME normalized forms the fingerprints use, so what this reports and what makes
+ * two claims count as distinct can never come apart - a difference of casing in an English gloss
+ * is not a difference here either. */
+export function differingFields(outcomes: ContributionOutcome[]): ClaimField[] {
+  if (outcomes.length < 2) return [];
+  const entries = outcomes.filter((o): o is EntryOutcome => o.kind === 'entry');
+  if (entries.length !== outcomes.length) {
+    const sets = new Set(outcomes.map((o) => fingerprintOutcome(o)));
+    return sets.size > 1 ? ['components'] : [];
+  }
+  const varies = (project: (o: EntryOutcome) => string) => new Set(entries.map(project)).size > 1;
+  const fields: ClaimField[] = [];
+  if (varies((o) => normalizeText(o.displayText))) fields.push('spelling');
+  if (varies((o) => o.syllables.map(normalizeText).join(LIST_SEP))) fields.push('syllables');
+  if (varies((o) => (o.definitionText === null ? NULL_MARKER : normalizeGloss(o.definitionText)))) fields.push('definition');
+  if (varies((o) => o.citedEntryId ?? NULL_MARKER)) fields.push('etymology');
+  return fields;
+}
+
 // ---------------------------------------------------------------------------
 // Tallying
 // ---------------------------------------------------------------------------
@@ -320,6 +369,18 @@ export interface ConsensusSummary {
    * order. */
   dissentsFromGolden: ConsensusTallyEntry[];
   bucket: ConsensusBucket;
+  /** Which fields the competing claims actually differ on. Empty when there is nothing to compare.
+   *
+   * A contested word said only that it was contested, so a curator had to open it and diff two
+   * claims by eye to find out whether the argument was about a tone mark or about wording. */
+  differingFields: ClaimField[];
+  /** Every claim says this is the same word, and they differ only in how they word its definition.
+   *
+   * The case worth separating out: nothing about the entry's identity is in doubt, so what the
+   * curator is choosing is a rendering rather than settling a conflict. False when there is only
+   * one claim - there is no disagreement to characterise - and false the moment spelling,
+   * syllables or cited etymology vary. */
+  wordingOnly: boolean;
 }
 
 function toMillis(value: string | Date): number {
@@ -401,6 +462,13 @@ export function summarizeConsensus(
     bucket = meetsThreshold ? 'ready' : 'single';
   }
 
+  // Characterise the disagreement, over the distinct CLAIMS rather than the raw contributions:
+  // five volunteers holding two positions is a two-way difference, not a five-way one.
+  const claimOutcomes = tally.map((t) => t.outcome);
+  const fields = differingFields(claimOutcomes);
+  const wordingOnly =
+    tally.length > 1 && new Set(claimOutcomes.map(fingerprintIdentity)).size === 1;
+
   return {
     tally,
     winner,
@@ -411,5 +479,7 @@ export function summarizeConsensus(
     meetsThreshold,
     dissentsFromGolden,
     bucket,
+    differingFields: fields,
+    wordingOnly,
   };
 }

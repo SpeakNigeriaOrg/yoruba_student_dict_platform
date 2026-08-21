@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { ReviewQueue } from './ReviewQueue.js';
 import type { ConsensusGroup } from '../api.js';
+import { differingFields, fingerprintIdentity } from '@yoruba-student-dict-platform/shared';
 import type { ConsensusBucket, ConsensusTallyEntry, EntryOutcome } from '@yoruba-student-dict-platform/shared';
 
 afterEach(() => {
@@ -47,6 +48,10 @@ function group(wordId: string, bucket: ConsensusBucket, tally: ConsensusTallyEnt
       meetsThreshold: (winner?.count ?? 0) >= 2,
       dissentsFromGolden: bucket === 'dissent_on_golden' ? [tally[0]] : [],
       bucket,
+      // Derived with the real functions rather than hand-set, so a fixture cannot describe a
+      // disagreement its own claims do not actually have.
+      differingFields: differingFields(tally.map((t) => t.outcome)),
+      wordingOnly: tally.length > 1 && new Set(tally.map((t) => fingerprintIdentity(t.outcome))).size === 1,
     },
   };
 }
@@ -564,6 +569,67 @@ describe('ReviewQueue', () => {
       await waitFor(() => screen.getByLabelText('Upstream drift status'));
       expect(screen.queryByLabelText('Words with no Wiktionary entry')).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('ReviewQueue - what a contested word is actually arguing about', () => {
+  const sky = (over: Partial<EntryOutcome> = {}) =>
+    claim(`fp-${JSON.stringify(over)}`, 1, ['ada@example.com'], over);
+
+  it('names the fields that differ, so a tone dispute is not confused with a reword', async () => {
+    mockFetch([group('w1', 'contested', [sky(), sky({ displayText: 'ikun2' })])]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    expect(await screen.findByLabelText('What differs')).toHaveTextContent('They differ on the spelling.');
+  });
+
+  it('lists several fields in reading order', async () => {
+    mockFetch([
+      group('w1', 'contested', [sky(), sky({ displayText: 'ikun2', definitionText: 'belly' })]),
+    ]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    expect(await screen.findByLabelText('What differs')).toHaveTextContent(
+      'They differ on the spelling and the student definition.',
+    );
+  });
+
+  it('calls out a wording-only split as a choice rather than a conflict', async () => {
+    // Everyone agrees what the word IS; they wrote the gloss three ways. A student definition is a
+    // rendering, not an identity claim, and two good ones can disagree.
+    mockFetch([
+      group('w1', 'contested', [
+        sky({ definitionText: 'stomach' }),
+        sky({ definitionText: 'the belly' }),
+        sky({ definitionText: 'your tummy' }),
+      ]),
+    ]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    const note = await screen.findByLabelText('Wording only');
+    expect(note).toHaveTextContent('Same word, different wording');
+    expect(note).toHaveTextContent(/not a conflict to settle/);
+    // And it replaces the plain list rather than appearing alongside it.
+    expect(screen.queryByLabelText('What differs')).toBeNull();
+  });
+
+  it('does not call it wording-only when the spelling differs too', async () => {
+    mockFetch([
+      group('w1', 'contested', [sky({ definitionText: 'stomach' }), sky({ displayText: 'ikun2', definitionText: 'belly' })]),
+    ]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await screen.findByLabelText('What differs');
+    expect(screen.queryByLabelText('Wording only')).toBeNull();
+  });
+
+  it('says nothing at all when there is one claim', async () => {
+    mockFetch([group('w1', 'ready', [claim('fp-a', 2, ['ada@example.com', 'ben@example.com'])])]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    await screen.findByText('display_w1');
+    expect(screen.queryByLabelText('What differs')).toBeNull();
+    expect(screen.queryByLabelText('Wording only')).toBeNull();
   });
 });
 
