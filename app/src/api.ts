@@ -213,6 +213,10 @@ export interface EtymologyReviewResult {
   entryType: 'phrase' | null;
   componentsProposal: ComponentsProposalItem[];
   components: string[];
+  /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
+   * exists so the screen shows words rather than word_ids, and tests "do we hold a breakdown?"
+   * in one place instead of repeating the `[wordId]` self-reference check. */
+  componentsOnRecord: Array<{ wordId: string; displayText: string }>;
   axisDecided: AxisDecided;
   // Wiktionary's free-text etymology prose, distinct from componentsProposal
   // (the structured decomposition) - present even for entries with no

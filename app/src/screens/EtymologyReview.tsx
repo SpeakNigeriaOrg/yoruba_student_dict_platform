@@ -390,11 +390,14 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       .then((result) => {
         if (cancelled) return;
         setReview(result);
-        // Atomic words report components as [wordId] itself (see
-        // getEtymologyReview.ts) - not a real manual pick, start the
-        // draft empty in that case rather than pre-seeding a self-chip.
-        const isAtomic = result.components.length === 1 && result.components[0] === wordId;
-        setDraftComponents(isAtomic ? [] : result.components);
+        // componentsOnRecord has the atomic self-reference already collapsed server-side, so the
+        // `[wordId]` test that used to live here is gone from the client entirely - it was stated
+        // in two places and is now stated in one. Seeding the labels too, so a list loaded from the
+        // record shows its words instead of falling back to printing word_ids.
+        setDraftComponents(result.componentsOnRecord.map((c) => c.wordId));
+        setDraftLabels(
+          Object.fromEntries(result.componentsOnRecord.map((c) => [c.wordId, { displayText: c.displayText, pending: false }])),
+        );
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -509,8 +512,27 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   }
 
   const isPhrase = review?.entryType === 'phrase';
-  const hasRealExistingComponents =
-    review !== null && review.components.length > 0 && !(review.components.length === 1 && review.components[0] === wordId);
+  /** Our own breakdown, already resolved and already free of the atomic self-reference - the server
+   * collapses it now, so this is a plain "is there one?" rather than the two-clause test that used
+   * to be repeated here and in the loader. */
+  const onRecord = review?.componentsOnRecord ?? [];
+  const hasRealExistingComponents = onRecord.length > 0;
+  /** Wiktionary's breakdown, in word_ids, where every part resolves to a word we hold. Null when it
+   * proposes nothing comparable - either no proposal, or one naming parts we do not have, which is
+   * an unresolved suggestion rather than a rival answer. */
+  const proposalIds =
+    (review?.componentsProposal.length ?? 0) > 1 && (review?.componentsProposal ?? []).every((p) => p.wordId)
+      ? (review?.componentsProposal ?? []).map((p) => p.wordId as string)
+      : null;
+  /** Two answers to one question, and they differ.
+   *
+   * Order counts: a decomposition is a sequence, and `ojú + ilé` is not `ilé + ojú`. Only computed
+   * when we actually hold a breakdown - with nothing of our own on record, Wiktionary's suggestion
+   * is not in disagreement with anything, it is just the only answer available. */
+  const sourcesDisagree =
+    hasRealExistingComponents &&
+    proposalIds !== null &&
+    (proposalIds.length !== onRecord.length || proposalIds.some((id, i) => id !== onRecord[i].wordId));
   /** A one-part "breakdown" is not a breakdown.
    *
    * 9 of the 21 words in the dictionary that have any proposal at all have exactly one candidate -
@@ -575,9 +597,35 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         )}
       </div>
 
+      {/* Ours first, because it is the record and Wiktionary's is a suggestion about it. This
+          section did not exist: a word whose breakdown we already held showed only the upstream
+          proposal, so a curator who had just entered the parts on Add Word came here, read
+          "Wiktionary suggests no breakdown for this word", and reasonably concluded nothing had
+          saved. The list was on screen nowhere unless you clicked "It does have parts" - i.e. you
+          had to claim the word has parts to discover it was already recorded as having them. */}
+      {hasRealExistingComponents ? (
+        <div aria-label="Components on record">
+          <h3>{isPhrase ? 'The words of this phrase, as recorded' : 'What we have on record'}</h3>
+          <ul aria-label="Recorded components" className="plain-list">
+            {onRecord.map((c, i) => (
+              // Keyed by position: a reduplication holds one word twice, and the position is what
+              // tells the two apart.
+              <li key={`${i}-${c.wordId}`}>
+                <strong>{c.displayText}</strong>
+              </li>
+            ))}
+          </ul>
+          <p className="field-note">
+            {review.axisDecided.etymology
+              ? 'Confirmed on this word\u2019s etymology axis.'
+              : 'Recorded when this entry was added, and not yet confirmed here - that is what this screen is for.'}
+          </p>
+        </div>
+      ) : null}
+
       {isPhrase ? null : (
         <>
-          <h3>What Wiktionary suggests this is built from</h3>
+          <h3>{hasRealExistingComponents ? 'What Wiktionary suggests instead' : 'What Wiktionary suggests this is built from'}</h3>
           {review.componentsProposal.length === 0 ? (
             <p>Wiktionary suggests no breakdown for this word.</p>
           ) : (
@@ -587,6 +635,23 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               ))}
             </ul>
           )}
+          {/* Named rather than left for the reader to diff two lists by eye. Both answers stay on
+              screen and both actions stay available: upstream is often right and occasionally
+              wrong, and nothing in the data says which - the same reason the phrase screen reports
+              a spelling that differs from its parts instead of refusing it. */}
+          {sourcesDisagree ? (
+            <div role="alert" aria-label="Sources disagree" className="warning-banner">
+              <p>
+                <strong>This does not match what we hold.</strong> We record{' '}
+                <strong>{onRecord.map((c) => c.displayText).join(' + ')}</strong>; Wiktionary proposes{' '}
+                <strong>{review.componentsProposal.map((p) => p.kaikkiForm).join(' + ')}</strong>.
+              </p>
+              <p className="field-note">
+                Confirm ours if the record is right, accept Wiktionary&apos;s if it is better, or build the list
+                yourself. Nothing is changed until you choose.
+              </p>
+            </div>
+          ) : null}
           {/* Shown, but not as something to accept - see hasProposal. */}
           {singleRootProposal ? (
             <p className="field-note" aria-label="Single root note">
@@ -686,8 +751,16 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         </p>
       ) : null}
       <div className="btn-row">
+        {/* Secondary once we hold a breakdown of our own. Our record is the thing under review and
+            upstream's is the alternative to it, so "Confirm components" is the primary action and
+            this is the deliberate departure from it - the two used to be the other way round, which
+            offered a curator Wiktionary's answer first about a word we had already answered. */}
         {proposalFullyResolves ? (
-          <button type="button" className="btn btn-primary" onClick={acceptProposedComponents}>
+          <button
+            type="button"
+            className={`btn ${hasRealExistingComponents ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={acceptProposedComponents}
+          >
             {label('Accept proposed components')}
           </button>
         ) : null}
@@ -697,8 +770,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           </button>
         ) : null}
         {hasRealExistingComponents ? (
-          <button type="button" className="btn btn-secondary" onClick={confirmExisting}>
-            {label('Confirm components')}
+          <button type="button" className="btn btn-primary" onClick={confirmExisting}>
+            {label(sourcesDisagree ? 'Confirm ours' : 'Confirm components')}
           </button>
         ) : null}
         {isPhrase ? null : (

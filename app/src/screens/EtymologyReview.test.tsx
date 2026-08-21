@@ -295,7 +295,11 @@ describe('EtymologyReview', () => {
     await openCuratorTools(userEvent.setup());
 
     const draft = screen.getByLabelText('Draft components');
-    expect(draft).toHaveTextContent('fixturegenconfirmed_part_word');
+    // The word, not its word_id. A list loaded from the record used to fall back to printing the
+    // id, because labels were only ever populated by an interactive pick; componentsOnRecord now
+    // carries the spelling, so a recorded list reads the same way a freshly picked one does.
+    expect(draft).toHaveTextContent('fixturegenconfirmed_partspelling');
+    expect(draft).not.toHaveTextContent('fixturegenconfirmed_part_word');
   });
 
   it('starts with an empty manual draft for an atomic word (no self-referencing chip)', async () => {
@@ -365,10 +369,120 @@ describe('EtymologyReview', () => {
     await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
 
     await openCuratorTools(user);
-    expect(screen.getByLabelText('Draft components')).toHaveTextContent('fixturegenconfirmed_part_word');
+    expect(screen.getByLabelText('Draft components')).toHaveTextContent('fixturegenconfirmed_partspelling');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
     expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
+  });
+
+  describe('what WE hold, and where it differs from upstream', () => {
+    /** Our breakdown on record, with upstream proposing whatever the caller says. */
+    const withRecord = (proposal: Array<Record<string, unknown>>) => ({
+      ...etymologyConfirmedFixture,
+      componentsProposal: proposal,
+      components: ['a_word', 'b_word'],
+      componentsOnRecord: [
+        { wordId: 'a_word', displayText: 'ojú' },
+        { wordId: 'b_word', displayText: 'ilé' },
+      ],
+    });
+
+    const renderWith = async (fixture: unknown) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+      render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+      await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+    };
+
+    it('shows our recorded breakdown without being asked to claim the word has parts', async () => {
+      // The gap this closes: a curator who entered the parts on Add Word came here and read
+      // "Wiktionary suggests no breakdown for this word", because the only list on screen was
+      // upstream's. Ours was reachable only by clicking "It does have parts" - i.e. by claiming
+      // the word has parts in order to find out it was already recorded as having them.
+      await renderWith(withRecord([]));
+
+      const onRecord = screen.getByLabelText('Components on record');
+      expect(onRecord).toHaveTextContent('ojú');
+      expect(onRecord).toHaveTextContent('ilé');
+      expect(screen.queryByLabelText('Component picker')).toBeNull();
+    });
+
+    it('says the record is not yet confirmed, which is a different state from absent', async () => {
+      await renderWith(withRecord([]));
+      expect(screen.getByLabelText('Components on record')).toHaveTextContent('not yet confirmed');
+    });
+
+    it('makes confirming OURS the primary action, not accepting upstream', async () => {
+      // Precedence: our record is the thing under review and upstream's is the alternative to it.
+      await renderWith(
+        withRecord([
+          { kaikkiForm: 'ọwọ́', wordId: 'c_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+          { kaikkiForm: 'ẹsẹ̀', wordId: 'd_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+        ]),
+      );
+
+      expect(screen.getByRole('button', { name: /Confirm ours/ })).toHaveClass('btn-primary');
+      expect(screen.getByRole('button', { name: /Accept proposed components/ })).toHaveClass('btn-secondary');
+    });
+
+    it('names the disagreement instead of leaving two lists to be diffed by eye', async () => {
+      await renderWith(
+        withRecord([
+          { kaikkiForm: 'ọwọ́', wordId: 'c_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+          { kaikkiForm: 'ẹsẹ̀', wordId: 'd_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+        ]),
+      );
+
+      const alert = screen.getByLabelText('Sources disagree');
+      expect(alert).toHaveTextContent('ojú + ilé');
+      expect(alert).toHaveTextContent('ọwọ́ + ẹsẹ̀');
+      // Both actions survive it: upstream is often right and occasionally wrong, and nothing in
+      // the data says which.
+      expect(screen.getByRole('button', { name: /Confirm ours/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Accept proposed components/ })).toBeInTheDocument();
+    });
+
+    it('stays quiet when the two agree, including about order', async () => {
+      await renderWith(
+        withRecord([
+          { kaikkiForm: 'ojú', wordId: 'a_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+          { kaikkiForm: 'ilé', wordId: 'b_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+        ]),
+      );
+      expect(screen.queryByLabelText('Sources disagree')).toBeNull();
+      expect(screen.getByRole('button', { name: /Confirm components/ })).toBeInTheDocument();
+    });
+
+    it('treats a reordering as a disagreement, because a decomposition is a sequence', async () => {
+      // `ojú + ilé` is not `ilé + ojú`. A set comparison would call these the same answer.
+      await renderWith(
+        withRecord([
+          { kaikkiForm: 'ilé', wordId: 'b_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+          { kaikkiForm: 'ojú', wordId: 'a_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+        ]),
+      );
+      expect(screen.getByLabelText('Sources disagree')).toBeInTheDocument();
+    });
+
+    it('does not call an unresolvable proposal a disagreement', async () => {
+      // A proposal naming a word we do not hold is an unresolved suggestion, not a rival answer -
+      // and it cannot be accepted anyway, so presenting it as a conflict would ask for a choice
+      // that has only one available side.
+      await renderWith(
+        withRecord([
+          { kaikkiForm: 'adìyẹ', wordId: null, ambiguous: false, possibleMatches: [], previewGlosses: [] },
+          { kaikkiForm: 'ojú', wordId: 'a_word', ambiguous: false, possibleMatches: [], previewGlosses: [] },
+        ]),
+      );
+      expect(screen.queryByLabelText('Sources disagree')).toBeNull();
+    });
+
+    it('shows no record section for an atomic word', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
+      render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+      await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+      expect(screen.queryByLabelText('Components on record')).toBeNull();
+    });
   });
 
   it("shows Wiktionary's prose etymology, in one wording whether or not there is a breakdown", async () => {

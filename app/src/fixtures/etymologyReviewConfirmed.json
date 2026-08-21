@@ -15,5 +15,11 @@
   "components": [
     "fixturegenconfirmed_part_word"
   ],
-  "etymologyText": null
+  "etymologyText": null,
+  "componentsOnRecord": [
+    {
+      "wordId": "fixturegenconfirmed_part_word",
+      "displayText": "fixturegenconfirmed_partspelling"
+    }
+  ]
 }

@@ -56,6 +56,17 @@ export interface EtymologyReviewResult {
   entryType: 'phrase' | null;
   componentsProposal: ComponentsProposalItem[];
   components: string[];
+  /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
+   * collapsed to an empty list.
+   *
+   * `components` above is the raw axis field, which reports an atomic word as `[wordId]` and every
+   * component as a bare id. Both are wrong to put in front of a person: the screen was repeating
+   * the `[wordId]` test in two places and falling back to printing word_ids when it had no label
+   * for one, and this screen's own rule is that a component is shown as the word, not the key.
+   *
+   * Kept as a separate field rather than a change to `components`, whose shape componentsAxisFields
+   * owns and other callers read. */
+  componentsOnRecord: Array<{ wordId: string; displayText: string }>;
   /** Whether each of the platform's review axes already has a
    * word_decisions row for this word - shown as read-only context so a
    * curator reviewing etymology (the only axis this screen has an
@@ -132,5 +143,11 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     // usedAsComponentOf stop here.
     componentsProposal: fields.componentsProposal,
     components: fields.components,
+    // The self-reference is not a component; see the field's own note. vocab is already loaded, so
+    // resolving each id to its spelling costs nothing extra.
+    componentsOnRecord:
+      fields.components.length === 1 && fields.components[0] === wordId
+        ? []
+        : fields.components.map((id) => ({ wordId: id, displayText: vocab[id]?.displayText ?? id })),
   };
 }
