@@ -42,6 +42,15 @@ import { submitContributionInTransaction } from './submitContribution.js';
  * written. So the frozen outcome is the author's own content, arrived at by the
  * same code path a volunteer's agreement would take, rather than a second
  * construction of it here that could drift from the first. */
+/** The two submissions an authoring vote is made of.
+ *
+ * Exported because backfillAuthoringVotes.ts casts the same vote for words created before this
+ * existed. Shared constants rather than two constructions of the same literal, so the backfilled
+ * rows cannot come to mean something different from the live ones. */
+export const AUTHORING_ENTRY_VOTE = { action: 'keep_ours', definitionAction: 'confirm' } as const;
+export const AUTHORING_ETYMOLOGY_VOTE = { componentsAction: 'confirm_existing' } as const;
+export const AUTHORING_NOTE = 'Authored on the add-entry form.';
+
 export async function recordAuthoringVote(
   client: Queryable,
   wordId: string,
@@ -53,8 +62,8 @@ export async function recordAuthoringVote(
     {
       axis: 'entry',
       wordId,
-      proposedValue: { action: 'keep_ours', definitionAction: 'confirm' },
-      note: 'Authored on the add-entry form.',
+      proposedValue: { ...AUTHORING_ENTRY_VOTE },
+      note: AUTHORING_NOTE,
     },
     authoredBy,
   );
@@ -72,8 +81,8 @@ export async function recordAuthoringVote(
     {
       axis: 'etymology',
       wordId,
-      proposedValue: { componentsAction: 'confirm_existing' },
-      note: 'Authored on the add-entry form.',
+      proposedValue: { ...AUTHORING_ETYMOLOGY_VOTE },
+      note: AUTHORING_NOTE,
     },
     authoredBy,
   );
