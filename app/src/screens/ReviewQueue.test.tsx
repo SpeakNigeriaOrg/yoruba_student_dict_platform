@@ -672,6 +672,66 @@ describe('ReviewQueue - the authoring vote backfill', () => {
     expect(screen.queryByRole('button', { name: /Cast/ })).toBeNull();
   });
 
+  it('keeps calling until nothing is left, because the server caps each request', async () => {
+    // The failure that produced this: 163 votes in one request outlived the HTTP gateway timeout
+    // and came back 500, having written most of them.
+    const fetchMock = mockWithBackfill([
+      PREVIEW,
+      { ...PREVIEW, applied: true, written: 25, remaining: 50, failed: [] },
+      { ...PREVIEW, applied: true, written: 25, remaining: 25, failed: [] },
+      { ...PREVIEW, applied: true, written: 25, remaining: 0, failed: [] },
+    ]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    const status = await screen.findByRole('status');
+    // The total across batches, not the last batch's count.
+    expect(status).toHaveTextContent('Wrote 75 votes');
+    const applies = fetchMock.mock.calls.filter(
+      (c) => String(c[0]).includes('/maintenance/authoring-votes') && JSON.parse((c[1] as RequestInit).body as string).apply,
+    );
+    expect(applies).toHaveLength(3);
+  });
+
+  it('says what was saved when a batch fails part way, rather than reading as a total loss', async () => {
+    const queue: unknown[] = [PREVIEW, { ...PREVIEW, applied: true, written: 25, remaining: 50, failed: [] }];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/maintenance/authoring-votes')) {
+        if (queue.length === 0) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+        return Promise.resolve({ ok: true, json: async () => queue.shift() });
+      }
+      if (init?.method === 'POST') return Promise.resolve({ ok: true, json: async () => ({ confirmed: [], skipped: [] }) });
+      if (url.includes('/upstream-drift')) return Promise.resolve({ ok: true, json: async () => NO_DRIFT });
+      if (url.includes('/contributions')) return Promise.resolve({ ok: true, json: async () => ({ contributions: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({ groups: [] }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<ReviewQueue onOpenWord={() => {}} />);
+    await waitFor(() => screen.getByLabelText('Authoring vote backfill'));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('25 votes were written before this and are saved');
+    expect(alert).toHaveTextContent(/Preview again/);
+  });
+
+  it('stops instead of looping when a batch makes no progress', async () => {
+    mockWithBackfill([
+      PREVIEW,
+      { ...PREVIEW, applied: true, written: 0, remaining: 40, failed: [] },
+    ]);
+    const user = await openQueue();
+    await user.click(screen.getByRole('button', { name: /Preview/ }));
+    await user.click(await screen.findByRole('button', { name: 'Cast 1482 votes' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Stopped with 40 left');
+  });
+
   it('names the words that failed rather than reporting a bare count', async () => {
     mockWithBackfill([
       PREVIEW,

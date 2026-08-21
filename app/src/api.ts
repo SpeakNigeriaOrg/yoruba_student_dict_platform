@@ -372,6 +372,9 @@ export interface AuthoringVoteBackfillResult {
   skippedAlreadyVoted: number;
   skippedAlreadyDecided: number;
   written?: number;
+  /** Planned votes this call did not reach. Nonzero means call again - the server caps how many it
+   * will do per request, because the whole set outlives an HTTP timeout on a real corpus. */
+  remaining?: number;
   failed?: Array<{ wordId: string; axis: string; error: string }>;
 }
 

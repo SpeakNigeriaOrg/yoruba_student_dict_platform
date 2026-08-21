@@ -391,17 +391,59 @@ function AuthoringVoteBackfillSection() {
   const [preview, setPreview] = useState<AuthoringVoteBackfillResult | null>(null);
   const [done, setDone] = useState<AuthoringVoteBackfillResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function run(apply: boolean) {
+  async function runPreview() {
     setBusy(true);
     setError(null);
     try {
-      const result = await backfillAuthoringVotes(apply);
-      if (apply) setDone(result);
-      else setPreview(result);
+      setPreview(await backfillAuthoringVotes(false));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Drives the batches, because the server will only do so many per request.
+   *
+   * The first real run sent all 163 in one call, outlived the HTTP gateway timeout and came back
+   * 500 - having written most of them. So the loop is not only about finishing: an interrupted run
+   * now reports what it got through, and every vote already committed stays committed. */
+  async function runApply() {
+    setBusy(true);
+    setError(null);
+    let written = 0;
+    const failed: NonNullable<AuthoringVoteBackfillResult['failed']> = [];
+    try {
+      for (;;) {
+        const result = await backfillAuthoringVotes(true);
+        written += result.written ?? 0;
+        failed.push(...(result.failed ?? []));
+        const remaining = result.remaining ?? 0;
+        setProgress(`Cast ${written}${remaining > 0 ? `, ${remaining} to go` : ''}...`);
+        if (remaining === 0) {
+          setDone({ ...result, written, failed });
+          setProgress(null);
+          return;
+        }
+        // A batch that wrote nothing and left work behind would loop forever. Report what happened
+        // and stop, rather than hammering an endpoint that is not making progress.
+        if ((result.written ?? 0) === 0) {
+          setDone({ ...result, written, failed });
+          setProgress(null);
+          setError(`Stopped with ${remaining} left: the last batch wrote nothing.`);
+          return;
+        }
+      }
+    } catch (err) {
+      // Whatever was written before this stays written. Say so, because the natural reading of an
+      // error here is that the whole thing failed.
+      setError(
+        `${err instanceof Error ? err.message : String(err)} - ${written} votes were written before this and are saved. Preview again to see what is left.`,
+      );
+      setProgress(null);
     } finally {
       setBusy(false);
     }
@@ -415,6 +457,10 @@ function AuthoringVoteBackfillSection() {
         later disagrees makes the word <strong>contested</strong> rather than quietly outvoting
         nobody. Everything created before that holds no such vote. This casts one, attributed to
         you, for every entry that is missing one.
+      </p>
+      <p className="field-note">
+        It runs in batches and can be stopped or interrupted at any point: every vote is saved as it
+        is cast, so nothing is half-written and re-running only ever does what is left.
       </p>
       <p className="field-note">
         It writes <strong>contributions and nothing else</strong> — no spellings, components,
@@ -454,16 +500,21 @@ function AuthoringVoteBackfillSection() {
           ) : null}
 
           <div className="btn-row">
-            <button type="button" className="btn btn-secondary" onClick={() => run(false)} disabled={busy}>
+            <button type="button" className="btn btn-secondary" onClick={runPreview} disabled={busy}>
               {preview ? 'Preview again' : 'Preview (writes nothing)'}
             </button>
             {/* Only after a preview, and only when it found something to do. */}
             {preview && preview.planned > 0 ? (
-              <button type="button" className="btn btn-danger" onClick={() => run(true)} disabled={busy}>
+              <button type="button" className="btn btn-danger" onClick={runApply} disabled={busy}>
                 Cast {preview.planned} votes
               </button>
             ) : null}
           </div>
+          {progress ? (
+            <p role="status" aria-label="Backfill progress">
+              {progress}
+            </p>
+          ) : null}
           {preview && preview.planned === 0 ? (
             <p role="status">Nothing to backfill — every entry already has its author's vote.</p>
           ) : null}

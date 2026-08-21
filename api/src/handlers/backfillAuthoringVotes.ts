@@ -104,22 +104,37 @@ export async function planAuthoringVoteBackfill(client: Queryable, userId: strin
 
 export interface BackfillResult extends BackfillPlan {
   written: number;
+  /** Planned items this call did not reach, because `limit` stopped it. Zero means done. */
+  remaining: number;
   failed: Array<BackfillPlanItem & { error: string }>;
 }
 
-/** Applies the plan, one word-axis per transaction.
+/** Applies the plan, one word-axis per transaction, at most `limit` of them.
  *
  * Per item rather than one transaction over thousands of rows: a single word
  * that cannot resolve an outcome (a phrase whose components went missing, say)
- * should be reported and stepped over, not take the whole corpus with it. */
+ * should be reported and stepped over, not take the whole corpus with it.
+ *
+ * BOUNDED because the caller may be an HTTP request. Each item is roughly five
+ * round trips to Postgres, so a few hundred of them comfortably outlives an
+ * HTTP gateway timeout - which is what happened the first time this ran from
+ * the Review tab against the real corpus: 163 votes, one request, a 500 from
+ * the gateway and no report of the many that had in fact been written.
+ *
+ * Resumable rather than transactional across the batch, and deliberately: every
+ * item commits on its own, so an interrupted run leaves completed work
+ * completed, and re-planning simply finds less to do. `remaining` lets the
+ * caller drive the rest without recomputing what it already knows. */
 export async function applyAuthoringVoteBackfill(
   pool: pg.Pool,
   userId: string,
   plan: BackfillPlan,
+  limit = Number.POSITIVE_INFINITY,
 ): Promise<BackfillResult> {
-  const result: BackfillResult = { ...plan, written: 0, failed: [] };
+  const batch = plan.planned.slice(0, limit === Number.POSITIVE_INFINITY ? undefined : limit);
+  const result: BackfillResult = { ...plan, written: 0, remaining: plan.planned.length - batch.length, failed: [] };
 
-  for (const item of plan.planned) {
+  for (const item of batch) {
     try {
       // eslint-disable-next-line no-await-in-loop
       // Branched rather than a ternary inside the object: axis and proposedValue are correlated

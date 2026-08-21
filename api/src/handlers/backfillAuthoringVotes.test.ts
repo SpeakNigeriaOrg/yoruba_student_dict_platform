@@ -203,6 +203,33 @@ describe('what the backfill writes, and refuses to write', () => {
     expect(plan.skipped).toContainEqual({ wordId, axis: 'etymology', reason: 'already_decided' });
   });
 
+  it('stops at the limit and says how many are left', async () => {
+    // The applier is called from an HTTP request, where the whole set outlives the gateway
+    // timeout. Bounded and resumable beats fast and all-or-nothing.
+    for (const n of ['lim_a', 'lim_b', 'lim_c']) await seedWordWithAudio(`${NS}${n}`, n);
+
+    const plan = await planAuthoringVoteBackfill(pool, owner);
+    const planned = plan.planned.length;
+    expect(planned).toBeGreaterThan(2);
+
+    const first = await applyAuthoringVoteBackfill(pool, owner, plan, 2);
+    expect(first.written).toBe(2);
+    expect(first.remaining).toBe(planned - 2);
+
+    // Every vote committed on its own, so re-planning simply finds less to do - the work already
+    // done is not repeated and not lost.
+    const second = await planAuthoringVoteBackfill(pool, owner);
+    expect(second.planned.length).toBe(planned - 2);
+  });
+
+  it('reports remaining 0 when it gets through everything', async () => {
+    await seedWordWithAudio(`${NS}unbounded`, 'gbogbo');
+    const plan = await planAuthoringVoteBackfill(pool, owner);
+    const result = await applyAuthoringVoteBackfill(pool, owner, plan);
+    expect(result.remaining).toBe(0);
+    expect(result.written).toBe(plan.planned.length);
+  });
+
   it('is safe to run twice: the second pass has nothing left to do', async () => {
     const wordId = `${NS}idempotent`;
     await seedWordWithAudio(wordId, 'igi');

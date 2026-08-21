@@ -9,6 +9,13 @@
 //
 // `apply` is opt-in per request. Absent or false plans and returns counts
 // without writing, which is what the screen's preview uses.
+//
+// An apply does at most BATCH votes and reports how many are left, because the
+// first real run did not: 163 votes in one request outlived the HTTP gateway
+// timeout and came back 500, with no account of the many that had been written
+// before it died. The work was resumable even then - every vote commits on its
+// own - but the caller had no way to know that, which is the part that made a
+// harmless timeout look like a failure.
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
@@ -35,6 +42,14 @@ function summarize(plan: BackfillPlan) {
   };
 }
 
+/** Votes per apply request.
+ *
+ * Each is about five round trips to Postgres, so this is sized to finish well
+ * inside an HTTP timeout on a slow connection rather than to be quick. The
+ * screen loops until `remaining` is zero, so a low number costs a few extra
+ * requests and buys a run that cannot half-fail invisibly. */
+const BATCH = 25;
+
 export async function backfillAuthoringVotesFunction(
   request: HttpRequest,
   _context: InvocationContext,
@@ -53,13 +68,14 @@ export async function backfillAuthoringVotesFunction(
       return { status: 200, jsonBody: { applied: false, ...summarize(plan) } };
     }
 
-    const result = await applyAuthoringVoteBackfill(pool, user.userId, plan);
+    const result = await applyAuthoringVoteBackfill(pool, user.userId, plan, BATCH);
     return {
       status: 200,
       jsonBody: {
         applied: true,
         ...summarize(plan),
         written: result.written,
+        remaining: result.remaining,
         failed: result.failed.map((f) => ({ wordId: f.wordId, axis: f.axis, error: f.error })),
       },
     };
