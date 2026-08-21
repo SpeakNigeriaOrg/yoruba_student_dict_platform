@@ -260,6 +260,14 @@ function WordTab({
    * the person adding it knows the answer, rather than a reconstruction job later. */
   const [pos, setPos] = useState('');
   const [englishGloss, setEnglishGloss] = useState('');
+  /** The optional decomposition: which words the dictionary already holds that this one is built
+   * from. Empty for most words, because most words are atomic - see createWord.ts on why that is
+   * zero rows rather than a placeholder, and why recording it here does not decide the axis. */
+  const [components, setComponents] = useState<PhrasePart[]>([]);
+  /** Collapsed until asked for. A word's decomposition is a real question but a rare one, and a
+   * component picker sitting open above the submit button reads as something to fill in - which is
+   * how an optional field turns into a prompt to invent an answer. */
+  const [componentsOpen, setComponentsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
@@ -342,6 +350,8 @@ function WordTab({
     setEnglishGloss('');
     setOffPath(false);
     setDuplicates(null);
+    setComponents([]);
+    setComponentsOpen(false);
   }
 
   function startOffPath() {
@@ -403,6 +413,10 @@ function WordTab({
         syllables: offPath ? composedSyllables : syllablesText.split(',').map((s) => s.trim()).filter(Boolean),
         definition: definitionText.trim() || null,
         citation: offPath ? { exemptReason: exemptReason.trim() } : { entryId: selected!.entryId! },
+        // Omitted entirely when empty, rather than sent as []. An atomic word makes no claim about
+        // its parts, and a present-but-empty list would say it had considered the question - which
+        // is a different thing from a curator never opening the section.
+        ...(components.length > 0 ? { components: components.map((c) => c.wordId) } : {}),
         // Off-path only: a cited word reads both from its pin, and 0018 keeps these as overrides
         // precisely so the cited majority needs no second copy of what upstream already said.
         ...(offPath ? { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null } : {}),
@@ -606,6 +620,100 @@ function WordTab({
               </div>
             </>
           ) : null}
+
+          {/* Optional, collapsed, and last of the content fields.
+              
+              A word's components are a claim ABOUT it rather than its identity - the citation above
+              is the identity (0017) - so this asks a question most words answer with silence, and
+              the section stays shut until somebody has one to give. Opening it and picking nothing
+              is the same as never opening it: submit sends no components either way. */}
+          <div className="field">
+            {componentsOpen ? (
+              <div aria-label="Word components section">
+                <p>
+                  <strong>What is this word built from?</strong>{' '}
+                  <button type="button" className="btn btn-secondary" onClick={() => setComponentsOpen(false)}>
+                    Hide
+                  </button>
+                </p>
+                <p className="field-note">
+                  Only for a word that really is made of words we already hold - a compound like `ojúlé`
+                  from `ojú` and `ilé`. Most words are not, and leaving this empty is the ordinary
+                  answer. It is recorded as a proposal: the etymology review still asks a curator to
+                  confirm it.
+                </p>
+                {components.length === 0 ? (
+                  <p>No components picked yet.</p>
+                ) : (
+                  <ul aria-label="Word components" className="plain-list">
+                    {components.map((c, i) => (
+                      // Keyed by position, not wordId - a reduplication holds the same word twice.
+                      <li key={`${i}-${c.wordId}`} className="search-result-row">
+                        <span className="result-text">
+                          <strong>{c.displayText}</strong>
+                          {c.definition ? ` — ${c.definition}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          onClick={() => setComponents(components.filter((_, j) => j !== i))}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <SearchBox
+                  search={searchVocab}
+                  renderResult={(r) => (
+                    <>
+                      <strong>{r.displayText}</strong>
+                      {r.definition ? ` — ${r.definition}` : ''}
+                    </>
+                  )}
+                  onSelect={(r: VocabSearchResult) =>
+                    setComponents((prev) => [
+                      ...prev,
+                      { wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition },
+                    ])
+                  }
+                  renderAction={(r: VocabSearchResult) => (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() =>
+                        setComponents((prev) => [
+                          ...prev,
+                          { wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition },
+                        ])
+                      }
+                    >
+                      Add as component
+                    </button>
+                  )}
+                  placeholder="Search words already in the dictionary..."
+                  resultsAriaLabel="Word component search results"
+                  label="Search words this one is built from"
+                />
+              </div>
+            ) : (
+              <p className="field-note">
+                <button type="button" className="btn btn-secondary" onClick={() => setComponentsOpen(true)}>
+                  Is this word built from other words? (optional)
+                </button>
+                {/* Said out loud when there ARE components and the section is shut, because a
+                    collapsed section that hides a filled-in answer is how a submission comes to
+                    carry something nobody remembers entering. */}
+                {components.length > 0 ? (
+                  <span aria-label="Components picked while collapsed">
+                    {' '}
+                    {components.length} picked: {components.map((c) => c.displayText).join(' + ')}
+                  </span>
+                ) : null}
+              </p>
+            )}
+          </div>
 
           <div className="field">
             <label htmlFor="word-hint-field">Word ID hint (English meaning, e.g. "hand")</label>

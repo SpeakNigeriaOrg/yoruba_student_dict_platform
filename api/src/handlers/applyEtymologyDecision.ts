@@ -17,6 +17,7 @@ import {
 } from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
 import { WordNotFoundError } from './errors.js';
+import { assertComponentsExist, ComponentsNotFoundError } from './components.js';
 
 // Re-exported rather than redeclared: shared/src/consensus.ts owns this union
 // now, since resolveEtymologyOutcome has to switch on it. Two independent
@@ -37,12 +38,12 @@ export class ComponentsRequiredError extends Error {
   }
 }
 
-export class ComponentsNotFoundError extends Error {
-  constructor(public readonly missingWordIds: string[]) {
-    super(`component word_id(s) not found in golden_record: ${missingWordIds.join(', ')}`);
-    this.name = 'ComponentsNotFoundError';
-  }
-}
+// Re-exported, not declared. This file used to carry its own character-for-character copy of the
+// class createPhrase raised, and two classes of one name are two different answers to `instanceof`:
+// functions/approveContribution.ts imports the name from HERE while the error its new_entry path can
+// actually raise comes from createWord/createPhrase, so that check never matched. It looked correct
+// because the `err instanceof Error` fallback below it returns the same 400 with the same message.
+export { ComponentsNotFoundError };
 
 /** A phrase's composition is a fact about it, not an optional annotation.
  *
@@ -127,14 +128,7 @@ export async function applyEtymologyDecisionInTransaction(
 
   if (CONTENT_CHANGING_ACTIONS.has(input.componentsAction)) {
     const components = input.components ?? [];
-    const foundRows = await client.query<{ word_id: string }>('select word_id from golden_record where word_id = any($1)', [
-      components,
-    ]);
-    const foundIds = new Set(foundRows.rows.map((r) => r.word_id));
-    const missing = components.filter((c) => !foundIds.has(c));
-    if (missing.length > 0) {
-      throw new ComponentsNotFoundError(missing);
-    }
+    await assertComponentsExist(client, components);
 
     await client.query('delete from golden_record_components where word_id = $1', [wordId]);
     for (const [position, componentWordId] of components.entries()) {
@@ -213,14 +207,7 @@ export async function applyEtymologyOutcomeInTransaction(
 
   // Same existence check the action path applies - a consensus can still name a
   // component word that has since been removed.
-  if (outcome.components.length > 0) {
-    const found = await client.query<{ word_id: string }>('select word_id from golden_record where word_id = any($1)', [
-      outcome.components,
-    ]);
-    const foundIds = new Set(found.rows.map((r) => r.word_id));
-    const missing = outcome.components.filter((c) => !foundIds.has(c));
-    if (missing.length > 0) throw new ComponentsNotFoundError(missing);
-  }
+  await assertComponentsExist(client, outcome.components);
 
   await client.query('delete from golden_record_components where word_id = $1', [wordId]);
   for (const [position, componentWordId] of outcome.components.entries()) {

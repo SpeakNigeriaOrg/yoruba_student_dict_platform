@@ -25,6 +25,7 @@ import { withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
 import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
+import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
 
 export interface CreatePhraseInput {
   wordId: string;
@@ -70,12 +71,9 @@ export class NoComponentsError extends Error {
   }
 }
 
-export class ComponentsNotFoundError extends Error {
-  constructor(public readonly missingWordIds: string[]) {
-    super(`component word_id(s) not found in golden_record: ${missingWordIds.join(', ')}`);
-    this.name = 'ComponentsNotFoundError';
-  }
-}
+// Re-exported rather than declared here, now that createWord.ts raises it too. Two classes of one
+// name would be two different answers to `instanceof`, and the function layer catches by identity.
+export { ComponentsNotFoundError };
 
 /** Accepts a pg.Pool specifically (not just Queryable) since this handler
  * needs a real transaction across its multiple inserts - createWord.ts's
@@ -99,15 +97,7 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
     throw new WordIdAlreadyExistsError(input.wordId);
   }
 
-  const existingComponents = await client.query<{ word_id: string }>(
-    'select word_id from golden_record where word_id = any($1)',
-    [input.components],
-  );
-  const foundIds = new Set(existingComponents.rows.map((r) => r.word_id));
-  const missing = input.components.filter((c) => !foundIds.has(c));
-  if (missing.length > 0) {
-    throw new ComponentsNotFoundError(missing);
-  }
+  await assertComponentsExist(client, input.components);
 
   await client.query(
     `insert into golden_record (word_id, display_text, syllables, entry_type, definition, pos, english_gloss, etymid_label, updated_by)
@@ -124,13 +114,7 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
     ],
   );
 
-  for (const [position, componentWordId] of input.components.entries()) {
-    await client.query(
-      `insert into golden_record_components (word_id, component_position, component_word_id)
-       values ($1, $2, $3)`,
-      [input.wordId, position, componentWordId],
-    );
-  }
+  await writeComponents(client, input.wordId, input.components);
 
   // Exactly one citation row either way, because the alternative is three states - cited, explicitly
   // exempt, and simply absent - where "absent" would mean both "a phrase, correctly" and "a word nobody

@@ -5,7 +5,10 @@
 // submits a 'new_entry' contribution, see handlers/submitContribution.ts).
 // A plain word gets zero golden_record_components rows - an atomic word
 // has no real decomposition, not a self-referencing placeholder (see
-// db/migrations/0001_initial_schema.sql).
+// db/migrations/0001_initial_schema.sql). Most words are that word, which is
+// why `components` below is optional and normally absent; a word that IS built
+// from words we already hold can now say so here instead of being created
+// atomic and corrected afterwards on its etymology axis.
 //
 // This is where a word acquires its identity, and identity means the Wiktionary
 // etymology it cites - not its spelling. Adding a word IS choosing an etymology
@@ -20,6 +23,7 @@ import { isUniqueViolation, withTransaction, type Queryable } from '../db.js';
 import { WordIdAlreadyExistsError } from './errors.js';
 import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
+import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
 
 export interface CreateWordInput {
   wordId: string;
@@ -36,6 +40,18 @@ export interface CreateWordInput {
    * an etymology to add. Deriving it later from the spelling is impossible - one
    * spelling maps to several etymologies (`kọ́` is three). */
   citation: UpstreamCitationInput;
+  /** word_ids this word is built from, in order - optional, and for most words correctly absent.
+   *
+   * Unlike a phrase's, this list is not the word's identity: a word IS the etymology it cites (0017),
+   * and its decomposition is a separate claim ABOUT it. So zero components is a perfectly good answer
+   * and the ordinary one - `ilé` is not made of anything - which is why this is optional here and
+   * required in createPhrase.
+   *
+   * Writing it does NOT decide the etymology axis. No word_decisions row is written, so the word still
+   * reaches review with its decomposition as a proposal a curator confirms - exactly the state
+   * createPhrase leaves a phrase in. A claim made while adding a word is a good starting point and not
+   * a substitute for the review that checks it. */
+  components?: string[];
   /** 0018's publication overrides - all optional, and normally all absent.
    *
    * A cited word needs none of them: the pin already holds pos and glosses as upstream stated
@@ -48,7 +64,7 @@ export interface CreateWordInput {
   etymidLabel?: string | null;
 }
 
-export { WordIdAlreadyExistsError };
+export { WordIdAlreadyExistsError, ComponentsNotFoundError };
 
 /** Accepts a pg.Pool specifically (not just Queryable) since the word and its
  * citation must be written in ONE transaction - a word that exists with no
@@ -95,6 +111,12 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
     }
     throw err;
   }
+
+  // Before the citation only because both are inside the one transaction and neither can outlive a
+  // failure of the other - a word with components but no citation is the state 0014 forbids just as
+  // much as a word with neither.
+  await assertComponentsExist(client, input.components ?? []);
+  await writeComponents(client, input.wordId, input.components ?? []);
 
   await writeCitationInTransaction(client, input.wordId, input.citation, createdBy);
 }

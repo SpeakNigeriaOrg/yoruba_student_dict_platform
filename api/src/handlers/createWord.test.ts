@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, deleteTestKaikkiSenses, getTestPool, insertTestKaikkiSense } from '../testSupport.js';
-import { createWord, WordIdAlreadyExistsError } from './createWord.js';
+import { ComponentsNotFoundError, createWord, WordIdAlreadyExistsError } from './createWord.js';
 import { EntryIdNotCitableError, EntryIdNotInCorpusError } from './upstreamCitations.js';
 
 const NS = 'testcw_';
@@ -88,6 +88,116 @@ describe('createWord', () => {
       [`${NS}no_def`],
     );
     expect(word.rows[0].definition).toBeNull();
+  });
+});
+
+describe('createWord: the optional decomposition', () => {
+  it('records the components a word was given, in order', async () => {
+    // A compound of two words the dictionary already holds. Both must exist first - the FK is the
+    // real enforcement and the picker only ever offers committed words.
+    for (const [id, text] of [[`${NS}oju_face`, 'ojú'], [`${NS}ile_house`, 'ilé']]) {
+      await createWord(pool, { wordId: id, displayText: text, syllables: [text], citation: EXEMPT }, curatorUserId);
+    }
+
+    await createWord(
+      pool,
+      {
+        wordId: `${NS}ojule_doorway`,
+        displayText: 'ojúlé',
+        syllables: ['o', 'ju', 'le'],
+        citation: EXEMPT,
+        components: [`${NS}oju_face`, `${NS}ile_house`],
+      },
+      curatorUserId,
+    );
+
+    const rows = await pool.query<{ component_position: number; component_word_id: string }>(
+      'select component_position, component_word_id from golden_record_components where word_id = $1 order by component_position',
+      [`${NS}ojule_doorway`],
+    );
+    expect(rows.rows).toEqual([
+      { component_position: 0, component_word_id: `${NS}oju_face` },
+      { component_position: 1, component_word_id: `${NS}ile_house` },
+    ]);
+
+    // Still a WORD, not a phrase: entry_type is what separates the two, and having components is
+    // not what makes something a phrase.
+    const word = await pool.query<{ entry_type: string | null }>(
+      'select entry_type from golden_record where word_id = $1',
+      [`${NS}ojule_doorway`],
+    );
+    expect(word.rows[0].entry_type).toBeNull();
+  });
+
+  it('leaves the etymology axis undecided, so the claim still goes to review', async () => {
+    // The point of the field is to capture what the person adding the word knows, not to skip the
+    // check. A decision row here would take the word straight out of the review queue.
+    await createWord(pool, { wordId: `${NS}part_one`, displayText: 'a', syllables: ['a'], citation: EXEMPT }, curatorUserId);
+    await createWord(
+      pool,
+      {
+        wordId: `${NS}undecided_compound`,
+        displayText: 'ab',
+        syllables: ['ab'],
+        citation: EXEMPT,
+        components: [`${NS}part_one`],
+      },
+      curatorUserId,
+    );
+
+    const decisions = await pool.query(
+      "select 1 from word_decisions where word_id = $1 and axis = 'etymology'",
+      [`${NS}undecided_compound`],
+    );
+    expect(decisions.rowCount).toBe(0);
+  });
+
+  it('refuses a component that is not in the dictionary, naming it', async () => {
+    await expect(
+      createWord(
+        pool,
+        {
+          wordId: `${NS}bad_component`,
+          displayText: 'x',
+          syllables: ['x'],
+          citation: EXEMPT,
+          components: [`${NS}does_not_exist`],
+        },
+        curatorUserId,
+      ),
+    ).rejects.toThrow(ComponentsNotFoundError);
+
+    // And the word itself is not left behind: one transaction, so a rejected component list takes
+    // the whole create with it.
+    const word = await pool.query('select 1 from golden_record where word_id = $1', [`${NS}bad_component`]);
+    expect(word.rowCount).toBe(0);
+  });
+
+  it('allows the same word twice, which is what a reduplication is', async () => {
+    await createWord(pool, { wordId: `${NS}meji_two`, displayText: 'méjì', syllables: ['me', 'ji'], citation: EXEMPT }, curatorUserId);
+    await createWord(
+      pool,
+      {
+        wordId: `${NS}mejimeji_pairs`,
+        displayText: 'méjìméjì',
+        syllables: ['me', 'ji', 'me', 'ji'],
+        citation: EXEMPT,
+        components: [`${NS}meji_two`, `${NS}meji_two`],
+      },
+      curatorUserId,
+    );
+
+    const rows = await pool.query(
+      'select component_position from golden_record_components where word_id = $1 order by component_position',
+      [`${NS}mejimeji_pairs`],
+    );
+    expect(rows.rows).toEqual([{ component_position: 0 }, { component_position: 1 }]);
+  });
+
+  it('writes nothing when the list is omitted or empty, which is the ordinary word', async () => {
+    await createWord(pool, { wordId: `${NS}empty_list`, displayText: 'x', syllables: ['x'], citation: EXEMPT, components: [] }, curatorUserId);
+    const rows = await pool.query('select 1 from golden_record_components where word_id = $1', [`${NS}empty_list`]);
+    expect(rows.rowCount).toBe(0);
   });
 });
 

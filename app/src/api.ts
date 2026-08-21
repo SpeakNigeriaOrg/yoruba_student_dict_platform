@@ -364,6 +364,10 @@ export interface CreateWordInput extends PublicationFields {
   syllables: string[];
   definition?: string | null;
   citation: UpstreamCitationInput;
+  /** word_ids this word is built from, in order. Optional and usually absent - most words are
+   * atomic, which is zero rows rather than a placeholder. Not the word's identity the way a
+   * phrase's components are its identity; see createWord.ts. */
+  components?: string[];
 }
 
 export function createWord(input: CreateWordInput): Promise<{ wordId: string }> {

@@ -473,6 +473,115 @@ async function searchWith(result: Record<string, unknown>, props: Record<string,
 // it is a second chance to differ from the words already listed. The components propose now, and a
 // correction is still a correction.
 
+describe('AddWord - a word may say what it is built from, but is not asked to', () => {
+  /** Gets to the filled-in word form, which is where the section lives. */
+  async function wordFormWith(fetchMock: ReturnType<typeof mockFetch>) {
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.clear(screen.getByLabelText(/Word ID hint/));
+    await user.type(screen.getByLabelText(/Word ID hint/), 'meaning');
+    return user;
+  }
+
+  const openComponents = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: /Is this word built from other words/ }));
+
+  /** Adds the first n of TWO_WORDS through the section's own picker. */
+  async function addComponents(user: ReturnType<typeof userEvent.setup>, count: number) {
+    const box = within(screen.getByRole('search', { name: 'Search words this one is built from' }));
+    await user.click(box.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('sky', { exact: false }));
+    const add = screen.getAllByRole('button', { name: 'Add as component' });
+    for (let i = 0; i < count; i += 1) await user.click(add[i]);
+  }
+
+  it('stays shut, so the ordinary word is never asked the question', async () => {
+    await wordFormWith(mockFetch({ vocabResults: TWO_WORDS }));
+
+    expect(screen.getByRole('button', { name: /Is this word built from other words/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Word components section')).toBeNull();
+    expect(screen.queryByRole('search', { name: 'Search words this one is built from' })).toBeNull();
+  });
+
+  it('sends no components at all when the section was never opened', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await wordFormWith(fetchMock);
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+    // Absent, not []. An atomic word makes no claim about its parts; an empty array would say the
+    // question had been considered and answered.
+    expect('components' in body).toBe(false);
+  });
+
+  it('submits the picked components in order once the section is opened', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await wordFormWith(fetchMock);
+    await openComponents(user);
+    await addComponents(user, 2);
+
+    expect(screen.getByLabelText('Word components')).toHaveTextContent('ojú');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+    expect(body.components).toEqual(['oju_face', 'sanma_sky']);
+    // The citation is untouched by any of this: a word's identity is still the etymology it cites,
+    // and its decomposition is a separate claim about it.
+    expect(body.citation).toEqual({ entryId: 'en-test-yo-noun-ABC123' });
+  });
+
+  it('removes by position, so a reduplication can lose just one of its two', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await wordFormWith(fetchMock);
+    await openComponents(user);
+    await addComponents(user, 1);
+    await user.click(screen.getAllByRole('button', { name: 'Add as component' })[0]);
+    expect(screen.getByLabelText('Word components').querySelectorAll('li')).toHaveLength(2);
+
+    await user.click(screen.getAllByRole('button', { name: 'Remove' })[1]);
+    expect(screen.getByLabelText('Word components').querySelectorAll('li')).toHaveLength(1);
+  });
+
+  it('says what it is holding when it is collapsed again, rather than hiding it', async () => {
+    // A shut section concealing a filled-in answer is how a submission comes to carry something
+    // nobody remembers entering.
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await wordFormWith(fetchMock);
+    await openComponents(user);
+    await addComponents(user, 2);
+    await user.click(screen.getByRole('button', { name: 'Hide' }));
+
+    expect(screen.queryByLabelText('Word components section')).toBeNull();
+    expect(screen.getByLabelText('Components picked while collapsed')).toHaveTextContent('ojú + sánmà');
+
+    // And they are still submitted - collapsing is not discarding.
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+    expect(body.components).toEqual(['oju_face', 'sanma_sky']);
+  });
+
+  it('clears and closes the section after a word is added, so the next word starts clean', async () => {
+    const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
+    const user = await wordFormWith(fetchMock);
+    await openComponents(user);
+    await addComponents(user, 2);
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+
+    // The form resets to the search, so the section goes with it - a second word inheriting the
+    // first one's parts is the failure this guards.
+    expect(screen.queryByLabelText('Word components section')).toBeNull();
+    expect(screen.queryByLabelText('Components picked while collapsed')).toBeNull();
+  });
+});
+
 const TWO_WORDS = [
   { wordId: 'oju_face', displayText: 'ojú', syllables: ['o', 'jú'], definition: 'eye, face', baseSpelling: 'oju', matchedVia: 'yoruba_exact' },
   { wordId: 'sanma_sky', displayText: 'sánmà', syllables: ['sán', 'mà'], definition: 'sky', baseSpelling: 'sanma', matchedVia: 'yoruba_exact' },
