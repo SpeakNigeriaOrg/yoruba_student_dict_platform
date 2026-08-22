@@ -408,6 +408,54 @@ export function createWord(input: CreateWordInput): Promise<{ wordId: string }> 
   });
 }
 
+// ---------------------------------------------------------------------------
+// Changing or removing an entry that already exists
+// ---------------------------------------------------------------------------
+// Mirrors api/src/handlers/deleteWord.ts and renameWord.ts. Both are curator-only and both
+// are reached from the danger zone at the bottom of Entry Review, never from a list row.
+
+/** One kind of attached row, already labelled for display by the server - the screen must not
+ * invent its own wording for what a table means. */
+export interface AttachedRows {
+  label: string;
+  count: number;
+}
+
+export interface WordDeletionImpact {
+  wordId: string;
+  displayText: string;
+  attached: AttachedRows[];
+  attachedTotal: number;
+  /** Non-empty means the delete is refused however it is confirmed. */
+  usedAsComponentOf: string[];
+}
+
+export function getWordDeletionImpact(wordId: string): Promise<WordDeletionImpact> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/deletion-impact`);
+}
+
+/** `confirm` is required by the server the moment anything is attached, and the screen only
+ * sends it once the curator has retyped the word_id against the impact it just showed them. */
+export function deleteWord(wordId: string, confirm: boolean): Promise<{ deleted: WordDeletionImpact }> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}${confirm ? '?confirm=true' : ''}`, { method: 'DELETE' });
+}
+
+export interface WordRenameResult {
+  from: string;
+  to: string;
+  moved: AttachedRows[];
+  componentReferencesRewritten: number;
+  fingerprintsRewritten: number;
+}
+
+export function renameWord(wordId: string, newWordId: string): Promise<WordRenameResult> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newWordId }),
+  });
+}
+
 // Mirrors api/src/handlers/createPhrase.ts's CreatePhraseInput.
 export interface CreatePhraseInput extends PublicationFields {
   wordId: string;

@@ -105,6 +105,10 @@ export async function cleanUpTestData(pool: pg.Pool, namespace: string): Promise
         or excluded_by in (select user_id from users where email like $2)`,
     [wordPattern, usernamePattern],
   );
+  // 0011's archive of the pre-merge spelling/definition decisions has no foreign key (it is
+  // a rollback path, kept deliberately independent of the live table), so golden_record's
+  // cascade never reaches it and a test that writes one would leave it behind for good.
+  await pool.query('delete from word_decisions_premerge where word_id like $1', [wordPattern]);
   await pool.query('delete from golden_record where word_id like $1', [wordPattern]);
   await pool.query('delete from users where email like $1', [usernamePattern]);
 }

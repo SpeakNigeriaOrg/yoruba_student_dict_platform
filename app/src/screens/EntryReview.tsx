@@ -52,12 +52,16 @@ import {
   type KaikkiSearchResult,
 } from '@yoruba-student-dict-platform/shared';
 import {
+  deleteWord,
   getEntryReview,
+  getWordDeletionImpact,
   postEntryDecision,
+  renameWord,
   searchKaikki,
   submitEntryContribution,
   type ApplyEntryDecisionInput,
   type EntryReviewResult,
+  type WordDeletionImpact,
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
 import { PhraseComposer } from './PhraseComposer.js';
@@ -79,6 +83,17 @@ export interface EntryReviewProps {
    * stay (they are the task), the three axis chips go (they duplicate the tab bar,
    * which the queue does not show either). */
   showAxisChips?: boolean;
+  /** Renaming and deleting the entry, which only the word route offers.
+   *
+   * One object rather than two optional callbacks, so "both or neither" is structural:
+   * both actions navigate away from the word being reviewed (to its new id, or off it
+   * entirely), and a screen that cannot navigate must not present them. The task queue
+   * passes nothing, which is why a volunteer working a queue is never one mis-tap from
+   * deleting the word they were handed. */
+  entryAdmin?: {
+    onRenamed: (newWordId: string) => void;
+    onDeleted: (wordId: string) => void;
+  };
 }
 
 /** The written-form half of the pending decision. Held as one value rather
@@ -164,7 +179,7 @@ function writtenFormFromPhrase(currentDisplayText: string, phraseText: string | 
   return { action: 'respell', newDisplayText: trimmed, newSyllables };
 }
 
-export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true }: EntryReviewProps) {
+export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true, entryAdmin }: EntryReviewProps) {
   const [review, setReview] = useState<EntryReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -593,6 +608,15 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
           onNoteChange={setNote}
         />
       ) : null}
+
+      {isCurator && entryAdmin ? (
+        <EntryDangerZone
+          wordId={wordId}
+          displayText={review.displayText}
+          onRenamed={entryAdmin.onRenamed}
+          onDeleted={entryAdmin.onDeleted}
+        />
+      ) : null}
     </section>
   );
 }
@@ -696,6 +720,198 @@ function CuratorTools({
             <label htmlFor="entry-note-field">Note</label>
             <textarea id="entry-note-field" value={note} onChange={(e) => onNoteChange(e.target.value)} aria-label="Note" />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Renaming and deleting the entry itself - the two operations that act on the word rather
+ * than on a claim about it.
+ *
+ * ---------------------------------------------------------------------------
+ * Why they are here and not in Browse
+ * ---------------------------------------------------------------------------
+ * A list row is where you tap to navigate, dozens of times an hour, on a phone. Putting an
+ * irreversible action there is asking for the mis-tap. Reaching this needs the word open and
+ * the section expanded, and neither happens by accident.
+ *
+ * ---------------------------------------------------------------------------
+ * Why rename is offered at all, given delete exists
+ * ---------------------------------------------------------------------------
+ * They are not alternatives. Delete-and-re-add loses every recording, image, example and
+ * review decision attached to the word; rename keeps all of it. The wrong id noticed five
+ * minutes after adding the word can go either way, and the one noticed after a term of
+ * recording can only be renamed.
+ *
+ * ---------------------------------------------------------------------------
+ * No client-side check on the new id
+ * ---------------------------------------------------------------------------
+ * Deliberate. api/src/handlers/wordIdShape.ts is the single statement of what a word_id may
+ * be, and its error says WHY (the id becomes a filename, a URL and a storage key). A regex
+ * copied into this file is the exact drift that file's own header describes hitting once
+ * already, and it would answer with less than the server does.
+ */
+function EntryDangerZone({
+  wordId,
+  displayText,
+  onRenamed,
+  onDeleted,
+}: {
+  wordId: string;
+  displayText: string;
+  onRenamed: (newWordId: string) => void;
+  onDeleted: (wordId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [impact, setImpact] = useState<WordDeletionImpact | null>(null);
+  const [newWordId, setNewWordId] = useState(wordId);
+  /** The retyped id. Not a checkbox: the point is to make the curator name the specific word
+   * they are destroying, on a screen where several words look alike by design. */
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Everything resets on the word, including `expanded` - arriving at a new word with the
+  // danger zone already open (and the previous word's impact still on screen) is how the
+  // wrong entry gets deleted.
+  useEffect(() => {
+    setExpanded(false);
+    setImpact(null);
+    setNewWordId(wordId);
+    setConfirmText('');
+    setError(null);
+  }, [wordId]);
+
+  // Fetched on expand rather than on load: it is a handful of counts nobody needs while
+  // reviewing, and it must be FRESH when read, not as of whenever the screen opened.
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    setImpact(null);
+    getWordDeletionImpact(wordId)
+      .then((result) => {
+        if (!cancelled) setImpact(result);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, wordId]);
+
+  async function submitRename() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await renameWord(wordId, newWordId.trim());
+      onRenamed(result.to);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitDelete() {
+    setBusy(true);
+    setError(null);
+    try {
+      // confirm is sent unconditionally: the curator has retyped the id against the impact
+      // shown above, which is a stronger statement than the flag itself. The server still
+      // decides whether it was needed.
+      await deleteWord(wordId, true);
+      onDeleted(wordId);
+    } catch (err) {
+      setError((err as Error).message);
+      // The impact is the thing that just changed under them if this failed on a stale
+      // count, so re-read it rather than leaving the old numbers on screen.
+      getWordDeletionImpact(wordId)
+        .then(setImpact)
+        .catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const blocked = (impact?.usedAsComponentOf.length ?? 0) > 0;
+  const renameReady = newWordId.trim().length > 0 && newWordId.trim() !== wordId && !busy;
+  const deleteReady = confirmText.trim() === wordId && !blocked && !busy;
+
+  return (
+    <div className="curator-tools">
+      <button type="button" className="btn btn-secondary" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+        {expanded ? 'Hide entry admin' : 'Entry admin'}
+      </button>
+      {!expanded ? null : (
+        <div aria-label="Entry admin">
+          <h4>Change this word&apos;s id</h4>
+          <p className="field-note">
+            The id is what every recording, image and published file is named from - it is not the spelling. Renaming
+            moves all of them; nothing attached to <strong>{displayText}</strong> is lost.
+          </p>
+          <div className="field">
+            <label htmlFor="rename-word-id-field">Word ID</label>
+            <input
+              id="rename-word-id-field"
+              type="text"
+              value={newWordId}
+              onChange={(e) => setNewWordId(e.target.value)}
+              aria-label="New word ID"
+            />
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={() => void submitRename()} disabled={!renameReady}>
+            Rename
+          </button>
+
+          <h4>Delete this entry</h4>
+          {impact === null ? (
+            <p className="field-note">Checking what is attached...</p>
+          ) : blocked ? (
+            <div className="warning-banner" aria-label="Deletion blocked">
+              <strong>{impact.usedAsComponentOf.length}</strong> other{' '}
+              {impact.usedAsComponentOf.length === 1 ? 'entry is' : 'entries are'} built from this word (
+              {impact.usedAsComponentOf.join(', ')}). Change their components first, or rename this word instead.
+            </div>
+          ) : impact.attachedTotal === 0 ? (
+            <p className="field-note">Nothing is attached to this entry - deleting it loses no recorded work.</p>
+          ) : (
+            <div className="warning-banner" aria-label="Deletion impact">
+              Deleting <strong>{wordId}</strong> permanently destroys:
+              <ul className="plain-list">
+                {impact.attached.map((a) => (
+                  <li key={a.label}>
+                    {a.count} {a.label}
+                  </li>
+                ))}
+              </ul>
+              Audio is stored in the database, not in a bucket with versions - none of this can be recovered.
+            </div>
+          )}
+          {impact !== null && !blocked ? (
+            <>
+              <div className="field">
+                <label htmlFor="delete-confirm-field">Type {wordId} to confirm</label>
+                <input
+                  id="delete-confirm-field"
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  aria-label="Confirm word ID"
+                />
+              </div>
+              <button type="button" className="btn btn-danger" onClick={() => void submitDelete()} disabled={!deleteReady}>
+                Delete entry
+              </button>
+            </>
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="status-banner">
+              {error}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

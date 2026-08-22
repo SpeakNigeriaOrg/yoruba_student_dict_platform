@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { AudioRecording } from './AudioRecording.js';
 import { ExampleContribution } from './ExampleContribution.js';
-import { EntryReview } from './EntryReview.js';
+import { EntryReview, type EntryReviewProps } from './EntryReview.js';
 import { EtymologyReview } from './EtymologyReview.js';
 import { getAxisStatus, type AxisDecided } from '../api.js';
 import { nextAxisForWord } from '../taskQueue.js';
@@ -46,6 +46,9 @@ export interface WordReviewProps {
    * picks the next task, which may be another axis of this word OR the next word
    * entirely. Two mechanisms racing on the same submit would fight. */
   advanceAfterDecision?: boolean;
+  /** Forwarded to EntryReview's danger zone. Absent in the task queue, which has nowhere to
+   * navigate a rename or a deletion to - see EntryReviewProps.entryAdmin. */
+  entryAdmin?: EntryReviewProps['entryAdmin'];
 }
 
 export function WordReview({
@@ -56,6 +59,7 @@ export function WordReview({
   onDecided,
   showAxisTabs = true,
   advanceAfterDecision = false,
+  entryAdmin,
 }: WordReviewProps) {
   const [axisStatus, setAxisStatus] = useState<AxisDecided | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -118,7 +122,13 @@ export function WordReview({
         </nav>
       ) : null}
       {axis === 'entry' ? (
-        <EntryReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />
+        <EntryReview
+          wordId={wordId}
+          isCurator={isCurator}
+          onDecided={handleDecided}
+          showAxisChips={showAxisTabs}
+          entryAdmin={entryAdmin}
+        />
       ) : null}
       {axis === 'etymology' ? (
         <EtymologyReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />

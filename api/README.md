@@ -75,11 +75,22 @@ anonymous caller. Only a real non-curator signing in exposes it.
 JSON has no comments, so the invariant lives here. To check it after editing
 routes:
 
+A **methods-narrowed rule on the same path is the exception**, and must come
+first for the same reason: `/api/words/*` restricted to `PATCH`/`DELETE`
+(curator) sits above the unrestricted `/api/words/*` (member), so renaming and
+deleting an entry are curator-gated while reading one is not. That is a more
+specific rule preceding its own wildcard, not a shadow, which is why the check
+below skips a wildcard that names `methods`.
+
 ```
 python3 -c "
-import json; rules=[r for r in json.load(open('app/public/staticwebapp.config.json'))['routes'] if r.get('route','').startswith('/api')]
-print([(w['route'],s['route']) for i,w in enumerate(rules) if w['route'].endswith('/*')
-       for j,s in enumerate(rules) if j>i and (s['route']==w['route'][:-2] or s['route'].startswith(w['route'][:-2]+'/'))] or 'OK')
+import json
+rules=[r for r in json.load(open('app/public/staticwebapp.config.json'))['routes'] if r.get('route','').startswith('/api')]
+def shadows(w, s):
+    if not w['route'].endswith('/*') or 'methods' in w: return False
+    base = w['route'][:-2]
+    return s['route'] == base or s['route'].startswith(base + '/')
+print([(w['route'],s['route']) for i,w in enumerate(rules) for s in rules[i+1:] if shadows(w,s)] or 'OK')
 "
 ```
 
@@ -161,6 +172,31 @@ Implemented:
   the stricter "≥2" the old tool's UI alone enforces) and does an existence
   pre-check for a clean error before the `golden_record_components` foreign
   key would otherwise reject it with a raw constraint violation.
+- `PATCH /words/{wordId}`, `DELETE /words/{wordId}`,
+  `GET /words/{wordId}/deletion-impact` (`src/functions/wordAdmin.ts`,
+  `src/handlers/renameWord.ts` / `deleteWord.ts`) - curator-only correction of
+  an entry that already exists. Until these, a mistyped `word_id` was permanent,
+  and 0017's one-etymology-one-word rule made that worse than untidy: a word
+  added against the wrong Kaikki sense held that etymology forever, so the right
+  word could never be added at all.
+  - **Rename** moves the entry and everything attached to it. `word_id` is
+    `golden_record`'s primary key and eleven other columns reference it with no
+    `ON UPDATE CASCADE`, so it is an insert-under-the-new-id, move-the-children,
+    delete-the-old-row sequence in one transaction. It also rewrites the
+    `word_id`s stored *inside* jsonb (a decision's `components` array) and the
+    consensus fingerprints derived from them - no constraint reaches those, and
+    a stale fingerprint makes two contributors who agree read as dissent.
+  - **Delete** cascades. It refuses a word other entries are built from (naming
+    them, rather than surfacing a raw foreign-key violation), and refuses to
+    destroy attached work without `?confirm=true` - audio bytes live in Postgres
+    (0005), so there is no bucket version to restore. `GET .../deletion-impact`
+    is the preview the screen shows first; the `DELETE` returns the same body on
+    its 409, so the safety does not depend on a client having asked.
+  - Both call `assertWordIdReferencesKnown` first, which compares
+    `src/handlers/wordIdReferences.ts`'s inventory against the live catalog and
+    refuses to run if a migration has added a `word_id` column nobody listed.
+    Without it the failure is silent: the missed rows are simply cascaded away
+    by the rename's final delete, with a 200 in response.
 - `POST /decisions/{axis}` (`src/functions/decisions.ts`,
   `src/handlers/applySpellingDecision.ts` / `applyDefinitionDecision.ts` /
   `applyEtymologyDecision.ts`) - a curator's direct decision on one of the

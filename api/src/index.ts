@@ -5,6 +5,7 @@
 
 import './functions/maintenance.js';
 import './functions/words.js';
+import './functions/wordAdmin.js';
 import './functions/phrases.js';
 import './functions/decisions.js';
 import './functions/contributions.js';

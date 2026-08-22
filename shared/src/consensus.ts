@@ -245,6 +245,35 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
   ].join(FIELD_SEP);
 }
 
+/** Rewrites one component word_id inside an already-stored fingerprint, leaving every
+ * other field byte-identical.
+ *
+ * Needed by the word_id rename (api/src/handlers/renameWord.ts). An etymology fingerprint
+ * is built from component word_ids, so renaming a word makes every fingerprint that names
+ * it stale - and stale in the worst possible way, because the rows stay consistent with
+ * EACH OTHER while diverging from anything submitted afterwards. Two volunteers asserting
+ * the identical decomposition, one before the rename and one after, would read as dissent.
+ *
+ * A substitution rather than a recompute, deliberately. Recomputing from resolved_value
+ * would also silently re-fingerprint rows written under an older version of
+ * fingerprintOutcome, rewriting beliefs the rename was never asked to touch. This changes
+ * exactly the one token and nothing else, so a fingerprint that mentions no components, or
+ * is not an etymology fingerprint at all, comes back unchanged.
+ *
+ * Lives here, next to fingerprintOutcome, because it depends on that function's field
+ * layout - the two have to move together. */
+export function renameComponentInFingerprint(fingerprint: string, from: string, to: string): string {
+  const fields = fingerprint.split(FIELD_SEP);
+  // Only an etymology fingerprint carries component word_ids. An entry fingerprint's fields
+  // are spelling, syllables, gloss and an upstream entry id, none of which a word_id names.
+  if (fields.length !== 3 || fields[0] !== 'etymology' || fields[2] === '') return fingerprint;
+  const before = normalizeText(from);
+  const after = normalizeText(to);
+  const components = fields[2].split(LIST_SEP);
+  if (!components.includes(before)) return fingerprint;
+  return ['etymology', fields[1], components.map((c) => (c === before ? after : c)).join(LIST_SEP)].join(FIELD_SEP);
+}
+
 /** Which fields two claims about one word can differ on. */
 export type ClaimField = 'spelling' | 'syllables' | 'definition' | 'etymology' | 'components';
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGREEMENT_THRESHOLD,
   fingerprintOutcome,
+  renameComponentInFingerprint,
   resolveEntryOutcome,
   resolveEtymologyOutcome,
   summarizeConsensus,
@@ -499,5 +500,49 @@ describe('summarizeConsensus', () => {
     expect(a.voterLabels).toEqual(['u1', 'u2']);
     expect(b.voterLabels).toEqual(['u3']);
     expect(a.earliestSubmittedAt).toBe(T1);
+  });
+});
+
+// The property that matters is not "the string changed" but that a fingerprint carried across
+// a word_id rename equals what the SAME belief fingerprints to when submitted fresh afterwards.
+// Anything less and two contributors who agree, one on each side of the rename, read as dissent.
+describe('renameComponentInFingerprint', () => {
+  const etymology = (components: string[], atomic = false) =>
+    fingerprintOutcome({ kind: 'etymology', components, atomic });
+
+  it('matches what the renamed decomposition would fingerprint to if submitted fresh', () => {
+    const before = etymology(['owo_hand', 'ile_house']);
+    expect(renameComponentInFingerprint(before, 'owo_hand', 'owo_money')).toBe(etymology(['owo_money', 'ile_house']));
+  });
+
+  it('renames every occurrence, which a reduplication genuinely has twice', () => {
+    const before = etymology(['meji_two', 'meji_two']);
+    expect(renameComponentInFingerprint(before, 'meji_two', 'meji_2')).toBe(etymology(['meji_2', 'meji_2']));
+  });
+
+  it('leaves a fingerprint that does not name the word exactly as it was', () => {
+    const before = etymology(['ile_house']);
+    expect(renameComponentInFingerprint(before, 'owo_hand', 'owo_money')).toBe(before);
+  });
+
+  it('leaves an entry fingerprint alone - none of its fields is a word_id', () => {
+    const before = fingerprintOutcome({
+      kind: 'entry',
+      displayText: 'ọwọ́',
+      syllables: ['ọ', 'wọ́'],
+      definitionText: 'hand',
+      citedEntryId: 'owo_hand',
+    });
+    expect(renameComponentInFingerprint(before, 'owo_hand', 'owo_money')).toBe(before);
+  });
+
+  it('leaves an atomic etymology alone - it has no component list to rewrite', () => {
+    const before = etymology([], true);
+    expect(renameComponentInFingerprint(before, 'owo_hand', 'owo_money')).toBe(before);
+  });
+
+  it('does not rename a component the old id is merely a prefix of', () => {
+    const before = etymology(['owo_hand_left']);
+    expect(renameComponentInFingerprint(before, 'owo_hand', 'owo_money')).toBe(before);
   });
 });

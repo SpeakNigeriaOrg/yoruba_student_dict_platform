@@ -980,3 +980,149 @@ describe('linking an etymology must not swallow the spelling that was corrected 
     expect(postedBody(fetchMock).newDisplayText).toBe('o ṣé');
   });
 });
+
+// ---------------------------------------------------------------------------
+// The danger zone
+// ---------------------------------------------------------------------------
+// Two operations that act on the entry rather than on a claim about it, and the reason they
+// are gated the way they are: a rename is recoverable (rename it back), a delete is not -
+// audio lives in Postgres, so nothing restores it.
+describe('entry admin', () => {
+  const WORD_ID = 'fixturegenentry_adiye_chicken';
+
+  function mockAdminFetch(
+    impact: Record<string, unknown>,
+    responses: { patch?: { ok: boolean; body: unknown }; delete?: { ok: boolean; body: unknown } } = {},
+  ) {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        const r = responses.patch ?? { ok: true, body: { from: WORD_ID, to: 'renamed_id', moved: [] } };
+        return Promise.resolve({ ok: r.ok, json: async () => r.body });
+      }
+      if (init?.method === 'DELETE') {
+        const r = responses.delete ?? { ok: true, body: { deleted: impact } };
+        return Promise.resolve({ ok: r.ok, json: async () => r.body });
+      }
+      if (url.includes('/deletion-impact')) return Promise.resolve({ ok: true, json: async () => impact });
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  const EMPTY_IMPACT = {
+    wordId: WORD_ID,
+    displayText: 'dùjẹ̀kù',
+    attached: [],
+    attachedTotal: 0,
+    usedAsComponentOf: [],
+  };
+
+  async function openZone(
+    impact: Record<string, unknown>,
+    handlers: { onRenamed?: (id: string) => void; onDeleted?: (id: string) => void } = {},
+    responses?: Parameters<typeof mockAdminFetch>[1],
+  ) {
+    const user = userEvent.setup();
+    const fetchMock = mockAdminFetch(impact, responses);
+    const entryAdmin = {
+      onRenamed: handlers.onRenamed ?? vi.fn(),
+      onDeleted: handlers.onDeleted ?? vi.fn(),
+    };
+    render(<EntryReview wordId={WORD_ID} isCurator entryAdmin={entryAdmin} />);
+    await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Entry admin' }));
+    await waitFor(() => expect(screen.getByLabelText('Entry admin')).toBeInTheDocument());
+    return { user, fetchMock, entryAdmin };
+  }
+
+  it('is absent in the task queue, which passes no entryAdmin', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByRole('button', { name: 'Entry admin' })).not.toBeInTheDocument();
+  });
+
+  it('is absent for a volunteer even where the screen could navigate', async () => {
+    mockAdminFetch(EMPTY_IMPACT);
+    render(<EntryReview wordId={WORD_ID} isCurator={false} entryAdmin={{ onRenamed: vi.fn(), onDeleted: vi.fn() }} />);
+    await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Entry admin' })).not.toBeInTheDocument();
+  });
+
+  it('names what a deletion would destroy, item by item', async () => {
+    await openZone({
+      ...EMPTY_IMPACT,
+      attached: [
+        { label: 'audio recordings', count: 3 },
+        { label: 'images', count: 1 },
+      ],
+      attachedTotal: 4,
+    });
+
+    const banner = screen.getByLabelText('Deletion impact');
+    expect(banner).toHaveTextContent('3 audio recordings');
+    expect(banner).toHaveTextContent('1 images');
+  });
+
+  it('will not delete until the word_id is retyped - a mis-tap cannot reach it', async () => {
+    const onDeleted = vi.fn();
+    const { user, fetchMock } = await openZone(EMPTY_IMPACT, { onDeleted });
+
+    expect(screen.getByRole('button', { name: 'Delete entry' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Confirm word ID'), 'not-the-word');
+    expect(screen.getByRole('button', { name: 'Delete entry' })).toBeDisabled();
+
+    await user.clear(screen.getByLabelText('Confirm word ID'));
+    await user.type(screen.getByLabelText('Confirm word ID'), WORD_ID);
+    await user.click(screen.getByRole('button', { name: 'Delete entry' }));
+
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith(WORD_ID));
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'DELETE');
+    expect(call?.[0]).toBe(`/api/words/${WORD_ID}?confirm=true`);
+  });
+
+  it('offers no delete at all for a word other entries are built from, and says which', async () => {
+    await openZone({ ...EMPTY_IMPACT, usedAsComponentOf: ['ile_iwe_school', 'ile_ise_workplace'] });
+
+    expect(screen.getByLabelText('Deletion blocked')).toHaveTextContent('ile_iwe_school, ile_ise_workplace');
+    expect(screen.queryByRole('button', { name: 'Delete entry' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Confirm word ID')).not.toBeInTheDocument();
+  });
+
+  it('renames to the id the server confirms, not the one that was typed', async () => {
+    const onRenamed = vi.fn();
+    const { user, fetchMock } = await openZone(EMPTY_IMPACT, { onRenamed });
+
+    await user.clear(screen.getByLabelText('New word ID'));
+    await user.type(screen.getByLabelText('New word ID'), 'adiye_hen');
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'PATCH');
+    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ newWordId: 'adiye_hen' });
+    await waitFor(() => expect(onRenamed).toHaveBeenCalledWith('renamed_id'));
+  });
+
+  it('cannot rename a word to the id it already has', async () => {
+    await openZone(EMPTY_IMPACT);
+    expect(screen.getByLabelText('New word ID')).toHaveValue(WORD_ID);
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeDisabled();
+  });
+
+  it("shows the server's own explanation of a bad id rather than pre-judging it", async () => {
+    // No client-side regex, deliberately - api/src/handlers/wordIdShape.ts is the single
+    // statement of the rule and its message says why the rule exists.
+    const { user } = await openZone(
+      EMPTY_IMPACT,
+      {},
+      { patch: { ok: false, body: { error: "word_id 'ọwọ́_hand' must be lowercase a-z, 0-9, underscore and hyphen only" } } },
+    );
+
+    await user.clear(screen.getByLabelText('New word ID'));
+    await user.type(screen.getByLabelText('New word ID'), 'ọwọ́_hand');
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('must be lowercase a-z, 0-9, underscore and hyphen only'),
+    );
+  });
+});

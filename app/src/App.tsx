@@ -128,6 +128,15 @@ export default function App() {
                 // as inside the queue. Without it, confirming here left you on the axis
                 // you had just finished with no acknowledgement that there was more to do.
                 advanceAfterDecision
+                // Renaming and deleting the entry, offered only here. Both end with the
+                // route pointing at a word_id that no longer exists, so both must navigate:
+                // a rename REPLACES this history entry (going Back to the old id would 404
+                // on a word that was never really a different word), while a deletion pushes
+                // Browse, because there is nothing left to be on.
+                entryAdmin={{
+                  onRenamed: (newWordId) => navigate({ view: 'word', wordId: newWordId, axis: route.axis }, { replace: true }),
+                  onDeleted: () => navigate({ view: 'browse' }),
+                }}
               />
             </>
           ) : route.view === 'user' ? (
