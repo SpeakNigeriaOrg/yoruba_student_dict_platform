@@ -487,7 +487,7 @@ describe('the student definition is a simplification, not a correction', () => {
 
   it('shows the upstream glosses it is simplifying FROM, taken from the pin', async () => {
     await loaded(entryFixture);
-    expect(screen.getByLabelText('Upstream glosses')).toHaveTextContent('Wiktionary says: chicken; fowl');
+    expect(screen.getByLabelText('Wiktionary glosses')).toHaveTextContent('Wiktionary says: chicken; fowl');
   });
 
   it('says in as many words that rewording is not a correction', async () => {

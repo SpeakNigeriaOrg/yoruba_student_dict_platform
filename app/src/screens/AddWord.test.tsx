@@ -126,7 +126,7 @@ describe('AddWord - Word tab', () => {
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
     expect(screen.getByLabelText('Student definition')).toHaveValue('a test gloss');
-    expect(screen.getByLabelText('Upstream glosses')).toHaveTextContent('Wiktionary says: a test gloss');
+    expect(screen.getByLabelText('Wiktionary glosses')).toHaveTextContent('Wiktionary says: a test gloss');
     expect(screen.getByText(/simplification, not a correction/)).toBeInTheDocument();
   });
 
@@ -1038,7 +1038,7 @@ describe('AddWord - the phrase path can finish the job', () => {
     expect((screen.getByLabelText('Student definition') as HTMLTextAreaElement).value).toBe(
       'thank you (non-honorific, to a singular person)',
     );
-    expect(screen.getByLabelText('Upstream glosses')).toHaveTextContent('thank you');
+    expect(screen.getByLabelText('Wiktionary glosses')).toHaveTextContent('thank you');
 
     await user.type(screen.getByLabelText('Word ID hint'), 'thank_you');
     await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));

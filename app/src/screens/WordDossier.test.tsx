@@ -52,7 +52,7 @@ function mount(over: Partial<Dossier> = {}) {
 describe('the word dossier', () => {
   it('shows the pinned upstream copy itself, not just a verdict about it', async () => {
     mount();
-    const upstream = await waitFor(() => screen.getByLabelText('Upstream citation'));
+    const upstream = await waitFor(() => screen.getByLabelText('Wiktionary citation'));
     expect(upstream).toHaveTextContent('canonicalForm');
     expect(upstream).toHaveTextContent('ọwọ́');
   });

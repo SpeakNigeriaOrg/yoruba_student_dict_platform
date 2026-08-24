@@ -114,8 +114,8 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
           </dl>
         </div>
 
-        <div className="dossier-section" aria-label="Upstream citation">
-          <h3>Upstream</h3>
+        <div className="dossier-section" aria-label="Wiktionary citation">
+          <h3>Wiktionary</h3>
           <dl>
             <dt>State</dt>
             <dd>

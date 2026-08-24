@@ -219,9 +219,9 @@ function Overview({ overview, onOpenLens }: { overview: DictionaryOverview; onOp
           <StatRow label="Untouched" value={overview.etymology.none} lens="etymology:none" onOpenLens={onOpenLens} />
         </div>
         <div className="stat-card">
-          <h3>Upstream</h3>
+          <h3>Wiktionary</h3>
           <StatRow label="Cited" value={overview.citation.cited} lens="citation:cited" onOpenLens={onOpenLens} />
-          <StatRow label="Exempt (no upstream entry)" value={overview.citation.exempt} lens="citation:exempt" onOpenLens={onOpenLens} />
+          <StatRow label="Exempt (not in Wiktionary)" value={overview.citation.exempt} lens="citation:exempt" onOpenLens={onOpenLens} />
           {/* Named, not just counted. The drift report has always given this as a bare
               number, which is the defect the exempt list was fixed for once already. */}
           <StatRow label="Uncited" value={overview.citation.uncited} lens="citation:uncited" onOpenLens={onOpenLens} />
@@ -339,7 +339,7 @@ function WordTable({
                 {header('displayText', 'Word')}
                 <th>Entry</th>
                 <th>Etymology</th>
-                <th>Upstream</th>
+                <th>Wiktionary</th>
                 {header('speakers', 'Speakers')}
                 <th>Images</th>
                 {header('examples', 'Examples')}

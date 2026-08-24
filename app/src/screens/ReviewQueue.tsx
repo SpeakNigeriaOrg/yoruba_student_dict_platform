@@ -717,7 +717,7 @@ const DRIFT_LABELS: Record<DriftItem['kind'], { title: string; blurb: string }> 
   re_identified: {
     title: 'An etymology we cite moved',
     blurb:
-      'The id we cited is gone, but the same content is now under a different one - a renumber or re-identification upstream. Re-linking keeps the word pointing at the etymology it always meant.',
+      'The id we cited is gone, but the same content is now under a different one - a renumber or re-identification on their side. Re-linking keeps the word pointing at the etymology it always meant.',
   },
   disappeared: {
     title: 'An etymology we cite is gone',
@@ -753,7 +753,7 @@ function UpstreamDriftSection({
   if (drift.items.length === 0) {
     return (
       <>
-        <p className="field-note" aria-label="Upstream drift status">
+        <p className="field-note" aria-label="Wiktionary drift status">
           Every cited etymology still matches Wiktionary ({drift.counts.unchanged} checked
           {drift.exempt > 0 ? `, ${drift.exempt} exempt` : ''}
           {drift.uncited > 0 ? `, ${drift.uncited} not linked yet` : ''}).
@@ -764,7 +764,7 @@ function UpstreamDriftSection({
   }
 
   return (
-    <div className="review-section" aria-label="Upstream drift">
+    <div className="review-section" aria-label="Wiktionary drift">
       <ExemptWordsSection items={drift.exemptItems} onOpenWord={onOpenWord} />
       {DRIFT_ORDER.map((kind) => {
         const items = drift.items.filter((i) => i.kind === kind);
@@ -785,7 +785,7 @@ function UpstreamDriftSection({
                     <span className="badge">{item.citedEntryId}</span>
                   </div>
 
-                  <div className="comparison" aria-label={`Upstream change for ${item.displayText}`}>
+                  <div className="comparison" aria-label={`Wiktionary change for ${item.displayText}`}>
                     <div className="col">
                       <div className="col-label">Pinned when validated</div>
                       {item.pin.glosses.join('; ')}

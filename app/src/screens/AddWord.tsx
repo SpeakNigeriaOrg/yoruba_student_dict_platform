@@ -581,7 +581,7 @@ function WordTab({
           <div className="field">
             <label htmlFor="word-definition-field">Student definition</label>
             {selected && selected.glosses.length > 0 ? (
-              <p className="field-note" aria-label="Upstream glosses">
+              <p className="field-note" aria-label="Wiktionary glosses">
                 Wiktionary says: {selected.glosses.join('; ')}
               </p>
             ) : null}
@@ -1299,7 +1299,7 @@ function PhraseTab({
       <div className="field">
         <label htmlFor="phrase-definition-field">Student definition</label>
         {adopted && adopted.glosses.length > 0 ? (
-          <p className="field-note" aria-label="Upstream glosses">
+          <p className="field-note" aria-label="Wiktionary glosses">
             Wiktionary says: {adopted.glosses.join('; ')}
           </p>
         ) : null}

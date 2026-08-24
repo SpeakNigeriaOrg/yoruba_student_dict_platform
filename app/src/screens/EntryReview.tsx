@@ -571,7 +571,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
 
       <h3>Student definition</h3>
       {upstreamGlosses.length > 0 ? (
-        <p className="field-note" aria-label="Upstream glosses">
+        <p className="field-note" aria-label="Wiktionary glosses">
           Wiktionary says: {upstreamGlosses.join('; ')}
         </p>
       ) : null}

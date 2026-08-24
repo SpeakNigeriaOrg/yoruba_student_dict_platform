@@ -124,7 +124,7 @@ describe('ReviewQueue: upstream drift', () => {
     mockFetch([READY]);
     render(<ReviewQueue onOpenWord={() => {}} />);
     await waitFor(() =>
-      expect(screen.getByLabelText('Upstream drift status')).toHaveTextContent('still matches Wiktionary'),
+      expect(screen.getByLabelText('Wiktionary drift status')).toHaveTextContent('still matches Wiktionary'),
     );
   });
 
@@ -132,7 +132,7 @@ describe('ReviewQueue: upstream drift', () => {
     mockFetch([READY], undefined, { ...NO_DRIFT, exempt: 9, uncited: 4 });
     render(<ReviewQueue onOpenWord={() => {}} />);
     await waitFor(() => {
-      const status = screen.getByLabelText('Upstream drift status');
+      const status = screen.getByLabelText('Wiktionary drift status');
       expect(status).toHaveTextContent('9 exempt');
       expect(status).toHaveTextContent('4 not linked yet');
     });
@@ -157,7 +157,7 @@ describe('ReviewQueue: upstream drift', () => {
     render(<ReviewQueue onOpenWord={() => {}} />);
 
     await waitFor(() => expect(screen.getByLabelText('Wiktionary edited an etymology we cite')).toBeInTheDocument());
-    const comparison = screen.getByLabelText('Upstream change for ikun');
+    const comparison = screen.getByLabelText('Wiktionary change for ikun');
     expect(comparison).toHaveTextContent('stomach');
     expect(comparison).toHaveTextContent('belly; abdomen');
   });
@@ -238,7 +238,7 @@ describe('ReviewQueue: upstream drift', () => {
     render(<ReviewQueue onOpenWord={() => {}} />);
 
     await waitFor(() => expect(screen.getByLabelText('An etymology we cite is gone')).toBeInTheDocument());
-    expect(screen.getByLabelText('Upstream change for ikun')).toHaveTextContent('a meaning nothing else carries');
+    expect(screen.getByLabelText('Wiktionary change for ikun')).toHaveTextContent('a meaning nothing else carries');
     expect(screen.queryByRole('button', { name: /Re-link/ })).not.toBeInTheDocument();
   });
 
@@ -568,7 +568,7 @@ describe('ReviewQueue', () => {
       mockFetch([], undefined, { ...NO_DRIFT, exemptItems: undefined });
       render(<ReviewQueue onOpenWord={() => {}} />);
 
-      await waitFor(() => screen.getByLabelText('Upstream drift status'));
+      await waitFor(() => screen.getByLabelText('Wiktionary drift status'));
       expect(screen.queryByLabelText('Words with no Wiktionary entry')).not.toBeInTheDocument();
     });
   });
