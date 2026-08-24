@@ -539,4 +539,24 @@ describe('listConsensus filtering', () => {
     const etymOnly = await listConsensus(pool, { axis: 'etymology' });
     expect(etymOnly.find((g) => g.wordId === wordId)).toBeUndefined();
   });
+
+  it('can restrict to one word, for its dossier', async () => {
+    // A curator reads the tally next to everything else known about the word and decides
+    // there, which is where setting the record now lives.
+    const mine = await word();
+    const other = await word();
+    await submitContribution(pool, { axis: 'entry', wordId: mine, proposedValue: KEEP }, ada);
+    await submitContribution(pool, { axis: 'entry', wordId: other, proposedValue: KEEP }, ben);
+
+    const groups = await listConsensus(pool, { wordId: mine });
+    expect(groups.map((g) => g.wordId)).toEqual([mine]);
+  });
+
+  it('combines the word filter with the axis and bucket filters', async () => {
+    const wordId = await word();
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    expect(await listConsensus(pool, { wordId, axis: 'etymology' })).toEqual([]);
+    expect(await listConsensus(pool, { wordId, buckets: ['contested'] })).toEqual([]);
+    expect(await listConsensus(pool, { wordId, buckets: ['single'] })).toHaveLength(1);
+  });
 });

@@ -184,7 +184,14 @@ export function unassignWord(userId: string, wordId: string): Promise<{ userId: 
 export interface AxisDecided {
   entry: boolean;
   etymology: boolean;
+  /** This user has recorded the word. Deliberately NOT "...and it still matches the current
+   * spelling": a speaker records what they actually say (0006), and whether golden has since
+   * moved is a publishing question. Conflating the two made the task unfinishable for a
+   * volunteer whose own spelling correction was still an unreviewed contribution. */
   audio: boolean;
+  /** Recorded, but at least one take no longer matches the word, so publish will drop it
+   * until the spelling settles or they record again. Never true while `audio` is false. */
+  audioDiverges: boolean;
   /** Whether THIS user has contributed an example of the word in use. Per-user like
    * audio: several different examples are more material, not a conflict, so someone
    * else's example must not read as done. */
@@ -317,20 +324,6 @@ export function searchVocab(query: string): Promise<VocabSearchResult[]> {
   );
 }
 
-// Mirrors api/src/handlers/listAllWords.ts's AllWordsListItem.
-export interface AllWordsListItem {
-  wordId: string;
-  displayText: string;
-  syllables: string[];
-  definition: string | null;
-  entryType: 'phrase' | null;
-  axisDecided: AxisDecided;
-}
-
-export function getAllWords(): Promise<AllWordsListItem[]> {
-  return fetchJson<{ words: AllWordsListItem[] }>('/api/words').then((r) => r.words);
-}
-
 // Mirrors api/src/handlers/checkDuplicates.ts's DuplicateMatch (from shared/).
 export interface DuplicateMatch {
   wordId: string;
@@ -454,6 +447,266 @@ export function renameWord(wordId: string, newWordId: string): Promise<WordRenam
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ newWordId }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// The curator level: the whole dictionary, and everything about one word
+// ---------------------------------------------------------------------------
+// Mirrors api/src/handlers/dictionarySurvey.ts, wordDossier.ts and rightsRoster.ts. These
+// answer questions about the CORPUS; nothing in them is scoped to the caller, which is what
+// separates them from AxisDecided and the assignment endpoints.
+
+/** Has anyone decided this, or merely offered an opinion. Mirrors GlobalAxisState. */
+export type GlobalAxisState = 'golden' | 'provisional' | 'none';
+export type CitationState = 'cited' | 'exempt' | 'uncited';
+export type GameBlocker =
+  | 'no_matching_recording'
+  | 'only_stale_recordings'
+  | 'no_speaker_covers_syllables'
+  | 'no_image';
+export type WiktionaryBlocker = 'no_citation_row' | 'no_part_of_speech' | 'no_english_gloss';
+
+export interface SurveyWord {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  entryType: 'phrase' | null;
+  pos: string | null;
+  englishGloss: string | null;
+  etymidLabel: string | null;
+  entry: GlobalAxisState;
+  etymology: GlobalAxisState;
+  speakerCount: number;
+  divergedSpeakerCount: number;
+  fullyCoveredSpeakerCount: number;
+  imageCount: number;
+  exampleCount: number;
+  staleExampleCount: number;
+  componentCount: number;
+  usedAsComponentOfCount: number;
+  assigneeCount: number;
+  citation: CitationState;
+  exemptReason: string | null;
+  citedEntryId: string | null;
+  gameBlockers: GameBlocker[];
+  wiktionaryBlockers: WiktionaryBlocker[];
+}
+
+export interface DictionaryOverview {
+  totalWords: number;
+  entry: Record<GlobalAxisState, number>;
+  etymology: Record<GlobalAxisState, number>;
+  citation: Record<CitationState, number>;
+  audioCoverage: { none: number; one: number; two: number; threeOrMore: number };
+  wordsWithStaleAudio: number;
+  wordsWithNoImage: number;
+  wordsWithExamples: number;
+  gameReady: number;
+  gameBlockers: Record<GameBlocker, number>;
+  wiktionaryReady: number;
+  wiktionaryBlockers: Record<WiktionaryBlocker, number>;
+}
+
+/** One call for both, deliberately: an overview computed separately from the list it heads
+ * is an overview that can disagree with it. */
+export function getDictionary(): Promise<{ words: SurveyWord[]; overview: DictionaryOverview }> {
+  return fetchJson('/api/dictionary');
+}
+
+export interface DossierDecision {
+  axis: string;
+  decision: unknown;
+  note: string | null;
+  decidedByEmail: string | null;
+  decidedAt: string;
+  valueFingerprint: string | null;
+  archived: boolean;
+}
+
+export interface DossierContribution {
+  contributionId: string;
+  axis: string;
+  status: string;
+  proposedValue: unknown;
+  resolvedValue: unknown;
+  valueFingerprint: string | null;
+  note: string | null;
+  submittedByEmail: string;
+  submittedAt: string;
+  excludedReason: string | null;
+  excludedAt: string | null;
+}
+
+export interface DossierRecording {
+  utteranceId: string;
+  speakerId: string;
+  speakerName: string;
+  releaseState: string;
+  takeNumber: number;
+  recordedDisplayText: string;
+  recordedSyllables: string[];
+  matchesGolden: boolean;
+  durationS: number | null;
+  status: string;
+  recordedAt: string;
+  segmentCount: number;
+  lowestSegmentConfidence: number | null;
+}
+
+export interface DossierExample {
+  exampleId: string;
+  exampleType: string;
+  exampleText: string;
+  translation: string;
+  authorEmail: string;
+  releaseState: string;
+  submittedAt: string;
+  recordedWordText: string;
+  wordTextChanged: boolean;
+  excludedReason: string | null;
+}
+
+export interface DossierImage {
+  imageId: string;
+  artStyle: string;
+  variantNumber: number;
+  contentType: string;
+  byteLength: number;
+  uploadedAt: string;
+}
+
+export interface WordDossier {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  entryType: 'phrase' | null;
+  pos: string | null;
+  englishGloss: string | null;
+  etymidLabel: string | null;
+  updatedAt: string;
+  updatedByEmail: string | null;
+  citation: CitationState;
+  citedEntryId: string | null;
+  exemptReason: string | null;
+  pin: unknown;
+  pinnedAt: string | null;
+  pinnedByEmail: string | null;
+  components: Array<{ wordId: string; displayText: string; position: number }>;
+  usedAsComponentOf: Array<{ wordId: string; displayText: string }>;
+  decisions: DossierDecision[];
+  contributions: DossierContribution[];
+  recordings: DossierRecording[];
+  examples: DossierExample[];
+  images: DossierImage[];
+  assignees: Array<{ email: string; displayName: string | null; assignedAt: string }>;
+}
+
+export function getWordDossier(wordId: string): Promise<WordDossier> {
+  return fetchJson(`/api/words/${encodeURIComponent(wordId)}/dossier`);
+}
+
+/** The URL of one stored image. A URL rather than base64: images are an order of magnitude
+ * larger than the audio clips this app inlines, and an <img> wants a src. */
+export function wordImageUrl(imageId: string): string {
+  return `/api/images/${encodeURIComponent(imageId)}`;
+}
+
+export type ReleaseState = 'agreed' | 'declined' | 'revoked' | 'unknown';
+
+export interface SpeakerRights {
+  speakerId: string;
+  displayName: string;
+  dialectRegion: string | null;
+  releaseState: ReleaseState;
+  instrument: string | null;
+  instrumentRef: string | null;
+  statedOn: string | null;
+  utteranceCount: number;
+  hasAccount: boolean;
+}
+
+export interface ContributorRights {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+  releaseState: ReleaseState;
+  instrument: string | null;
+  instrumentRef: string | null;
+  statedOn: string | null;
+  exampleCount: number;
+  contributionCount: number;
+}
+
+export interface RightsRoster {
+  currentTermsVersion: string;
+  speakers: SpeakerRights[];
+  contributors: ContributorRights[];
+  counts: {
+    speakers: Record<ReleaseState, number>;
+    contributors: Record<ReleaseState, number>;
+    utterancesWithoutAgreement: number;
+    speakersWithoutAccount: number;
+  };
+}
+
+// Mirrors api/src/handlers/coverageReport.ts - the numbers the publish scripts compute and
+// print to a terminal. Per SPEAKER, because a level plays one voice.
+
+export interface SpeakerCoverage {
+  speakerId: string;
+  displayName: string;
+  releaseState: string;
+  wordsRecorded: number;
+  wordsFullyCovered: number;
+  wordsPlayable: number;
+  staleRecordings: number;
+  meetsLevelMinimum: boolean;
+}
+
+export interface TonePatternCoverage {
+  pattern: string;
+  wordsInCorpus: number;
+  speakersWithEnough: number;
+}
+
+export interface SyllableCoverage {
+  syllable: string;
+  wordsUsingIt: number;
+  recordings: number;
+  speakers: number;
+  speakersWithDuplicates: number;
+}
+
+export interface CoverageReport {
+  speakers: SpeakerCoverage[];
+  tonePatterns: TonePatternCoverage[];
+  syllables: SyllableCoverage[];
+  unrecordedSyllables: string[];
+  minLevelWords: number;
+  minTonePatternWords: number;
+}
+
+export function getCoverageReport(): Promise<CoverageReport> {
+  return fetchJson('/api/dictionary/coverage');
+}
+
+/** Removes an example from the collection without destroying the row.
+ *
+ * 0015 designed word_examples.excluded_* for exactly this and no endpoint ever wrote them,
+ * so the only moderation the example axis had was none. */
+export function excludeExample(exampleId: string, reason: string): Promise<void> {
+  return fetchJson(`/api/examples/${encodeURIComponent(exampleId)}/exclude`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function getRightsRoster(): Promise<RightsRoster> {
+  return fetchJson('/api/dictionary/rights');
 }
 
 // Mirrors api/src/handlers/createPhrase.ts's CreatePhraseInput.
@@ -648,12 +901,16 @@ export interface ConsensusGroup {
   summary: ConsensusSummary;
 }
 
-export function getConsensus(options: { buckets?: ConsensusBucket[]; axis?: 'entry' | 'etymology' } = {}): Promise<
-  ConsensusGroup[]
-> {
+export function getConsensus(
+  options: { buckets?: ConsensusBucket[]; axis?: 'entry' | 'etymology'; wordId?: string } = {},
+): Promise<ConsensusGroup[]> {
   const params = new URLSearchParams();
   if (options.buckets?.length) params.set('buckets', options.buckets.join(','));
   if (options.axis) params.set('axis', options.axis);
+  // One word's tally, for its dossier. Ask for every bucket when using this: a settled word
+  // is excluded from the default actionable set, and on a dossier "this is settled, here is
+  // what was agreed" is exactly what a reader wants to see.
+  if (options.wordId) params.set('wordId', options.wordId);
   const query = params.toString();
   return fetchJson<{ groups: ConsensusGroup[] }>(`/api/consensus${query ? `?${query}` : ''}`).then((r) => r.groups);
 }
@@ -720,7 +977,18 @@ export interface RegisterUtteranceInput {
   segments?: RegisterSegmentInput[];
 }
 
-export async function registerUtterance(input: RegisterUtteranceInput): Promise<{ utteranceId: string }> {
+export interface RegisterUtteranceResult {
+  utteranceId: string;
+  /** Whether this recording still matches the word's current spelling and split, and so
+   * will be published.
+   *
+   * OPTIONAL on the client although the server always sends it, so an older deployment (or
+   * a test stub) reads as "not known" rather than as "diverges" - the screen must not
+   * announce a problem it was never told about. Check `=== false`, never falsiness. */
+  matchesGolden?: boolean;
+}
+
+export async function registerUtterance(input: RegisterUtteranceInput): Promise<RegisterUtteranceResult> {
   const body = {
     wordId: input.wordId,
     takeNumber: input.takeNumber,

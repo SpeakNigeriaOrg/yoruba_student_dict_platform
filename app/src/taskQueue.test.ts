@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { AssignmentSummary, AxisDecided } from './api.js';
-import { buildTaskQueue, completedTaskCount, nextAxisForWord, nextTask, totalTaskCount } from './taskQueue.js';
+import {
+  buildTaskQueue,
+  completedTaskCount,
+  nextAxisForWord,
+  nextTask,
+  skippedTaskCount,
+  taskKey,
+  totalTaskCount,
+} from './taskQueue.js';
 
 function assignment(wordId: string, axisDecided: Partial<AxisDecided> = {}): AssignmentSummary {
   return {
@@ -10,7 +18,7 @@ function assignment(wordId: string, axisDecided: Partial<AxisDecided> = {}): Ass
     definition: `def_${wordId}`,
     entryType: null,
     assignedAt: '2026-08-01T00:00:00.000Z',
-    axisDecided: { entry: false, etymology: false, audio: false, example: false, ...axisDecided },
+    axisDecided: { entry: false, etymology: false, audio: false, audioDiverges: false, example: false, ...axisDecided },
   };
 }
 
@@ -95,6 +103,7 @@ describe('nextAxisForWord', () => {
     entry: false,
     etymology: false,
     audio: false,
+    audioDiverges: false,
     example: false,
     ...over,
   });
@@ -125,5 +134,57 @@ describe('nextAxisForWord', () => {
     // Entry first is a dependency, not a preference: a spelling change invalidates
     // recordings and re-matches components.
     expect(nextAxisForWord(decided({ etymology: true }), 'etymology')).toBe('entry');
+  });
+});
+
+// Setting a task aside for the session. The defect this covers: "Skip for now" was wired to
+// the post-submit advance(), which only re-derives from server state - and a skip changes no
+// server state, so the identical task came back every time.
+describe('skipping', () => {
+  const skips = (...keys: string[]) => new Set(keys);
+
+  it('withholds the skipped axis and leaves the rest of the word', () => {
+    const queue = buildTaskQueue([assignment('w1')], { skipped: skips(taskKey('w1', 'audio')) });
+    expect(queue.map((t) => t.axis)).toEqual(['entry', 'etymology', 'example']);
+  });
+
+  it('hands over the same word\'s next axis rather than jumping to another word', () => {
+    const assignments = [assignment('w1'), assignment('w2')];
+    const task = nextTask(assignments, 'w1', { skipped: skips(taskKey('w1', 'entry')) });
+    expect(task).toMatchObject({ wordId: 'w1', axis: 'etymology' });
+  });
+
+  it('moves to the next word once every axis of this one is set aside', () => {
+    const assignments = [assignment('w1'), assignment('w2')];
+    const skipped = skips(...(['entry', 'etymology', 'audio', 'example'] as const).map((a) => taskKey('w1', a)));
+    expect(nextTask(assignments, 'w1', { skipped })).toMatchObject({ wordId: 'w2', axis: 'entry' });
+  });
+
+  it('returns null when everything pending is set aside', () => {
+    const assignments = [assignment('w1', { entry: true, etymology: true, example: true })];
+    expect(nextTask(assignments, 'w1', { skipped: skips(taskKey('w1', 'audio')) })).toBeNull();
+  });
+
+  it('leaves progress counts untouched - a task set aside is not a task done', () => {
+    // The regression guard for the progress bar. Excluding skips from completedTaskCount
+    // would make the bar claim work that has not happened, which is the same class of lie
+    // the dead Skip button was already telling.
+    const assignments = [assignment('w1'), assignment('w2')];
+    const skipped = skips(taskKey('w1', 'entry'), taskKey('w1', 'audio'));
+    expect(totalTaskCount(assignments)).toBe(8);
+    expect(completedTaskCount(assignments)).toBe(0);
+    expect(buildTaskQueue(assignments, { skipped })).toHaveLength(6);
+  });
+
+  it('counts only skips that still name pending work', () => {
+    // A key outlives what it names: skip a task, then finish it from "My whole list", and
+    // the count must not keep offering to bring back something already done.
+    const assignments = [assignment('w1', { audio: true })];
+    const skipped = skips(taskKey('w1', 'audio'), taskKey('w1', 'entry'), taskKey('w9', 'entry'));
+    expect(skippedTaskCount(assignments, skipped)).toBe(1);
+  });
+
+  it('counts nothing when nothing is skipped', () => {
+    expect(skippedTaskCount([assignment('w1')], new Set())).toBe(0);
   });
 });

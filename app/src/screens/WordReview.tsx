@@ -134,7 +134,7 @@ export function WordReview({
         <EtymologyReview wordId={wordId} isCurator={isCurator} onDecided={handleDecided} showAxisChips={showAxisTabs} />
       ) : null}
       {axis === 'audio' ? <AudioRecording wordId={wordId} isCurator={isCurator} onDecided={handleDecided} /> : null}
-      {axis === 'example' ? <ExampleContribution wordId={wordId} onDecided={handleDecided} /> : null}
+      {axis === 'example' ? <ExampleContribution wordId={wordId} isCurator={isCurator} onDecided={handleDecided} /> : null}
     </>
   );
 }

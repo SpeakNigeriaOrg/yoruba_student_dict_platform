@@ -51,10 +51,16 @@
     { "route": "/api/syllables/*", "allowedRoles": ["member"] },
 
     { "route": "/api/component-requests", "allowedRoles": ["member"] },
+    { "route": "/api/grants/me", "allowedRoles": ["member"] },
 
     { "route": "/api/kaikki-search", "allowedRoles": ["member"] },
     { "route": "/api/vocab-search", "allowedRoles": ["member"] },
     { "route": "/api/duplicate-check", "allowedRoles": ["curator"] },
+
+    { "route": "/api/dictionary", "allowedRoles": ["curator"] },
+    { "route": "/api/dictionary/*", "allowedRoles": ["curator"] },
+    { "route": "/api/images/*", "allowedRoles": ["curator"] },
+    { "route": "/api/examples/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/maintenance/*", "allowedRoles": ["curator"] },
 

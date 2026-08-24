@@ -423,6 +423,20 @@ audio {
   border-color: transparent;
   color: var(--red);
 }
+/* Sits INSIDE a sentence ("3 set aside for now. Bring them back"), so it drops .btn's
+   44px min-height and box - a tap target that size mid-paragraph reflows the line. The
+   surrounding text is the affordance; this is the only place a button is part of one. */
+.btn-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--indigo);
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 .btn-row {
   display: flex;
@@ -853,4 +867,266 @@ audio {
 .segment-syllable {
   font-size: 1.25rem;
   margin-right: 6px;
+}
+
+/* ---- The curating surface ----
+ *
+ * Everything below applies only to the Dictionary views. The contribution screens keep the
+ * 640px phone shape they were designed for; this is desk work over the whole corpus, and a
+ * table of two hundred words with six status columns is unreadable at that width.
+ *
+ * It still collapses. A curator with a phone is a real case, so the wide container is a
+ * max-width raise rather than a min-width requirement, and every grid below falls back to
+ * one column.
+ */
+main:has(.curating) {
+  max-width: 1100px;
+}
+
+.curating .surface-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.curating .surface-tabs button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.curating .surface-tabs button[aria-current='page'] {
+  border-color: var(--indigo);
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+/* ---- State, not progress ----
+ *
+ * The contribution screens ask a yes/no question ("is this off my list?") and two colours
+ * answer it. A curator's question has three answers, and the third one - somebody has an
+ * opinion, nobody has ratified it - is the one that was invisible.
+ *
+ * Solid versus hollow carries that distinction rather than a second green, so it survives
+ * greyscale and colour blindness. Grey stays "nobody has touched this".
+ */
+.state {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.state.golden {
+  background: var(--green-bg);
+  border-color: var(--green);
+  color: var(--green);
+}
+.state.provisional {
+  background: transparent;
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.state.none {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--ink-soft);
+}
+.state.blocked {
+  background: var(--red-bg);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* A count is a count. Wrapping "3 speakers" in a badge throws away the 3, which is the
+   only part a curator planning recording sessions can act on. */
+.figure {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.figure.zero {
+  color: var(--ink-soft);
+}
+.figure.warn {
+  color: var(--amber);
+}
+
+/* ---- The survey table ---- */
+.survey {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.survey th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+.survey th button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.survey th button[aria-sort]:not([aria-sort='none']) {
+  color: var(--indigo);
+}
+.survey td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.survey tbody tr:hover {
+  background: var(--card-bg);
+}
+.survey .word-cell button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--indigo);
+  cursor: pointer;
+  text-align: left;
+}
+.survey .word-id {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+/* Wide content scrolls inside its own container - the page body never scrolls sideways. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* ---- Overview ---- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.stat-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+/* Every number here is a button, because a count a curator cannot open is a count they
+   have to go and reproduce by hand. */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 5px 0;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid var(--bg);
+}
+.stat-row:hover:not(:disabled) {
+  color: var(--indigo);
+}
+.stat-row:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+}
+.stat-row .stat-value {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+.stat-headline {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+/* ---- Dossier ---- */
+.dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.dossier-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.dossier-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.dossier-section dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(7em, auto) 1fr;
+  gap: 4px 10px;
+  font-size: 0.85rem;
+}
+.dossier-section dt {
+  color: var(--ink-soft);
+}
+.dossier-section dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dossier-section pre {
+  margin: 0;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  overflow-x: auto;
+}
+/* A row that history has set aside - superseded, excluded, archived. Still shown, because
+   the point of keeping it was that someone could read it. */
+.set-aside {
+  opacity: 0.62;
+}
+.dossier-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dossier-images img {
+  width: 110px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
 }

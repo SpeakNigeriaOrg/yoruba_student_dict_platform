@@ -115,6 +115,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { reportUpstreamHealth } from './upstreamPublishCheck.mjs';
+import { recordingMatchesGoldenSql } from '../shared/dist/index.js';
 import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
 
@@ -487,8 +488,7 @@ async function main() {
      join golden_record w on w.word_id = u.word_id
      where u.take_number = 1
        and u.audio_data is not null
-       and u.recorded_display_text = w.display_text
-       and u.recorded_syllables = w.syllables`,
+       and ${recordingMatchesGoldenSql('u', 'w')}`,
   );
   const staleCountResult = await pool.query(
     `select count(*)::int as n
@@ -496,7 +496,7 @@ async function main() {
      join golden_record w on w.word_id = u.word_id
      where u.take_number = 1
        and u.audio_data is not null
-       and (u.recorded_display_text != w.display_text or u.recorded_syllables != w.syllables)`,
+       and not (${recordingMatchesGoldenSql('u', 'w')})`,
   );
   if (staleCountResult.rows[0].n > 0) {
     console.warn(

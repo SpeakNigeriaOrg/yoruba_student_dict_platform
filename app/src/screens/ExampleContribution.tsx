@@ -40,6 +40,12 @@ export interface ExampleContributionProps {
   wordId: string;
   /** Called after a successful submit, so the task queue can advance. */
   onDecided?: () => void;
+  /** Only changes whether the existing examples can be READ before contributing one.
+   *
+   * It does not change how an example is recorded - there is no decision step on this axis
+   * for anyone, and several different examples are more material rather than a conflict.
+   * Moderating them happens on the word's dossier. */
+  isCurator?: boolean;
 }
 
 const KINDS: Array<{ type: ExampleType; label: string; hint: string }> = [
@@ -54,7 +60,7 @@ const KIND_LABEL: Record<ExampleType, string> = {
   usage_phrase: 'phrase',
 };
 
-export function ExampleContribution({ wordId, onDecided }: ExampleContributionProps) {
+export function ExampleContribution({ wordId, onDecided, isCurator = false }: ExampleContributionProps) {
   const [displayText, setDisplayText] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -89,10 +95,19 @@ export function ExampleContribution({ wordId, onDecided }: ExampleContributionPr
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
       });
+    // A curator is here to check what exists, not to be anchored by it, so theirs load up
+    // front. A volunteer's still arrive only after they have written their own.
+    if (isCurator) {
+      getExamples(wordId)
+        .then((list) => {
+          if (!cancelled) setOthers(list);
+        })
+        .catch(() => undefined);
+    }
     return () => {
       cancelled = true;
     };
-  }, [wordId]);
+  }, [wordId, isCurator]);
 
   async function stopRecording() {
     const blob = await recorder.stop();
@@ -225,7 +240,12 @@ export function ExampleContribution({ wordId, onDecided }: ExampleContributionPr
         </p>
       ) : null}
 
-      {submitted && others ? (
+      {/* Was `submitted && others`, so nobody could read the examples on a word without
+          adding one - a curator included, which made moderating them impossible. The gate on
+          seeing OTHERS' work before doing your own is real and stays for volunteers (their
+          example should be their own idea); a curator is not writing one, they are checking
+          what is there. */}
+      {(submitted || isCurator) && others ? (
         <div aria-label="Other examples">
           <h3>Other examples for this word</h3>
           {others.filter((e) => !e.isOwn).length === 0 ? (

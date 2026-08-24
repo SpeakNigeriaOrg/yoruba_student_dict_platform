@@ -26,19 +26,35 @@ export type Axis = 'entry' | 'etymology' | 'audio' | 'example';
 
 export const AXES: readonly Axis[] = ['entry', 'etymology', 'audio', 'example'];
 
+/** Which view of the curating surface is open.
+ *
+ * One surface with three views rather than three tabs, because they are three questions
+ * about one thing: the survey is the spine, the overview summarises it, and the decision
+ * queues are filters over it. 'browse' and 'contributions' were separate tabs saying the
+ * same thing twice. */
+export type DictionaryView = 'overview' | 'words' | 'decisions' | 'coverage' | 'rights';
+
+export const DICTIONARY_VIEWS: readonly DictionaryView[] = ['overview', 'words', 'decisions', 'coverage', 'rights'];
+
 export type Route =
   | { view: 'queue' }
-  | { view: 'browse' }
   | { view: 'add' }
-  | { view: 'contributions' }
   | { view: 'users' }
   | { view: 'user'; userId: string }
-  | { view: 'word'; wordId: string; axis: Axis };
+  | { view: 'word'; wordId: string; axis: Axis }
+  /** The curating surface. */
+  | { view: 'dictionary'; tab: DictionaryView }
+  /** Everything held about one word - the deep view, distinct from working ON the word. */
+  | { view: 'dossier'; wordId: string };
 
 export const DEFAULT_ROUTE: Route = { view: 'queue' };
 
 function isAxis(value: string): value is Axis {
   return (AXES as readonly string[]).includes(value);
+}
+
+function isDictionaryView(value: string): value is DictionaryView {
+  return (DICTIONARY_VIEWS as readonly string[]).includes(value);
 }
 
 /** Parses a location.hash into a Route. Anything unrecognised - an empty
@@ -56,12 +72,20 @@ export function parseHash(hash: string): Route {
   switch (segments[0]) {
     case 'queue':
       return { view: 'queue' };
-    case 'browse':
-      return { view: 'browse' };
     case 'add':
       return { view: 'add' };
+    case 'dictionary': {
+      const tab = segments[1];
+      return { view: 'dictionary', tab: tab && isDictionaryView(tab) ? tab : 'overview' };
+    }
+    case 'dossier':
+      return segments[1] ? { view: 'dossier', wordId: segments[1] } : DEFAULT_ROUTE;
+    // Kept so a bookmark or a link from an older build still lands somewhere sensible
+    // rather than silently on the queue - both were folded into the dictionary surface.
+    case 'browse':
+      return { view: 'dictionary', tab: 'words' };
     case 'contributions':
-      return { view: 'contributions' };
+      return { view: 'dictionary', tab: 'decisions' };
     case 'users':
       // #/users and #/users/{id} are the same stack, which is what collapses
       // AdminUsers' former private selectedUserId state.
@@ -82,12 +106,12 @@ export function formatRoute(route: Route): string {
   switch (route.view) {
     case 'queue':
       return '#/queue';
-    case 'browse':
-      return '#/browse';
     case 'add':
       return '#/add';
-    case 'contributions':
-      return '#/contributions';
+    case 'dictionary':
+      return `#/dictionary/${route.tab}`;
+    case 'dossier':
+      return `#/dossier/${encodeURIComponent(route.wordId)}`;
     case 'users':
       return '#/users';
     case 'user':

@@ -260,6 +260,49 @@ describe('registerUtterance', () => {
     ).rejects.toThrow(/out of range/);
   });
 
+  // A recording that disagrees with the word is ACCEPTED and reported, never refused - see the
+  // file header. Refusing it would destroy the belief 0006's freeze exists to keep, and it would
+  // put back the deadlock where a volunteer who corrected a spelling could not finish the word.
+  it('stores a diverging pronunciation intact and reports that it will not publish', async () => {
+    const wordId = `${NS}word_diverging`;
+    await insertWord(wordId, ['o', 'wo']);
+
+    const result = await registerUtterance(
+      pool,
+      {
+        wordId,
+        takeNumber: 1,
+        audioData: FAKE_AUDIO,
+        recordedDisplayText: 'ọwọ́',
+        recordedSyllables: ['ọ', 'wọ́'],
+      },
+      userId,
+      username,
+    );
+
+    expect(result.matchesGolden).toBe(false);
+    const row = await pool.query<{ recorded_display_text: string; recorded_syllables: string[] }>(
+      'select recorded_display_text, recorded_syllables from utterances where utterance_id = $1',
+      [result.utteranceId],
+    );
+    // Verbatim, not coerced towards golden - the recording says what the speaker said.
+    expect(row.rows[0]).toEqual({ recorded_display_text: 'ọwọ́', recorded_syllables: ['ọ', 'wọ́'] });
+  });
+
+  it('reports a matching pronunciation as publishable', async () => {
+    const wordId = `${NS}word_matching`;
+    await insertWord(wordId, ['o', 'wo']);
+
+    const result = await registerUtterance(
+      pool,
+      { wordId, takeNumber: 1, audioData: FAKE_AUDIO, recordedDisplayText: 'owo', recordedSyllables: ['o', 'wo'] },
+      userId,
+      username,
+    );
+
+    expect(result.matchesGolden).toBe(true);
+  });
+
   it('rejects a word_id that does not exist', async () => {
     await expect(
       registerUtterance(

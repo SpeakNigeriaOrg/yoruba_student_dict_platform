@@ -15,7 +15,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getMyAssignments, type AssignmentSummary } from '../api.js';
-import { buildTaskQueue, completedTaskCount, nextTask, totalTaskCount, type Task } from '../taskQueue.js';
+import {
+  buildTaskQueue,
+  completedTaskCount,
+  nextTask,
+  skippedTaskCount,
+  taskKey,
+  totalTaskCount,
+  type Task,
+} from '../taskQueue.js';
+import { useSkippedTasks } from '../skippedTasks.js';
 import { AssignmentsList } from './AssignmentsList.js';
 import { WordReview } from './WordReview.js';
 
@@ -40,6 +49,7 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
   // The word currently being worked, so finishing its entry axis advances to
   // its etymology rather than jumping to an unrelated word.
   const [currentWordId, setCurrentWordId] = useState<string | null>(null);
+  const { skipped, skip, restoreAll } = useSkippedTasks();
 
   const load = useCallback(async () => {
     try {
@@ -56,11 +66,30 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
     void load();
   }, [load]);
 
+  /** After a real submit. The server state changed, so it has to be re-read - which is
+   * the whole difference between this and skipCurrent below, and the reason the two are
+   * no longer the same function. Sharing one handler is what made Skip a no-op: it
+   * re-derived the next task from server data a skip had not changed, and handed back
+   * the identical one. */
   async function advance() {
     const refreshed = await load();
     if (!refreshed) return;
-    const task = nextTask(refreshed, currentWordId);
+    const task = nextTask(refreshed, currentWordId, { skipped });
     setCurrentWordId(task?.wordId ?? null);
+  }
+
+  /** Sets one (word, axis) aside for this session.
+   *
+   * No re-fetch: nothing was submitted, so there is nothing new to read, and asking makes
+   * the button slower for no answer. The next render derives the task from the same
+   * assignments with the enlarged skip set, which is what actually moves it on.
+   *
+   * currentWordId stays on this word deliberately - skipping "Record this word" should
+   * offer that word's next unfinished axis, not jump to an unrelated word. The task just
+   * skipped is excluded, so preferring the word can no longer re-serve it. */
+  function skipCurrent(task: Task) {
+    skip(taskKey(task.wordId, task.axis));
+    setCurrentWordId(task.wordId);
   }
 
   if (error)
@@ -71,9 +100,13 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
     );
   if (!assignments) return <p>Loading your tasks...</p>;
 
-  const queue = buildTaskQueue(assignments);
+  // Two queues, and the difference between them is the point: `pending` is what is still
+  // owed (the truth behind progress), `offered` is what the volunteer is handed next.
+  const pending = buildTaskQueue(assignments);
+  const offered = buildTaskQueue(assignments, { skipped });
   const total = totalTaskCount(assignments);
   const done = completedTaskCount(assignments);
+  const setAside = skippedTaskCount(assignments, skipped);
 
   if (assignments.length === 0) {
     return (
@@ -83,7 +116,7 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
     );
   }
 
-  if (queue.length === 0) {
+  if (pending.length === 0) {
     return (
       <section aria-label="Task queue">
         <h2>All caught up</h2>
@@ -101,17 +134,53 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
     );
   }
 
-  const task = nextTask(assignments, currentWordId) ?? queue[0];
+  // Everything left is set aside. Said plainly, with the way back, rather than showing
+  // "All caught up" for work that is still owed.
+  if (offered.length === 0) {
+    return (
+      <section aria-label="Task queue">
+        <h2>Nothing left but what you set aside</h2>
+        <p>
+          You skipped {setAside} task{setAside === 1 ? '' : 's'} this session. {done} of {total} tasks are done.
+        </p>
+        <button type="button" className="btn btn-primary" onClick={restoreAll}>
+          Bring back skipped tasks
+        </button>{' '}
+        <button type="button" className="btn btn-secondary" onClick={() => setShowList((s) => !s)}>
+          {showList ? 'Hide my list' : 'My whole list'}
+        </button>
+        {showList ? (
+          <AssignmentsList assignments={assignments} onSelect={(wordId) => onOpenWord(wordId, 'entry')} />
+        ) : null}
+      </section>
+    );
+  }
+
+  // No `?? offered[0]` fallback: nextTask is given the same skip set, so a null here would
+  // mean the queue is empty, which the branch above has already handled. Falling back
+  // would re-serve a task the volunteer had just set aside.
+  const task = nextTask(assignments, currentWordId, { skipped })!;
 
   return (
     <section aria-label="Task queue">
       <div className="queue-header">
+        {/* A POSITION, not a completion count - tasks moved past include the ones set
+            aside. The BAR below stays on `done` alone, because a skipped task is not
+            work that happened and the bar is the only honest picture of how much is. */}
         <p className="queue-progress" aria-label="Queue progress">
-          Task {done + 1} of {total}
+          Task {done + setAside + 1} of {total}
         </p>
         <div className="progress-track" role="presentation">
           <div className="progress-fill" style={{ width: `${total === 0 ? 0 : (done / total) * 100}%` }} />
         </div>
+        {setAside > 0 ? (
+          <p className="field-note" aria-label="Skipped tasks">
+            {setAside} set aside for now.{' '}
+            <button type="button" className="btn btn-link" onClick={restoreAll}>
+              Bring them back
+            </button>
+          </p>
+        ) : null}
         <p className="queue-task-label">{AXIS_TASK_LABEL[task.axis]}</p>
         {/* Reachable without scrolling past the whole task.
           *
@@ -144,7 +213,7 @@ export function TaskQueue({ isCurator, onOpenWord }: TaskQueueProps) {
       />
 
       <div className="btn-row">
-        <button type="button" className="btn btn-secondary" onClick={() => void advance()}>
+        <button type="button" className="btn btn-secondary" onClick={() => skipCurrent(task)}>
           Skip for now
         </button>
       </div>

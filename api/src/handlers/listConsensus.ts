@@ -58,6 +58,11 @@ export interface ListConsensusOptions {
   buckets?: ConsensusBucket[];
   /** Restrict to one axis, for the bulk-confirm screen. */
   axis?: DecisionAxis;
+  /** Restrict to one word, for its dossier - where a curator reads the tally next to
+   * everything else known about the word and decides there. Note this widens what the
+   * caller will see: a single word's tally is worth showing whatever bucket it falls in,
+   * including 'golden', so the dossier must ask for those buckets explicitly. */
+  wordId?: string;
 }
 
 export async function listConsensus(client: Queryable, options: ListConsensusOptions = {}): Promise<ConsensusGroup[]> {
@@ -67,6 +72,7 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
   // at the query, so summarizeConsensus has no opinion about why a row was set
   // aside - and rows with no fingerprint (submitted before 0013) are skipped
   // because their outcome was never resolved and cannot be honestly inferred.
+  const params: string[] = [];
   const contributions = await client.query<{
     contribution_id: string;
     word_id: string;
@@ -85,9 +91,10 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
        and c.word_id is not null
        and c.value_fingerprint is not null
        and c.axis in ('entry', 'etymology')
-       ${options.axis ? 'and c.axis = $1' : ''}
+       ${options.axis ? `and c.axis = $${params.push(options.axis)}` : ''}
+       ${options.wordId ? `and c.word_id = $${params.push(options.wordId)}` : ''}
      order by c.submitted_at`,
-    options.axis ? [options.axis] : [],
+    params,
   );
 
   if (contributions.rowCount === 0) return [];

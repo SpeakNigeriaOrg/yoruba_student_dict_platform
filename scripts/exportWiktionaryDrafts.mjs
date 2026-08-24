@@ -86,7 +86,10 @@ import pg from 'pg';
 import {
   checkPhraseSpelling,
   describePhraseSpelling,
+  describeWiktionaryBlocker,
   etymidLabelFromWordId,
+  recordingMatchesGoldenSql,
+  wiktionaryBlockers,
   wiktionaryPageTitle,
 } from '../shared/dist/index.js';
 
@@ -228,8 +231,7 @@ async function loadAudio(pool) {
        join speaker_release_rights r on r.speaker_id = u.speaker_id
       where u.take_number = 1
         and u.audio_data is not null
-        and u.recorded_display_text = w.display_text
-        and u.recorded_syllables = w.syllables
+        and ${recordingMatchesGoldenSql('u', 'w')}
       order by u.word_id, r.display_name`,
   );
   const byWord = new Map();
@@ -274,17 +276,17 @@ function buildDraft(entry, components, examples, audio) {
   const glosses = entry.english_gloss ? [entry.english_gloss] : (pin?.glosses ?? []);
   const etymid = entry.etymid_label ?? etymidLabelFromWordId(entry.word_id, entry.display_text);
 
-  const blockers = [];
+  // The three hard blockers come from shared/src/publicationReadiness.ts, which the curator
+  // survey also reads. Same rule, two renderings: codes there so they can be counted and
+  // filtered, these same sentences here. A second copy is how the app would start telling a
+  // curator an entry is ready while this script refused to draft it.
   const notes = [];
-
-  if (!cited && !entry.exempt_reason) {
-    // No citation row at all. 0014 backfilled nothing by design, so this is a word
-    // predating citations rather than a fault - but nothing here can tell whether
-    // upstream has it, which is the first thing a contributor must know.
-    blockers.push('no citation row: cannot tell whether Wiktionary already has this entry');
-  }
-  if (!pos) blockers.push('no part of speech (set golden_record.pos)');
-  if (glosses.length === 0) blockers.push('no English gloss (set golden_record.english_gloss)');
+  const blockers = wiktionaryBlockers({
+    cited,
+    exemptReason: entry.exempt_reason ?? null,
+    pos,
+    glosses,
+  }).map(describeWiktionaryBlocker);
   if (!etymid) notes.push('no etymid label, and the word_id is not in <spelling>_<hint> shape to derive one');
 
   // A phrase whose spelling its parts cannot produce. Reported rather than resolved:

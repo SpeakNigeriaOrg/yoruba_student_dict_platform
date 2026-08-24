@@ -55,7 +55,6 @@ import {
   deleteWord,
   getEntryReview,
   getWordDeletionImpact,
-  postEntryDecision,
   renameWord,
   searchKaikki,
   submitEntryContribution,
@@ -71,9 +70,18 @@ import { ToneEditor } from './ToneEditor.js';
 
 export interface EntryReviewProps {
   wordId: string;
-  /** Curators decide directly (POST /decisions/entry); everyone else
-   * proposes a contribution instead (POST /contributions), pending a
-   * curator's approval - same data shape either way. */
+  /** What a curator gets EXTRA here - the diagnosis vocabulary, re-linking, the danger zone -
+   * and nothing about how their answer is recorded.
+   *
+   * That used to be the difference: a curator's Confirm wrote golden_record directly and a
+   * volunteer's became a contribution, off one boolean, with the word "entry" on the button
+   * as the only sign of which had happened. It ran backwards, too - the volunteer's buttons
+   * said "Propose:" and the curator's said the bare verb, so the person writing fact got the
+   * less explicit label.
+   *
+   * Now everyone contributes, because a curator's knowledge of a word is not better than
+   * anyone else's and the consensus model has always assumed their answer is one vote among
+   * others. Deciding is a different act at a different place - see screens/Dictionary.tsx. */
   isCurator: boolean;
   /** Called after a successful submit, so the task queue can advance. Absent
    * when this screen is reached directly (browse, admin), where staying put
@@ -321,13 +329,13 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
 
     setSubmitting(true);
     try {
-      if (isCurator) {
-        await postEntryDecision(wordId, input);
-        setStatus('Entry confirmed: spelling and definition recorded together.');
-      } else {
-        await submitEntryContribution(wordId, input);
-        setStatus('Thanks - your answer is recorded.');
-      }
+      // Everyone contributes here, curators included. See the note on this screen's role
+      // above: a curator's knowledge of a word is not better than anyone else's, and the
+      // server has always modelled their answer as one ordinary vote - that is what the
+      // authoring-vote backfill exists to record. Setting the record is a separate act, and
+      // it happens on the curating surface where the tally is visible.
+      await submitEntryContribution(wordId, input);
+      setStatus('Recorded. Your answer counts as one vote on this word.');
       const refreshed = await getEntryReview(wordId);
       setReview(refreshed);
       onDecided?.();
@@ -580,8 +588,9 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         not a correction.
       </p>
 
+      {/* One label for everyone, and it names what actually happens. */}
       <button type="button" className="btn btn-primary" onClick={submit} disabled={!readyToSubmit || submitting}>
-        {isCurator ? 'Confirm entry' : 'Confirm'}
+        Record my answer
       </button>
       {!readyToSubmit ? (
         <p className="field-note">

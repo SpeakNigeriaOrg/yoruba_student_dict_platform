@@ -32,6 +32,7 @@
 // choice as registerUtterance.ts - clips are short, so this stays small.
 
 import type { Queryable } from '../db.js';
+import { recordingMatchesGolden } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 
 export interface UtteranceSegmentSummary {
@@ -107,10 +108,10 @@ export async function listUtterances(
   if (wordResult.rowCount === 0) throw new WordNotFoundError(wordId);
   const current = wordResult.rows[0];
 
+  // Delegated rather than hand-rolled here, so this badge and what publish actually drops
+  // cannot drift apart - see reviewShared.ts's note on the one rule in five places.
   const diverges = (recordedDisplayText: string, recordedSyllables: string[]): boolean =>
-    recordedDisplayText !== current.display_text ||
-    recordedSyllables.length !== current.syllables.length ||
-    recordedSyllables.some((s, i) => s !== current.syllables[i]);
+    !recordingMatchesGolden(recordedDisplayText, recordedSyllables, current);
 
   const utteranceRows = await client.query<{
     utterance_id: string;

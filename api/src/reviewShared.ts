@@ -5,7 +5,13 @@
 // consumer needed the exact same full-vocab load and per-word axis-decided
 // lookup.
 
-import type { DiagnoseOverride, DiagnosticsOverrides, Vocab } from '@yoruba-student-dict-platform/shared';
+import {
+  recordingMatchesGolden,
+  recordingMatchesGoldenSql,
+  type DiagnoseOverride,
+  type DiagnosticsOverrides,
+  type Vocab,
+} from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from './db.js';
 
 export async function loadVocab(client: Queryable): Promise<Vocab> {
@@ -67,7 +73,15 @@ export interface AxisDecided {
   // "someone already recorded this" would be actively misleading here: it
   // would show green/done for a word this user personally hasn't touched yet,
   // just because a different speaker got to it first.
+  //
+  // Deliberately NOT "...and it still matches the word" - see the block below.
   audio: boolean;
+  /** This user HAS recorded, but at least one of those recordings no longer matches
+   * golden_record, so publish will drop it until golden converges or they record again.
+   *
+   * Never true while `audio` is false: it qualifies a finished task, it does not describe
+   * a missing one. */
+  audioDiverges: boolean;
   /** Whether this user has contributed an example of the word in use. Per-user for the
    * same reason audio is: an example is one person's own contribution, and several
    * different examples are more material rather than a conflict, so "someone else gave
@@ -76,30 +90,55 @@ export interface AxisDecided {
 }
 
 // ---------------------------------------------------------------------------
-// A recording only counts while it still matches the word
+// Whether a recording will PUBLISH, which is not whether the task is DONE
 // ---------------------------------------------------------------------------
 // 0006 freezes each recording's own recorded_display_text/recorded_syllables so a recording's
 // pronunciation is never silently reinterpreted. The publish scripts then admit a recording only
 // while those still equal golden_record's current values, and exclude it otherwise.
 //
-// The audio axis used to ask a weaker question - "does this user have a row in utterances?" - so a
-// word whose spelling or split changed after recording read as DONE in the app while every one of
-// its recordings was being dropped from the game. Nobody was told, and the axis that would have
-// told them said green.
+// The axis used to ask a weaker question - "does this user have a row in utterances?" - so a word
+// whose spelling or split changed after recording read as DONE in the app while every one of its
+// recordings was being dropped from the game. Nobody was told, and the axis that would have told
+// them said green. Making `audio` require the match fixed the silence and introduced a worse
+// failure: it answered the PUBLISH question ("will this ship?") in the field that reports the TASK
+// question ("has this person done the work?"), and those come apart constantly.
 //
-// So this is the publish scripts' comparison, deliberately verbatim: element-wise SQL array
-// equality, not Unicode-normalising. The point is to agree with what publish actually does, and a
-// more lenient check here would recreate the same gap one step further along.
-const RECORDING_STILL_MATCHES = `u.recorded_display_text = g.display_text and u.recorded_syllables = g.syllables`;
+// They came apart hardest for the person the app is for. A volunteer's spelling correction is a
+// contribution, not a decision, so it never reaches golden_record - only a curator's ruling does.
+// The audio screen then shows them the OLD spelling and invites them to say it the way they just
+// argued it should be said (see AudioRecording.tsx, and 0006, which exists to preserve exactly
+// that divergence). They record; the recording saves; the axis stays red until a curator rules.
+// The task was unfinishable, and the queue re-served it forever.
+//
+// So the comparison stays, and what it decides changed. It now answers only "will publish accept
+// this", reported as `audioDiverges` alongside a truthful `audio`. Nobody is misled about what
+// ships, and nobody is handed work they cannot complete.
+//
+// The rule itself now lives in shared/src/publicationReadiness.ts, imported below, because the
+// three scripts that actually DROP a recording - publishToR2.mjs, exportGameContent.mjs,
+// exportWiktionaryDrafts.mjs - can import it too. It used to be five hand-copied strings that
+// merely had to stay identical; it is now one. Only this file differs in what it DOES about a
+// mismatch: it reports it (audioDiverges) where they exclude.
+const RECORDING_MATCHES_GOLDEN = recordingMatchesGoldenSql('u', 'g');
+
+export { recordingMatchesGolden };
 
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
   const [decisionRows, utteranceRows, contributionRows, exampleRows] = await Promise.all([
     client.query<{ axis: DecisionAxis }>('select axis from word_decisions where word_id = $1', [wordId]),
-    client.query(
-      `select 1 from utterances u
+    // One query answering both halves. bool_and over no rows is null, which is how "never
+    // recorded" is told apart from "recorded, and all of it still matches".
+    //
+    // bool_AND rather than bool_or - any stale take makes the word diverge - because a
+    // submission writes takes 1 and 2 and publish reads BOTH: take 1 for the word clip,
+    // take 2's syllable_observations for the syllable clips. bool_or would call a word
+    // clean while half its audio is being dropped, and would contradict the per-recording
+    // "no longer matches" badges on the same screen.
+    client.query<{ all_match: boolean | null }>(
+      `select bool_and(${RECORDING_MATCHES_GOLDEN}) as all_match from utterances u
          join speakers s on s.speaker_id = u.speaker_id
          join golden_record g on g.word_id = u.word_id
-       where u.word_id = $1 and s.user_id = $2 and ${RECORDING_STILL_MATCHES} limit 1`,
+       where u.word_id = $1 and s.user_id = $2`,
       [wordId, userId],
     ),
     client.query<{ axis: DecisionAxis }>(
@@ -117,10 +156,12 @@ export async function loadAxisDecided(client: Queryable, wordId: string, userId:
   ]);
   const decided = new Set(decisionRows.rows.map((r) => r.axis));
   const mine = new Set(contributionRows.rows.map((r) => r.axis));
+  const allMatch = utteranceRows.rows[0]?.all_match ?? null;
   return {
     entry: decided.has('entry') || mine.has('entry'),
     etymology: decided.has('etymology') || mine.has('etymology'),
-    audio: (utteranceRows.rowCount ?? 0) > 0,
+    audio: allMatch !== null,
+    audioDiverges: allMatch === false,
     example: (exampleRows.rowCount ?? 0) > 0,
   };
 }
@@ -138,11 +179,14 @@ export async function loadAxisDecidedBatch(
     client.query<{ word_id: string; axis: DecisionAxis }>('select word_id, axis from word_decisions where word_id = any($1)', [
       wordIds,
     ]),
-    client.query<{ word_id: string }>(
-      `select distinct u.word_id from utterances u
+    // Grouped counterpart of loadAxisDecided's aggregate - a word_id present here has been
+    // recorded by this user; its all_match says whether publish will take all of it.
+    client.query<{ word_id: string; all_match: boolean | null }>(
+      `select u.word_id, bool_and(${RECORDING_MATCHES_GOLDEN}) as all_match from utterances u
          join speakers s on s.speaker_id = u.speaker_id
          join golden_record g on g.word_id = u.word_id
-       where s.user_id = $1 and u.word_id = any($2) and ${RECORDING_STILL_MATCHES}`,
+       where s.user_id = $1 and u.word_id = any($2)
+       group by u.word_id`,
       [userId, wordIds],
     ),
     client.query<{ word_id: string; axis: DecisionAxis }>(
@@ -168,7 +212,7 @@ export async function loadAxisDecidedBatch(
     if (existing) existing.add(row.axis);
     else mineByWord.set(row.word_id, new Set([row.axis]));
   }
-  const wordsWithAudio = new Set(utteranceRows.rows.map((r) => r.word_id));
+  const audioMatchByWord = new Map(utteranceRows.rows.map((r) => [r.word_id, r.all_match]));
   const wordsWithMyExample = new Set(exampleRows.rows.map((r) => r.word_id));
 
   const result = new Map<string, AxisDecided>();
@@ -178,7 +222,8 @@ export async function loadAxisDecidedBatch(
     result.set(wordId, {
       entry: decided.has('entry') || mine.has('entry'),
       etymology: decided.has('etymology') || mine.has('etymology'),
-      audio: wordsWithAudio.has(wordId),
+      audio: audioMatchByWord.has(wordId),
+      audioDiverges: audioMatchByWord.get(wordId) === false,
       example: wordsWithMyExample.has(wordId),
     });
   }
@@ -196,9 +241,14 @@ export type GlobalAxisState = 'golden' | 'provisional' | 'none';
 export interface GlobalAxisStatus {
   entry: GlobalAxisState;
   etymology: GlobalAxisState;
-  /** How many distinct speakers have recorded this word - audio has no
-   * decision step, so "settled" doesn't apply; coverage does. */
+  /** How many distinct speakers have recorded this word IN A FORM PUBLISH WILL TAKE -
+   * audio has no decision step, so "settled" doesn't apply; coverage does. */
   speakerCount: number;
+  /** Speakers whose recordings exist but no longer match the word, so they are excluded
+   * from the number above. Reported separately rather than folded in: a curator asking
+   * about coverage is asking what ships, and a shortfall they cannot see is the silence
+   * this whole area was fixed for once already. */
+  divergedSpeakerCount: number;
 }
 
 export async function loadGlobalAxisStatusBatch(
@@ -214,13 +264,18 @@ export async function loadGlobalAxisStatusBatch(
        where word_id = any($1) and status = 'active' and axis in ('entry', 'etymology')`,
       [wordIds],
     ),
-    // Same condition as AxisDecided's, so a curator's coverage number and a volunteer's done flag
-    // cannot disagree about the same recording. A count that includes recordings publish will drop
-    // is the curator-facing version of exactly the defect described above.
-    client.query<{ word_id: string; speakers: string }>(
-      `select u.word_id, count(distinct u.speaker_id) as speakers
+    // Strict, unlike AxisDecided.audio, and the asymmetry is deliberate: this is a coverage
+    // number read against what actually ships, so it must agree with the publish scripts.
+    // AxisDecided.audio answers a different question - has this person done the task - and
+    // reports the mismatch as audioDiverges instead of hiding the recording. Do not
+    // "reconcile" the two; they were one question once, and that is what made a word
+    // unfinishable for the volunteer who corrected its spelling.
+    client.query<{ word_id: string; speakers: string; diverged_speakers: string }>(
+      `select u.word_id,
+              count(distinct u.speaker_id) filter (where ${RECORDING_MATCHES_GOLDEN}) as speakers,
+              count(distinct u.speaker_id) filter (where not (${RECORDING_MATCHES_GOLDEN})) as diverged_speakers
        from utterances u join golden_record g on g.word_id = u.word_id
-       where u.word_id = any($1) and ${RECORDING_STILL_MATCHES} group by u.word_id`,
+       where u.word_id = any($1) group by u.word_id`,
       [wordIds],
     ),
   ]);
@@ -238,6 +293,7 @@ export async function loadGlobalAxisStatusBatch(
     else provisionalByWord.set(row.word_id, new Set([row.axis]));
   }
   const speakersByWord = new Map(speakerRows.rows.map((r) => [r.word_id, Number(r.speakers)]));
+  const divergedSpeakersByWord = new Map(speakerRows.rows.map((r) => [r.word_id, Number(r.diverged_speakers)]));
 
   const state = (wordId: string, axis: DecisionAxis): GlobalAxisState => {
     if (goldenByWord.get(wordId)?.has(axis)) return 'golden';
@@ -251,6 +307,7 @@ export async function loadGlobalAxisStatusBatch(
       entry: state(wordId, 'entry'),
       etymology: state(wordId, 'etymology'),
       speakerCount: speakersByWord.get(wordId) ?? 0,
+      divergedSpeakerCount: divergedSpeakersByWord.get(wordId) ?? 0,
     });
   }
   return result;

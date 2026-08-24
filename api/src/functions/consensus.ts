@@ -40,9 +40,11 @@ export async function listConsensusFunction(request: HttpRequest, _context: Invo
       throw new Error(`axis must be one of: ${AXES.join(', ')}`);
     }
 
+    const wordId = request.query.get('wordId');
     const groups = await listConsensus(getPool(), {
       ...(buckets ? { buckets } : {}),
       ...(axisParam ? { axis: axisParam as DecisionAxis } : {}),
+      ...(wordId ? { wordId } : {}),
     });
     return { status: 200, jsonBody: { groups } };
   } catch (err) {

@@ -262,7 +262,19 @@ export async function applyEntryDecisionInTransaction(
   // The write follows the fingerprint rather than the other way round, because the fingerprint's
   // precedence is the correct one: an authored split is a claim, and re-deriving it is not.
   const respelled = input.action === 'respell' && input.newDisplayText !== undefined && input.newSyllables !== undefined;
-  if (input.syllableAction === 'accept_programmatic' && !respelled) {
+  // adopt_kaikki is the SECOND reason to re-derive, and its absence was a bug of its own.
+  //
+  // That branch above writes display_text and nothing else, so the row was left holding the split
+  // of the word it used to be - a state the respell branch is careful never to create ("written
+  // TOGETHER, from the same submission, so they cannot disagree"). Nothing downstream tolerates
+  // it: the publish comparison wants recorded_syllables to equal the stored split, the audio
+  // screen offers the split of the CURRENT spelling, and the two could then never agree. Adopting
+  // an upstream spelling made the word permanently unrecordable-for-publish, silently.
+  //
+  // Not applied when the reviewer authored a split in the same decision - `respelled` still wins,
+  // for the reason immediately above.
+  const adoptedNewSpelling = input.action === 'adopt_kaikki' && Boolean(input.newDisplayText);
+  if ((input.syllableAction === 'accept_programmatic' || adoptedNewSpelling) && !respelled) {
     const programmatic = syllabifyWord(effectiveDisplayText);
     await client.query('update golden_record set syllables = $1, updated_at = now(), updated_by = $2 where word_id = $3', [
       programmatic,

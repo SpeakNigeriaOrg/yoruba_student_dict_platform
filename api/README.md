@@ -197,6 +197,39 @@ Implemented:
     refuses to run if a migration has added a `word_id` column nobody listed.
     Without it the failure is silent: the missed rows are simply cascaded away
     by the rename's final delete, with a 200 in response.
+- `GET /dictionary`, `GET /dictionary/coverage`, `GET /dictionary/rights`,
+  `GET /words/{wordId}/dossier`, `GET /images/{imageId}`
+  (`src/functions/dictionary.ts`) - the CURATOR level: questions about the
+  corpus, none of them scoped to the caller. That distinction is the whole
+  point. `AxisDecided` and the assignment endpoints answer "what do *I* still
+  owe?", and the browse screen used to render those flags on a screen whose job
+  was "is this settled" - so a word three volunteers had fully recorded read as
+  "not yet recorded" to a curator who had not recorded it. These call
+  `loadGlobalAxisStatusBatch` instead, which had been written for exactly this
+  and had no callers at all.
+  - `GET /dictionary` returns every entry with its global per-axis state
+    (`golden`/`provisional`/`none`), speaker coverage, citation state, and what
+    blocks it from the game and from Wiktionary - plus the summary of those same
+    rows. One response for both, because a count computed by a different query
+    than the list it heads can disagree with it.
+  - The readiness rules are **not** defined here. They live in
+    `shared/src/publicationReadiness.ts`, which `scripts/publishToR2.mjs`,
+    `exportGameContent.mjs` and `exportWiktionaryDrafts.mjs` also import - so the
+    app cannot start calling a word ready that the export then drops. That has
+    happened once (the audio axis read green while publish excluded every
+    recording behind it) and the extraction is the fix.
+  - `GET /words/{wordId}/dossier` is everything held about one word, including
+    three things no screen could previously read: superseded and excluded
+    contributions (0013 kept them deliberately), the upstream pin itself (0014 -
+    visible before only as a drift diff), and 0011's archived pre-merge
+    decisions.
+  - `GET /images/{imageId}` is the first route that serves an image. ~350 have
+    been stored since 0010 and none was ever readable, while a missing image is
+    a hard gate on the game export.
+- `POST /examples/{exampleId}/exclude` (`src/handlers/excludeExample.ts`) -
+  curator-only moderation. 0015 added `word_examples.excluded_by/at/reason` for
+  "a curator can remove something abusive or off-topic" and no endpoint was ever
+  written, so the columns could only be cleared, never set.
 - `POST /decisions/{axis}` (`src/functions/decisions.ts`,
   `src/handlers/applySpellingDecision.ts` / `applyDefinitionDecision.ts` /
   `applyEtymologyDecision.ts`) - a curator's direct decision on one of the

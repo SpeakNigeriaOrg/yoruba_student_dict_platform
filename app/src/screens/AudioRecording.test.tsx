@@ -351,6 +351,121 @@ describe('AudioRecording', () => {
     expect(typeof take2Register.segments[0].audioDataBase64).toBe('string');
   });
 
+  it("records the word's OWN stored split rather than re-deriving one", async () => {
+    // The defect: this screen always re-derived the split with syllabifySpans and threw away
+    // golden_record's. But applyEntryDecision's `respell` writes an AUTHORED split - "freeing a
+    // nasal is a respell whose whole content is the new split" - and re-deriving undid exactly
+    // that correction. Worse, the re-derived split is then what the publish comparison rejects,
+    // so a speaker who changed nothing produced a recording that could never be published.
+    //
+    // ['wòh','un'] is not a split syllabifySpans would ever produce, which is the point: it can
+    // only be here because a human authored it.
+    const authored = { ...entryFixture, displayText: 'wòhun', syllables: ['wòh', 'un'] };
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => authored });
+      if (url.includes('/utterances') && url.includes('/register')) {
+        return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'id', matchesGolden: true }) });
+      }
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByText('wòhun'));
+    await recordBothTakes(user);
+    await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
+    await user.click(screen.getByRole('button', { name: 'Submit recording' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter((c) => c[0].includes('/register'))).toHaveLength(2));
+    const body = JSON.parse(fetchMock.mock.calls.filter((c) => c[0].includes('/register'))[0][1].body);
+    expect(body.recordedSyllables).toEqual(['wòh', 'un']);
+    expect(body.recordedDisplayText).toBe('wòhun');
+  });
+
+  it('says a recording will not publish, while still counting the task as done', async () => {
+    // The beta-test bug. The screen used to report a bare "Recording submitted." whatever the
+    // outcome, and the axis then stayed red, so the queue handed back the identical task with no
+    // explanation. Both halves are asserted here: the message says what happened, and onDecided
+    // still fires so the queue moves on.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
+      if (url.includes('/utterances') && url.includes('/register')) {
+        return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'id', matchesGolden: false }) });
+      }
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onDecided = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} onDecided={onDecided} />);
+    await waitFor(() => screen.getByText('wòhun'));
+    await recordBothTakes(user);
+    await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
+    await user.click(screen.getByRole('button', { name: 'Submit recording' }));
+
+    const banner = await waitFor(() => screen.getByLabelText('Recording saved but not publishable'));
+    expect(banner).toHaveTextContent('your audio task is done');
+    expect(banner).toHaveTextContent('will not be published');
+    expect(onDecided).toHaveBeenCalled();
+  });
+
+  it('treats a response with no matchesGolden as "not known", not as a problem', async () => {
+    // The field is optional on the client so an older deployment reads as unknown. Announcing a
+    // divergence nobody reported would be worse than saying nothing.
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => entryFixture });
+      if (url.includes('/utterances') && url.includes('/register')) {
+        return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'id' }) });
+      }
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByText('wòhun'));
+    await recordBothTakes(user);
+    await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
+    await user.click(screen.getByRole('button', { name: 'Submit recording' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Recording submitted.'));
+    expect(screen.queryByLabelText('Recording saved but not publishable')).not.toBeInTheDocument();
+  });
+
+  it('warns BEFORE recording when the pronunciation already differs from the record', async () => {
+    // A word whose stored split cannot reconstitute its spelling falls back to a derived one, so
+    // what is about to be recorded diverges from the outset. The speaker should be choosing that,
+    // not discovering it from a banner after they have finished.
+    const inconsistent = { ...entryFixture, displayText: 'wòhun', syllables: ['wò', 'hun', 'extra'] };
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => inconsistent });
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+
+    const notice = await waitFor(() => screen.getByLabelText('Pronunciation differs from the record'));
+    expect(notice).toHaveTextContent('your task counts');
+
+    // Not a block. The tester's point was that a conflict is worth communicating and not worth
+    // refusing, so submitting stays reachable with the notice on screen.
+    await recordBothTakes(user);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit recording' })).toBeEnabled());
+    expect(screen.getByLabelText('Pronunciation differs from the record')).toBeInTheDocument();
+  });
+
   it('shows a VOLUNTEER no other speakers at all - not even an empty section', async () => {
     // Hearing someone else say the word first is an anchor, and the point of every participant
     // recording every word themselves is INDEPENDENT pronunciations - the divergence between

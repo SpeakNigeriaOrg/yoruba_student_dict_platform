@@ -143,7 +143,7 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
   it('submits keep_ours when the reviewer changes nothing', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ action: 'keep_ours', definitionAction: 'confirm' }));
   });
@@ -153,7 +153,7 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     const fetchMock = await loaded(entryFixture);
 
     await user.click(screen.getByLabelText('Syllable 2 high tone'));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
@@ -170,7 +170,7 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     const fetchMock = await loaded(entryFixture);
 
     await user.click(screen.getByLabelText('Syllable 1 mid tone'));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ newDisplayText: 'dujẹ̀kù' }));
   });
@@ -180,7 +180,7 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     const fetchMock = await loaded(entryFixture);
 
     await user.click(screen.getByLabelText('Syllable 2 high tone'));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).newDisplayText).toContain('ẹ'));
   });
@@ -203,7 +203,7 @@ describe('normalization must never masquerade as an edit', () => {
   it('confirming a non-NFC word without changes submits keep_ours, not a respelling', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(nfdFixture);
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
     expect(postedBody(fetchMock).newDisplayText).toBeUndefined();
@@ -216,7 +216,7 @@ describe('normalization must never masquerade as an edit', () => {
     // Syllable 1 is already low; tapping low must not manufacture a respelling out of
     // the recomposition alone.
     await user.click(screen.getByLabelText('Syllable 1 low tone'));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
   });
@@ -226,7 +226,7 @@ describe('normalization must never masquerade as an edit', () => {
     const fetchMock = await loaded(nfdFixture);
 
     await user.click(screen.getByLabelText('Syllable 1 high tone'));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
   });
@@ -338,7 +338,7 @@ describe('correcting the letters', () => {
     const box = screen.getByLabelText('Letters of syllable 3');
     await user.clear(box);
     await user.type(box, 'ko');
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
       const body = postedBody(fetchMock);
@@ -362,7 +362,7 @@ describe('correcting the letters', () => {
     const fetchMock = await loaded(nasalFixture);
 
     await user.click(screen.getByRole('button', { name: 'Make the nasal of syllable 2 its own syllable' }));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
       const body = postedBody(fetchMock);
@@ -383,7 +383,7 @@ describe('correcting the letters', () => {
     await user.click(screen.getByRole('button', { name: 'Make the nasal of syllable 2 its own syllable' }));
     // Four columns now, and the nasal is the third.
     await user.click(screen.getByRole('button', { name: 'Syllable 3 low tone' }));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
       const body = postedBody(fetchMock);
@@ -414,7 +414,7 @@ describe('correcting the letters', () => {
     expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('dùjẹ̀kù');
 
     // And submitting now claims nothing was changed.
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
   });
 
@@ -445,7 +445,7 @@ describe('correcting the letters', () => {
     await user.type(box, 'xyz');
     await user.click(screen.getByRole('button', { name: 'Discard changes' }));
 
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({ action: 'respell', newDisplayText: 'dùjẹ̀kú' }),
     );
@@ -462,7 +462,7 @@ describe('correcting the letters', () => {
     await user.click(screen.getByRole('button', { name: 'Done with letters' }));
 
     expect(screen.queryByLabelText('Letters of syllable 3')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
   });
 
@@ -501,7 +501,7 @@ describe('the student definition is a simplification, not a correction', () => {
 
     await user.clear(screen.getByLabelText('Student definition'));
     await user.type(screen.getByLabelText('Student definition'), 'a bird we keep for eggs');
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
@@ -515,7 +515,7 @@ describe('the student definition is a simplification, not a correction', () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ definitionAction: 'confirm' }));
   });
@@ -527,7 +527,7 @@ describe('atomicity: an entry is decided as a whole', () => {
     // spelling choice first. A pre-filled editor means the reviewer can confirm
     // straight away or change any syllable - both are real answers.
     await loaded(entryFixture);
-    expect(screen.getByRole('button', { name: 'Confirm entry' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Record my answer' })).toBeEnabled();
   });
 
   it('will not submit with an empty definition', async () => {
@@ -536,31 +536,49 @@ describe('atomicity: an entry is decided as a whole', () => {
 
     await user.clear(screen.getByLabelText('Student definition'));
 
-    expect(screen.getByRole('button', { name: 'Confirm entry' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Record my answer' })).toBeDisabled();
     expect(fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST')).toBeUndefined();
   });
 
-  it('sends both halves in ONE request to /api/decisions/entry', async () => {
+  it('sends both halves in ONE request', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
     await user.clear(screen.getByLabelText('Student definition'));
     await user.type(screen.getByLabelText('Student definition'), 'a hen');
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
       const posts = fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
       expect(posts).toHaveLength(1);
-      expect(posts[0][0]).toBe('/api/decisions/entry');
     });
     expect(postedBody(fetchMock)).toMatchObject({ action: 'keep_ours', definitionAction: 'custom', definitionText: 'a hen' });
   });
 
-  it('a non-curator proposes a contribution instead of deciding directly', async () => {
+  it('records a CURATOR\'s answer as a contribution, exactly like anyone else\'s', async () => {
+    // This reverses the old behaviour deliberately. A curator's Confirm used to POST
+    // /decisions/entry and write golden_record on the spot, off one boolean, with the word
+    // "entry" on the button as the only sign of which had happened - and a curator had no
+    // way to record a mere opinion at all, though the consensus model has always assumed
+    // their answer is one vote among others. Deciding is now a separate act in a separate
+    // place, where the tally is visible.
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture, true);
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
+      expect(post?.[0]).toBe('/api/contributions');
+    });
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/decisions/'))).toBe(false);
+  });
+
+  it('records a volunteer\'s answer the same way, through the same button', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture, false);
 
-    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
@@ -630,7 +648,7 @@ describe('curator tools', () => {
     const radios = screen.getByLabelText('Candidates considered').querySelectorAll('input[type=radio]');
     await user.click(radios[2]);
     await user.type(screen.getByLabelText('Student definition'), 'to hang something up');
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
@@ -661,7 +679,7 @@ describe('curator tools', () => {
 
     expect(screen.getByLabelText('Student definition')).toHaveValue('a different meaning');
 
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
         action: 'select_candidate',
@@ -709,7 +727,7 @@ describe('failures', () => {
 
     render(<EntryReview wordId="w" isCurator={true} />);
     await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('nope'));
     expect(screen.getByLabelText('Tone editor')).toBeInTheDocument();
@@ -759,7 +777,7 @@ describe('a phrase can be respelled here, because nothing else can respell it', 
 
     await user.clear(screen.getByLabelText('The phrase, spelled as it is said'));
     await user.type(screen.getByLabelText('The phrase, spelled as it is said'), 'fi sile');
-    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
     const body = postedBody(fetchMock);
@@ -773,7 +791,7 @@ describe('a phrase can be respelled here, because nothing else can respell it', 
   it('an untouched phrase is keep_ours, not a respelling of itself', async () => {
     const fetchMock = await loadedPhrase();
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
   });
 
@@ -833,7 +851,7 @@ describe('a hyphenated entry is editable, and its hyphen is a separator', () => 
     const field = screen.getByLabelText('The phrase, spelled as it is said');
     await user.clear(field);
     await user.type(field, 'ilé-ìwé');
-    await user.click(screen.getByRole('button', { name: /^Confirm/ }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
     const body = postedBody(fetchMock);
@@ -907,7 +925,7 @@ describe('linking an etymology must not swallow the spelling that was corrected 
     await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
     await user.click(screen.getByRole('button', { name: 'Use this record' }));
 
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
     expect(postedBody(fetchMock)).toMatchObject({
       action: 'respell',
@@ -930,7 +948,7 @@ describe('linking an etymology must not swallow the spelling that was corrected 
     await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
     await user.click(screen.getByRole('button', { name: 'Use this record' }));
 
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
     expect(postedBody(fetchMock).senseEntryId).toBe('en-o-ṣe-yo-intj-NEW');
   });
@@ -947,7 +965,7 @@ describe('linking an etymology must not swallow the spelling that was corrected 
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByRole('button', { name: 'Use this record' }));
     await user.click(screen.getByRole('button', { name: 'Use this record' }));
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() =>
       expect(postedBody(fetchMock)).toMatchObject({
@@ -975,7 +993,7 @@ describe('linking an etymology must not swallow the spelling that was corrected 
 
     // Loaded into the composer, not submitted from under the curator - and it travels as a
     // respell, since a phrase has no adopt_kaikki route (diagnoseEntry returns early for one).
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
     expect(postedBody(fetchMock).newDisplayText).toBe('o ṣé');
   });

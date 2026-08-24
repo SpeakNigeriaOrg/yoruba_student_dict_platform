@@ -369,8 +369,10 @@ describe('ReviewQueue', () => {
       render(<ReviewQueue onOpenWord={() => {}} />);
       await waitFor(() => screen.getByLabelText('Claims for display_con1'));
 
-      // Two claims, so two "Use this" buttons; take the minority one.
-      const buttons = screen.getAllByRole('button', { name: 'Use this' });
+      // Two claims, so two buttons; take the minority one. The label names the act rather
+      // than saying "Use this" in every section - in Conflicts, choosing settles a live
+      // disagreement, which is not the same as promoting an unchecked lone vote elsewhere.
+      const buttons = screen.getAllByRole('button', { name: 'Settle it with this' });
       expect(buttons).toHaveLength(2);
       await user.click(buttons[1]);
 
@@ -383,7 +385,7 @@ describe('ReviewQueue', () => {
       mockFetch([READY]);
       render(<ReviewQueue onOpenWord={() => {}} />);
       await waitFor(() => screen.getByLabelText('Claims for display_ready1'));
-      expect(screen.queryByRole('button', { name: 'Use this' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Set the record to this' })).not.toBeInTheDocument();
     });
 
     it('lets a curator open the word instead of picking someone else\'s answer', async () => {

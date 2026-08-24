@@ -36,10 +36,13 @@ export function AxisBanner({
   currentAxis,
   showAxisChips = true,
 }: AxisBannerProps) {
+  // The audio chip carries a mark when the recording exists but no longer matches the word.
+  // Leaving it plain green would be the same claim the badge row just stopped making: done AND
+  // publishable, when only the first is true.
   const chips: Array<{ label: string; done: boolean }> = [
     { label: 'entry', done: axisDecided.entry },
     { label: 'etymology', done: axisDecided.etymology },
-    { label: 'audio', done: axisDecided.audio },
+    { label: axisDecided.audio && axisDecided.audioDiverges ? "audio (won't publish)" : 'audio', done: axisDecided.audio },
     { label: 'example', done: axisDecided.example },
   ];
 

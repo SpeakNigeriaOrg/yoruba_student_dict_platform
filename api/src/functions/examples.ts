@@ -10,7 +10,7 @@
 
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { getPool } from '../db.js';
-import { ForbiddenError, requireUser, UnauthenticatedError } from '../httpAuth.js';
+import { ForbiddenError, requireCurator, requireUser, UnauthenticatedError } from '../httpAuth.js';
 import { listExamples } from '../handlers/listExamples.js';
 import {
   submitExample,
@@ -20,6 +20,7 @@ import {
   type ExampleType,
 } from '../handlers/submitExample.js';
 import { WordNotFoundError } from '../handlers/errors.js';
+import { excludeExample, ExampleAlreadyExcludedError, ExampleNotFoundError } from '../handlers/excludeExample.js';
 
 function parseSubmitExampleInput(body: unknown): SubmitExampleInput {
   if (!body || typeof body !== 'object') throw new Error('request body must be a JSON object');
@@ -83,4 +84,31 @@ app.http('SubmitExample', {
   authLevel: 'anonymous',
   route: 'words/{wordId}/examples',
   handler: submitExampleFunction,
+});
+
+/** POST /api/examples/{exampleId}/exclude - curator-only moderation.
+ *
+ * 0015 designed the columns for this and nothing ever wrote them. See excludeExample.ts. */
+export async function excludeExampleFunction(
+  request: HttpRequest,
+  _context: InvocationContext,
+): Promise<HttpResponseInit> {
+  try {
+    const user = await requireCurator(request);
+    const body = (await request.json()) as Record<string, unknown> | null;
+    const reason = body && typeof body.reason === 'string' ? body.reason : '';
+    await excludeExample(getPool(), request.params.exampleId, reason, user.userId);
+    return { status: 200, jsonBody: { exampleId: request.params.exampleId, status: 'excluded' } };
+  } catch (err) {
+    if (err instanceof ExampleNotFoundError) return { status: 404, jsonBody: { error: err.message } };
+    if (err instanceof ExampleAlreadyExcludedError) return { status: 409, jsonBody: { error: err.message } };
+    return errorResponse(err);
+  }
+}
+
+app.http('ExcludeExample', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'examples/{exampleId}/exclude',
+  handler: excludeExampleFunction,
 });

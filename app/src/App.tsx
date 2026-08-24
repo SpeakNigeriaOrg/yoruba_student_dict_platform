@@ -14,10 +14,10 @@
 import { AddWord } from './screens/AddWord.js';
 import { AdminUserDetail } from './screens/AdminUserDetail.js';
 import { AdminUsers } from './screens/AdminUsers.js';
-import { AllWordsList } from './screens/AllWordsList.js';
 import { ContributorTerms } from './screens/ContributorTerms.js';
-import { ReviewQueue } from './screens/ReviewQueue.js';
+import { Dictionary } from './screens/Dictionary.js';
 import { TaskQueue } from './screens/TaskQueue.js';
+import { WordDossier } from './screens/WordDossier.js';
 import { WordReview } from './screens/WordReview.js';
 import { getMyGrant } from './api.js';
 import { getClientPrincipal, type ClientPrincipal } from './identity.js';
@@ -26,11 +26,16 @@ import type { Axis, Route } from './route.js';
 import { useEffect, useState } from 'react';
 
 type MainView = Route['view'];
+// Four, not five. Browse and Review were two tabs asking two questions about one corpus,
+// and both are now views inside Dictionary - which is also what lets a count on the
+// overview open the words behind it.
+//
+// The order is the order of the day's work: what am I being asked to do, what is the state
+// of the whole thing, add something new, who is doing it.
 const MAIN_VIEWS: Array<{ view: MainView; label: string; icon: string }> = [
   { view: 'queue', label: 'Tasks', icon: '📋' },
-  { view: 'browse', label: 'Browse', icon: '🔍' },
+  { view: 'dictionary', label: 'Dictionary', icon: '📖' },
   { view: 'add', label: 'Add', icon: '➕' },
-  { view: 'contributions', label: 'Review', icon: '✅' },
   { view: 'users', label: 'Users', icon: '👥' },
 ];
 
@@ -77,9 +82,11 @@ export default function App() {
     navigate({ view: 'word', wordId, axis });
   }
 
-  // Which bottom-nav tab reads as current, including for the nested user
-  // detail route.
-  const activeView: MainView = route.view === 'user' ? 'users' : route.view;
+  // Which bottom-nav tab reads as current, including for the routes nested under one: a
+  // user's detail page belongs to Users, and a word's dossier belongs to Dictionary, which
+  // is where it is reached from.
+  const activeView: MainView =
+    route.view === 'user' ? 'users' : route.view === 'dossier' ? 'dictionary' : route.view;
 
   return (
     <main>
@@ -132,26 +139,43 @@ export default function App() {
                 // route pointing at a word_id that no longer exists, so both must navigate:
                 // a rename REPLACES this history entry (going Back to the old id would 404
                 // on a word that was never really a different word), while a deletion pushes
-                // Browse, because there is nothing left to be on.
+                // the word survey, because there is nothing left to be on.
                 entryAdmin={{
                   onRenamed: (newWordId) => navigate({ view: 'word', wordId: newWordId, axis: route.axis }, { replace: true }),
-                  onDeleted: () => navigate({ view: 'browse' }),
+                  onDeleted: () => navigate({ view: 'dictionary', tab: 'words' }),
                 }}
               />
             </>
-          ) : route.view === 'user' ? (
+          ) : route.view === 'dossier' && isCurator ? (
+            <>
+              <button type="button" className="back-btn" onClick={() => window.history.back()}>
+                ← Back
+              </button>
+              <WordDossier
+                wordId={route.wordId}
+                onOpenWord={(wordId) => openWord(wordId, 'entry')}
+                onOpenDossier={(wordId) => navigate({ view: 'dossier', wordId })}
+              />
+            </>
+          ) : /* Gated like its four siblings. It was the one route that was not, so a
+                volunteer reaching #/users/{id} rendered the whole admin screen - a live
+                assign-all-words control above a list that 403s. */
+          route.view === 'user' && isCurator ? (
             <>
               <button type="button" className="back-btn" onClick={() => window.history.back()}>
                 ← Back
               </button>
               <AdminUserDetail userId={route.userId} onSelectWord={(wordId) => openWord(wordId, 'entry')} />
             </>
-          ) : route.view === 'browse' && isCurator ? (
-            <AllWordsList onSelect={(wordId) => openWord(wordId, 'entry')} />
+          ) : route.view === 'dictionary' && isCurator ? (
+            <Dictionary
+              tab={route.tab}
+              onTabChange={(tab) => navigate({ view: 'dictionary', tab }, { replace: true })}
+              onOpenWord={openWord}
+              onOpenDossier={(wordId) => navigate({ view: 'dossier', wordId })}
+            />
           ) : route.view === 'add' && isCurator ? (
             <AddWord onOpenWord={(wordId) => openWord(wordId, 'entry')} />
-          ) : route.view === 'contributions' && isCurator ? (
-            <ReviewQueue onOpenWord={openWord} />
           ) : route.view === 'users' && isCurator ? (
             <AdminUsers onSelectUser={(userId) => navigate({ view: 'user', userId })} />
           ) : (
@@ -169,7 +193,7 @@ export default function App() {
                   key={view.view}
                   type="button"
                   aria-current={activeView === view.view ? 'page' : undefined}
-                  onClick={() => navigate({ view: view.view } as Route)}
+                  onClick={() => navigate(view.view === 'dictionary' ? { view: 'dictionary', tab: 'overview' } : ({ view: view.view } as Route))}
                 >
                   <span className="nav-icon" aria-hidden="true">
                     {view.icon}

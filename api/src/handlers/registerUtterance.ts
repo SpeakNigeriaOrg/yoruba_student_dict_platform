@@ -37,10 +37,20 @@
 // audio precisely so review/playback later shows what pronunciation a
 // given clip actually represents, distinct from the word's eventual
 // canonical spelling.
+//
+// A divergence is REPORTED and never rejected. The recording says what the
+// speaker said, which is the whole point of 0006 - but publish will drop it
+// while it disagrees with golden_record, and the person who can act on that
+// is the speaker, at the moment they finish recording. So the result carries
+// matchesGolden and the screen says so. Refusing the write instead would
+// destroy the belief the freeze exists to keep, and it would make the audio
+// task unfinishable for a volunteer whose own spelling correction is still a
+// pending contribution - which is exactly what the axis flag used to do.
 
 import { orthographyInsensitiveForm, toneInsensitiveForm } from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
 import type pg from 'pg';
+import { recordingMatchesGolden } from '../reviewShared.js';
 import { getOrCreateSpeakerForUser } from '../speakers.js';
 import { WordNotFoundError } from './errors.js';
 
@@ -74,6 +84,12 @@ export interface RegisterUtteranceInput {
 
 export interface RegisterUtteranceResult {
   utteranceId: string;
+  /** Whether this recording's own pronunciation still equals golden_record's current
+   * display_text and syllables.
+   *
+   * False is ACCEPTED and stored - it is what the speaker said - but publish excludes it,
+   * so the caller has to say so rather than reporting a bare success. */
+  matchesGolden: boolean;
 }
 
 export async function registerUtterance(
@@ -91,8 +107,14 @@ async function registerUtteranceInTransaction(
   userId: string,
   speakerDisplayName: string,
 ): Promise<RegisterUtteranceResult> {
-  const wordResult = await client.query('select 1 from golden_record where word_id = $1', [input.wordId]);
+  // Widened from `select 1`: the existence check and the publish comparison want the same
+  // row, and reading it twice is how the two drift.
+  const wordResult = await client.query<{ display_text: string; syllables: string[] }>(
+    'select display_text, syllables from golden_record where word_id = $1',
+    [input.wordId],
+  );
   if (wordResult.rowCount === 0) throw new WordNotFoundError(input.wordId);
+  const matchesGolden = recordingMatchesGolden(input.recordedDisplayText, input.recordedSyllables, wordResult.rows[0]);
 
   const speakerId = await getOrCreateSpeakerForUser(client, userId, speakerDisplayName);
   const status = input.segments && input.segments.length > 0 ? 'segmented' : 'pending_processing';
@@ -178,5 +200,5 @@ async function registerUtteranceInTransaction(
     );
   }
 
-  return { utteranceId };
+  return { utteranceId, matchesGolden };
 }

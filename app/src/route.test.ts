@@ -18,10 +18,28 @@ describe('parseHash', () => {
 
   it('parses the flat curator views', () => {
     expect(parseHash('#/queue')).toEqual({ view: 'queue' });
-    expect(parseHash('#/browse')).toEqual({ view: 'browse' });
     expect(parseHash('#/add')).toEqual({ view: 'add' });
-    expect(parseHash('#/contributions')).toEqual({ view: 'contributions' });
     expect(parseHash('#/users')).toEqual({ view: 'users' });
+  });
+
+  it('parses the curating surface and defaults it to the overview', () => {
+    expect(parseHash('#/dictionary')).toEqual({ view: 'dictionary', tab: 'overview' });
+    expect(parseHash('#/dictionary/words')).toEqual({ view: 'dictionary', tab: 'words' });
+    expect(parseHash('#/dictionary/decisions')).toEqual({ view: 'dictionary', tab: 'decisions' });
+    expect(parseHash('#/dictionary/rights')).toEqual({ view: 'dictionary', tab: 'rights' });
+    expect(parseHash('#/dictionary/nonsense')).toEqual({ view: 'dictionary', tab: 'overview' });
+  });
+
+  it('parses a dossier route, and refuses one with no word', () => {
+    expect(parseHash('#/dossier/owo_hand')).toEqual({ view: 'dossier', wordId: 'owo_hand' });
+    expect(parseHash('#/dossier')).toEqual(DEFAULT_ROUTE);
+  });
+
+  it('lands an old browse or contributions link on the view that replaced it', () => {
+    // Both were folded into the dictionary surface. Silently dropping a bookmark on the
+    // queue would look like the app losing its place.
+    expect(parseHash('#/browse')).toEqual({ view: 'dictionary', tab: 'words' });
+    expect(parseHash('#/contributions')).toEqual({ view: 'dictionary', tab: 'decisions' });
   });
 
   it('parses a user detail route', () => {
@@ -48,7 +66,7 @@ describe('parseHash', () => {
   });
 
   it('tolerates a missing leading slash', () => {
-    expect(parseHash('#browse')).toEqual({ view: 'browse' });
+    expect(parseHash('#queue')).toEqual({ view: 'queue' });
   });
 });
 
@@ -56,10 +74,13 @@ describe('formatRoute', () => {
   it('round-trips every route shape', () => {
     const routes: Route[] = [
       { view: 'queue' },
-      { view: 'browse' },
       { view: 'add' },
-      { view: 'contributions' },
       { view: 'users' },
+      { view: 'dictionary', tab: 'overview' },
+      { view: 'dictionary', tab: 'words' },
+      { view: 'dictionary', tab: 'decisions' },
+      { view: 'dictionary', tab: 'rights' },
+      { view: 'dossier', wordId: 'epo_oil' },
       { view: 'user', userId: 'abc-123' },
       { view: 'word', wordId: 'epo_oil', axis: 'entry' },
       { view: 'word', wordId: 'epo_oil', axis: 'etymology' },

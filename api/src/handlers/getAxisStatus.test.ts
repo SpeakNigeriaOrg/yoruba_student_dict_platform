@@ -43,7 +43,7 @@ describe('getAxisStatus', () => {
     await insertWord(wordId);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ entry: false, etymology: false, audio: false, example: false });
+    expect(result).toEqual({ entry: false, etymology: false, audio: false, audioDiverges: false, example: false });
   });
 
   it('reports spelling as decided once a word_decisions row exists', async () => {
@@ -59,7 +59,7 @@ describe('getAxisStatus', () => {
     ]);
 
     const result = await getAxisStatus(pool, wordId, userId);
-    expect(result).toEqual({ entry: true, etymology: false, audio: false, example: false });
+    expect(result).toEqual({ entry: true, etymology: false, audio: false, audioDiverges: false, example: false });
   });
 
   it('reports audio as recorded once the REQUESTING user has their own utterance registered', async () => {
@@ -100,11 +100,21 @@ describe('getAxisStatus', () => {
     expect(result.audio).toBe(false);
   });
 
-  it('stops reporting audio once the word is re-split, because publish stops accepting it', async () => {
-    // The gap this closes: the axis used to ask only "does this user have a row in utterances?", so
-    // a word whose spelling or split changed after recording read as DONE while every one of its
-    // recordings was being silently dropped from the game export. The axis that should have raised
-    // it was the one saying green.
+  it('keeps reporting audio once the word is re-split, and flags that it will not publish', async () => {
+    // Both halves of this area's history are in this one assertion, and neither may be lost.
+    //
+    // The ORIGINAL gap: the axis asked only "does this user have a row in utterances?", so a word
+    // whose spelling or split changed after recording read as DONE while every one of its
+    // recordings was being silently dropped from the game export. The axis that should have
+    // raised it was the one saying green.
+    //
+    // The OVERCORRECTION: requiring the match made `audio` answer the publish question instead.
+    // A volunteer's spelling correction is a contribution, not a decision, so it never reaches
+    // golden_record - and the audio screen then invites them to say the word the way they just
+    // argued it should be said. Their recording saved, the axis stayed red, and the task could
+    // not be completed by anyone but a curator. A beta tester hit exactly that.
+    //
+    // So it is two flags, not one: the task is done, and the recording will not ship.
     const wordId = `${NS}word_resplit`;
     await insertWord(wordId);
     const speaker = await pool.query<{ speaker_id: string }>(
@@ -121,10 +131,12 @@ describe('getAxisStatus', () => {
     // Re-split the word without touching the recording - exactly what freeing a nasal does.
     await pool.query('update golden_record set syllables = $1 where word_id = $2', [[wordId, 'n̄'], wordId]);
 
-    expect((await getAxisStatus(pool, wordId, userId)).audio).toBe(false);
+    const after = await getAxisStatus(pool, wordId, userId);
+    expect(after.audio).toBe(true);
+    expect(after.audioDiverges).toBe(true);
   });
 
-  it('stops reporting audio once the word is re-spelled', async () => {
+  it('keeps reporting audio once the word is re-spelled, and flags that it will not publish', async () => {
     const wordId = `${NS}word_respelled`;
     await insertWord(wordId);
     const speaker = await pool.query<{ speaker_id: string }>(
@@ -139,7 +151,64 @@ describe('getAxisStatus', () => {
 
     await pool.query('update golden_record set display_text = $1 where word_id = $2', [`${wordId}x`, wordId]);
 
-    expect((await getAxisStatus(pool, wordId, userId)).audio).toBe(false);
+    const after = await getAxisStatus(pool, wordId, userId);
+    expect(after.audio).toBe(true);
+    expect(after.audioDiverges).toBe(true);
+  });
+
+  it('reports no divergence for a recording that still matches', async () => {
+    const wordId = `${NS}word_matching`;
+    await insertWord(wordId);
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (display_name, user_id) values ($1, $2) returning speaker_id',
+      [`${NS}matchspeaker`, userId],
+    );
+    await pool.query(
+      `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+       values ($1, $2, 1, 'x', $3, $4)`,
+      [wordId, speaker.rows[0].speaker_id, wordId, [wordId]],
+    );
+
+    const result = await getAxisStatus(pool, wordId, userId);
+    expect(result.audio).toBe(true);
+    expect(result.audioDiverges).toBe(false);
+  });
+
+  it('never reports divergence for a word with no recording at all', async () => {
+    // audioDiverges qualifies a finished task; it must not describe a missing one.
+    const wordId = `${NS}word_norecording`;
+    await insertWord(wordId);
+    const result = await getAxisStatus(pool, wordId, userId);
+    expect(result.audio).toBe(false);
+    expect(result.audioDiverges).toBe(false);
+  });
+
+  it('flags divergence when ONE take is stale, even though the other still matches', async () => {
+    // bool_and, not bool_or - and this is the case that decides it. A submission writes takes 1
+    // and 2, and publish reads both: take 1 for the word clip, take 2's syllable_observations for
+    // the syllable clips. Calling the word clean because half of it matches would report coverage
+    // that does not exist, and would contradict the per-recording "no longer matches" badges shown
+    // on the same screen.
+    const wordId = `${NS}word_halfstale`;
+    await insertWord(wordId);
+    const speaker = await pool.query<{ speaker_id: string }>(
+      'insert into speakers (display_name, user_id) values ($1, $2) returning speaker_id',
+      [`${NS}halfstalespeaker`, userId],
+    );
+    for (const [take, recorded] of [
+      [1, wordId],
+      [2, `${wordId}_stale`],
+    ] as const) {
+      await pool.query(
+        `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
+         values ($1, $2, $3, 'x', $4, $5)`,
+        [wordId, speaker.rows[0].speaker_id, take, recorded, [recorded]],
+      );
+    }
+
+    const result = await getAxisStatus(pool, wordId, userId);
+    expect(result.audio).toBe(true);
+    expect(result.audioDiverges).toBe(true);
   });
 
   it('rejects a word_id that does not exist', async () => {

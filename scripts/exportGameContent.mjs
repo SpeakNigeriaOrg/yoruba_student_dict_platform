@@ -120,10 +120,13 @@
 //     A curator labeling UI (browse unlabeled image, pick a word, save)
 //     is the natural next step, same shape as EtymologyReview's inline
 //     "add missing component" flow.
-//   - No curator-visible coverage view exists yet in the curation app
-//     (would surface the same per-speaker-per-word audio coverage, and
-//     now per-word image coverage, computed here, as a UI instead of an
-//     offline script's console output).
+//   - The per-speaker-per-word coverage and per-word image coverage this
+//     script computes ARE now visible in the curation app: Dictionary ->
+//     Coverage (api/src/handlers/coverageReport.ts) and the word survey's
+//     image column. Both apply the same rules, from
+//     shared/src/publicationReadiness.ts. What is still only here is
+//     per-THEME coverage, which needs sessions_source.json from the game
+//     repo, and the orphaned-object report, which needs bucket credentials.
 //
 // Usage:
 //   DATABASE_URL=postgres://... node scripts/exportGameContent.mjs [--repo-dir=<path>] [--game-dir=<path>]
@@ -132,6 +135,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { reportUpstreamHealth } from './upstreamPublishCheck.mjs';
+import { recordingMatchesGoldenSql } from '../shared/dist/index.js';
 
 const args = process.argv.slice(2);
 function argValue(flag, fallback) {
@@ -271,8 +275,7 @@ async function main() {
      join golden_record w on w.word_id = u.word_id
      where u.take_number = 1
        and u.audio_data is not null
-       and u.recorded_display_text = w.display_text
-       and u.recorded_syllables = w.syllables`,
+       and ${recordingMatchesGoldenSql('u', 'w')}`,
   );
   // Say what was dropped, and name WHY.
   //
@@ -287,7 +290,7 @@ async function main() {
      join golden_record w on w.word_id = u.word_id
      where u.take_number = 1
        and u.audio_data is not null
-       and (u.recorded_display_text != w.display_text or u.recorded_syllables != w.syllables)
+       and not (${recordingMatchesGoldenSql('u', 'w')})
      group by w.word_id, w.display_text
      order by w.word_id`,
   );

@@ -535,6 +535,54 @@ describe('applyEntryDecision', () => {
       ).rejects.toBeInstanceOf(KaikkiVerificationMismatchError);
     });
 
+    it('re-splits the word it is becoming, so the stored split cannot describe the old spelling', async () => {
+      // Note: NO syllableAction. This branch used to write display_text and nothing else, leaving
+      // the row holding the split of the word it used to be - the exact disagreement the respell
+      // branch is careful never to create. It made the word permanently unrecordable-for-publish:
+      // the publish comparison wants recorded_syllables to equal the stored split, while the audio
+      // screen offers the split of the current spelling, and the two could never agree again.
+      const wordId = `${NS}adopt_resplits`;
+      await insertWord(wordId, 'kasu', ['ka', 'su']);
+
+      await applyEntryDecision(
+        pool,
+        wordId,
+        { action: 'adopt_kaikki', newDisplayText: 'kásù', definitionAction: 'confirm' },
+        curatorUserId,
+      );
+
+      const word = await pool.query<{ display_text: string; syllables: string[] }>(
+        'select display_text, syllables from golden_record where word_id = $1',
+        [wordId],
+      );
+      expect(word.rows[0].display_text).toBe('kásù');
+      expect(word.rows[0].syllables.join('')).toBe('kásù');
+    });
+
+    it('still lets an authored split win over the re-derived one', async () => {
+      // The respell guard has to survive the change above: an authored split is a claim, and
+      // re-deriving it is not. A decision carrying both must keep the human's.
+      const wordId = `${NS}adopt_respell_wins`;
+      await insertWord(wordId, 'kasu', ['ka', 'su']);
+
+      await applyEntryDecision(
+        pool,
+        wordId,
+        {
+          action: 'respell',
+          newDisplayText: 'kásù',
+          newSyllables: ['kás', 'ù'],
+          definitionAction: 'confirm',
+        },
+        curatorUserId,
+      );
+
+      const word = await pool.query<{ syllables: string[] }>('select syllables from golden_record where word_id = $1', [
+        wordId,
+      ]);
+      expect(word.rows[0].syllables).toEqual(['kás', 'ù']);
+    });
+
     it('rolls the whole decision back when verification fails - including the definition half', async () => {
       const wordId = `${NS}adopt_rollback`;
       await insertWord(wordId, 'kasu', ['ka', 'su'], 'original gloss');

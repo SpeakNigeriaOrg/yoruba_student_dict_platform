@@ -21,7 +21,6 @@ import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-
 import {
   createWord,
   getEtymologyReview,
-  postEtymologyDecision,
   requestComponent,
   requestUnlistedWord,
   searchKaikki,
@@ -372,6 +371,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const [draftComponents, setDraftComponents] = useState<string[]>([]);
   const [draftLabels, setDraftLabels] = useState<Record<string, DraftComponentLabel>>({});
   const [showTools, setShowTools] = useState(false);
+  /** Opened deliberately, by its own button. See the note where the picker is rendered. */
+  const [showCustomComponents, setShowCustomComponents] = useState(false);
   /** The disagree branch. "It has no parts" is a complete answer on its own; saying it
    * DOES have parts is only half an answer, so it reveals the picker rather than
    * submitting. Available to volunteers - it was curator-only, which is precisely what
@@ -422,13 +423,11 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
 
   async function submit(input: ApplyEtymologyDecisionInput, successMessage: string) {
     try {
-      if (isCurator) {
-        await postEtymologyDecision(wordId, input);
-        setStatus(successMessage);
-      } else {
-        await submitEtymologyContribution(wordId, input);
-        setStatus(`Proposed: ${successMessage}`);
-      }
+      // Everyone contributes, curators included - and this axis is the clearest case for it.
+      // A curator's grasp of a word's parts is not better than a volunteer's; it is one more
+      // reading of the same evidence, which is exactly what the consensus tally is for.
+      await submitEtymologyContribution(wordId, input);
+      setStatus(`Recorded as your answer: ${successMessage}`);
       onDecided?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -557,7 +556,9 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   if (error) return <p role="alert" className="error-banner">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
 
-  const label = (text: string) => (isCurator ? text : `Propose: ${text}`);
+  // One wording for everyone. It used to be the volunteer who got the explicit "Propose:"
+  // while the curator got the bare verb - the person writing fact had the vaguer label.
+  const label = (text: string) => text;
 
   return (
     <section aria-label="Etymology review" className={`card${review.axisDecided.etymology ? ' decided' : ''}`}>
@@ -693,21 +694,25 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         *
         * "Already confirmed as used in" used to live here too and is gone with the rest of the
         * reverse direction - see the note above. */}
-      {isCurator ? (
-        <div className="curator-tools">
-          <button type="button" className="btn btn-secondary" aria-expanded={showTools} onClick={() => setShowTools((v) => !v)}>
-            {showTools ? 'Hide curator tools' : 'Curator tools'}
-          </button>
-          {!showTools ? null : (
-            <div aria-label="Etymology curator tools">
-              <div className="field">
-                <label htmlFor="etymology-note-field">Note</label>
-                <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
-              </div>
+      {/* The note is for everyone now.
+        *
+        * It lived inside a panel only curators could open, so a volunteer's contribution
+        * could never carry one - although the endpoint has always accepted it, and the
+        * person most likely to want to explain their reasoning is the one least sure of it. */}
+      <div className="curator-tools">
+        <button type="button" className="btn btn-secondary" aria-expanded={showTools} onClick={() => setShowTools((v) => !v)}>
+          {showTools ? 'Hide note' : 'Add a note'}
+        </button>
+        {!showTools ? null : (
+          <div aria-label="Etymology note">
+            <div className="field">
+              <label htmlFor="etymology-note-field">Note</label>
+              <textarea id="etymology-note-field" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+              <p className="field-note">Why you answered this way. Kept with your answer.</p>
             </div>
-          )}
-        </div>
-      ) : null}
+          </div>
+        )}
+      </div>
 
       {/* Only the applicable answers, and hidden rather than disabled.
         *
@@ -797,7 +802,19 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           </button>
         ) : null}
       </div>
-      {isPhrase || claimsHasParts || (isCurator && showTools) ? (
+      {/* No longer opened as a side effect of the notes panel.
+        *
+        * `isCurator && showTools` used to be a third way in here, so expanding a panel
+        * advertised as a Note box also rendered this picker below the fold - and its Save
+        * button wrote golden_record. The panel said nothing about that. It writes a
+        * contribution now, which is less dangerous, but a control appearing because you
+        * opened something else is still a control nobody chose to open. */}
+      {!isPhrase && !claimsHasParts && !showCustomComponents ? (
+        <button type="button" className="btn btn-secondary" onClick={() => setShowCustomComponents(true)}>
+          Say what its parts are
+        </button>
+      ) : null}
+      {isPhrase || claimsHasParts || showCustomComponents ? (
         <div aria-label="Component picker">
           <h4>{isPhrase ? 'The words of this phrase, in order' : 'Which words is it made of?'}</h4>
           <p className="field-note">

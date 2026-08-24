@@ -17,7 +17,9 @@ afterEach(() => {
  * behind a collapsed curator-tools disclosure now - assembling word_ids is a
  * curator instrument, and an empty picker was noise on a volunteer's phone. */
 async function openCuratorTools(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+  // Its own control now. Opening it used to be a side effect of expanding a panel
+  // advertised as a Note box, which also rendered this picker - and its Save wrote golden.
+  await user.click(screen.getByRole('button', { name: 'Say what its parts are' }));
 }
 
 describe('EtymologyReview', () => {
@@ -73,10 +75,12 @@ describe('EtymologyReview', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Accepted proposed components.');
     });
 
-    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/decisions/etymology');
+    // A curator's answer is a contribution now, like everyone else's - their reading of a
+    // word's parts is one more reading of the same evidence, not a fact about it.
+    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
     expect(decisionCall).toBeDefined();
     const body = JSON.parse(decisionCall![1].body);
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       wordId: 'fixturegen2_compound_madeupword',
       componentsAction: 'accept_proposed',
       components: ['fixturegen2_partone_madeuppart', 'fixturegen2_parttwo_madeuppart'],
@@ -197,7 +201,7 @@ describe('EtymologyReview', () => {
     // derived and deliberately never shown.
     await waitFor(() => screen.getByText(/partone/));
     await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(screen.getByRole('button', { name: 'Propose: Save these parts' }));
+    await user.click(screen.getByRole('button', { name: 'Save these parts' }));
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
@@ -214,7 +218,7 @@ describe('EtymologyReview', () => {
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.getByRole('button', { name: 'Propose: It has no parts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'It has no parts' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'It does have parts' })).toBeInTheDocument();
   });
 
@@ -234,7 +238,9 @@ describe('EtymologyReview', () => {
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.queryByRole('button', { name: 'Curator tools' })).not.toBeInTheDocument();
+    // The note is everyone's now - the endpoint always accepted one, and only curators
+    // could reach the box. What a volunteer still does not get is the diagnosis vocabulary.
+    expect(screen.getByRole('button', { name: 'Add a note' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Note')).not.toBeInTheDocument();
     // The component search is no longer curator-only: it is how a volunteer says what
     // the parts ARE. It is just not shown until they say there are any.
@@ -258,9 +264,9 @@ describe('EtymologyReview', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Rejected the proposed etymology - stays atomic.');
     });
 
-    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/decisions/etymology');
+    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
     const body = JSON.parse(decisionCall![1].body);
-    expect(body).toEqual({ wordId: 'fixturegen2_compound_madeupword', componentsAction: 'reject_proposed' });
+    expect(body).toEqual({ axis: 'etymology', wordId: 'fixturegen2_compound_madeupword', componentsAction: 'reject_proposed' });
   });
 
   it('enables Confirm components for a word with real existing components, and submits confirm_existing', async () => {
@@ -282,9 +288,9 @@ describe('EtymologyReview', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Confirmed the existing components.');
     });
 
-    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/decisions/etymology');
+    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
     const body = JSON.parse(decisionCall![1].body);
-    expect(body).toEqual({ wordId: 'fixturegenconfirmed_compound_word', componentsAction: 'confirm_existing' });
+    expect(body).toEqual({ axis: 'etymology', wordId: 'fixturegenconfirmed_compound_word', componentsAction: 'confirm_existing' });
   });
 
   it('pre-seeds the manual draft from real existing components (not a self-referencing atomic chip)', async () => {
@@ -352,9 +358,10 @@ describe('EtymologyReview', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Saved these parts: manual spelling');
     });
 
-    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/decisions/etymology');
+    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
     const body = JSON.parse(decisionCall![1].body);
     expect(body).toEqual({
+      axis: 'etymology',
       wordId: 'fixturegen2_compound_madeupword',
       componentsAction: 'custom',
       components: ['manual_component_word'],
@@ -609,7 +616,7 @@ describe('EtymologyReview', () => {
     expect(screen.getByLabelText('Words awaiting approval')).toHaveTextContent('You can still save');
 
     // And saving genuinely works with a word still pending.
-    await user.click(screen.getByRole('button', { name: 'Propose: Save these parts' }));
+    await user.click(screen.getByRole('button', { name: 'Save these parts' }));
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
       expect(JSON.parse((post![1] as RequestInit).body as string)).toMatchObject({
@@ -641,7 +648,7 @@ describe('EtymologyReview', () => {
     expect(screen.queryByRole('button', { name: /Accept proposed components/ })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Single root note')).toHaveTextContent('not a breakdown into parts');
     // The honest answers remain available.
-    expect(screen.getByRole('button', { name: 'Propose: It has no parts' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'It has no parts' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'It does have parts' })).toBeInTheDocument();
   });
 
@@ -650,7 +657,7 @@ describe('EtymologyReview', () => {
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.getByRole('button', { name: 'Propose: Accept proposed components' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Accept proposed components' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Single root note')).not.toBeInTheDocument();
   });
 
@@ -800,7 +807,7 @@ describe('EtymologyReview', () => {
 
     // And the etymology submits NOW, referencing the word_id the request will create. This is
     // the whole point: the task finishes without waiting for a curator.
-    await user.click(screen.getByRole('button', { name: 'Propose: Save these parts' }));
+    await user.click(screen.getByRole('button', { name: 'Save these parts' }));
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
       expect(JSON.parse((post![1] as RequestInit).body as string)).toMatchObject({

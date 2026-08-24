@@ -18,6 +18,10 @@
 // the decided spelling. Example last because it is the only generative task:
 // illustrating a word is easiest once you have read it, checked its parts, and
 // said it aloud.
+//
+// A SKIP is a client-session exclusion laid over that same ordering, never a server
+// state - see skippedTasks.ts. It changes what is offered, and deliberately nothing
+// about assignment order, axis order, or what counts as done.
 
 import type { AssignmentSummary, AxisDecided } from './api.js';
 import type { Axis } from './route.js';
@@ -36,24 +40,42 @@ function isPending(axisDecided: AxisDecided, axis: Axis): boolean {
   return !axisDecided[axis];
 }
 
+/** Identifies one (word, axis) pair - the unit a skip applies to.
+ *
+ * ':' is unambiguous as a separator because a word_id cannot contain one:
+ * api/src/handlers/wordIdShape.ts's WORD_ID_PATTERN admits only [a-z0-9_-]. */
+export type TaskKey = string;
+
+export function taskKey(wordId: string, axis: Axis): TaskKey {
+  return `${wordId}:${axis}`;
+}
+
+export interface QueueOptions {
+  /** Tasks the user has set aside for this session (skippedTasks.ts).
+   *
+   * Excluded from what is OFFERED and deliberately not from what is DONE - see
+   * completedTaskCount. */
+  skipped?: ReadonlySet<TaskKey>;
+}
+
 /** Every not-yet-done (word, axis) pair the caller still owes work on.
  *
  * Note that `audio` is per-user by design (api/src/reviewShared.ts's
  * AxisDecided.audio) - so an audio task appears for a word someone ELSE
  * already recorded, which is intended: every participant records every word
  * themselves. */
-export function buildTaskQueue(assignments: AssignmentSummary[]): Task[] {
+export function buildTaskQueue(assignments: AssignmentSummary[], options: QueueOptions = {}): Task[] {
   const tasks: Task[] = [];
   for (const assignment of assignments) {
     for (const axis of AXIS_ORDER) {
-      if (isPending(assignment.axisDecided, axis)) {
-        tasks.push({
-          wordId: assignment.wordId,
-          displayText: assignment.displayText,
-          definition: assignment.definition,
-          axis,
-        });
-      }
+      if (!isPending(assignment.axisDecided, axis)) continue;
+      if (options.skipped?.has(taskKey(assignment.wordId, axis))) continue;
+      tasks.push({
+        wordId: assignment.wordId,
+        displayText: assignment.displayText,
+        definition: assignment.definition,
+        axis,
+      });
     }
   }
   return tasks;
@@ -85,16 +107,34 @@ export function totalTaskCount(assignments: AssignmentSummary[]): number {
   return assignments.length * AXIS_ORDER.length;
 }
 
+/** Deliberately called WITHOUT a skip set: setting a task aside is not finishing it, and
+ * counting it as done would make the progress bar say the work happened. The skipped
+ * count is reported separately (skippedTaskCount) so a volunteer can see both. */
 export function completedTaskCount(assignments: AssignmentSummary[]): number {
   return totalTaskCount(assignments) - buildTaskQueue(assignments).length;
+}
+
+/** How many still-pending tasks are currently set aside.
+ *
+ * Intersected with the pending queue rather than read off the set's size, because a key
+ * outlives what it names: a task skipped here and then completed from "My whole list", or
+ * belonging to a word since unassigned, must not inflate the count and leave the screen
+ * offering to bring back something that no longer exists. */
+export function skippedTaskCount(assignments: AssignmentSummary[], skipped: ReadonlySet<TaskKey>): number {
+  if (skipped.size === 0) return 0;
+  return buildTaskQueue(assignments).filter((t) => skipped.has(taskKey(t.wordId, t.axis))).length;
 }
 
 /** The task to hand over next, preferring to stay on the word the user is
  * already looking at so finishing its entry axis moves to its etymology
  * rather than jumping to a different word. Returns null when nothing is left.
  */
-export function nextTask(assignments: AssignmentSummary[], preferWordId?: string | null): Task | null {
-  const queue = buildTaskQueue(assignments);
+export function nextTask(
+  assignments: AssignmentSummary[],
+  preferWordId?: string | null,
+  options: QueueOptions = {},
+): Task | null {
+  const queue = buildTaskQueue(assignments, options);
   if (queue.length === 0) return null;
   if (preferWordId) {
     const onSameWord = queue.find((t) => t.wordId === preferWordId);

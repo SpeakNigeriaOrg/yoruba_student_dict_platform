@@ -10,6 +10,9 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  // Skips live in sessionStorage (app/src/skippedTasks.ts) so they survive the queue
+  // unmounting to open a word. That also means they survive between tests unless cleared.
+  window.sessionStorage.clear();
 });
 
 interface AxisFlags {
@@ -126,25 +129,94 @@ describe('TaskQueue', () => {
     state = [assignment('w1', { entry: true }), assignment('w2')];
     // No spelling click needed: the tone row arrives pre-filled, so leaving it alone
     // IS the answer (keep_ours). Confirm is enabled from the start.
-    await user.click(screen.getByRole('button', { name: 'Confirm entry' }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => expect(screen.getByText('Check the word parts')).toBeInTheDocument());
     expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 2 of 8');
   });
 
-  it('skip moves on without submitting anything', async () => {
+  it('skip hands over a DIFFERENT task, and still submits nothing', async () => {
+    // This test used to assert only the second half, and that is how the bug shipped: Skip
+    // was wired to the post-submit advance(), which re-derives the next task from server
+    // state a skip does not change, so the identical task came straight back. Worse, the
+    // click set currentWordId and nextTask PREFERS that word, so the one control for
+    // getting past a task pinned you to it. A button with an empty onClick passed the old
+    // assertions unchanged - which is why the "moves on" half is now asserted first.
     const state = [assignment('w1'), assignment('w2')];
     const fetchMock = installFetchMock(() => state);
     const user = userEvent.setup();
 
     render(<TaskQueue isCurator={true} onOpenWord={() => {}} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Skip for now' }));
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
 
-    // No decision or contribution was posted.
+    await waitFor(() => expect(screen.getByText('Check the word parts')).toBeInTheDocument());
+    // Moved PAST, not finished: the position advances while the completion bar does not.
+    expect(screen.getByLabelText('Queue progress')).toHaveTextContent('Task 2 of 8');
+    expect(screen.getByLabelText('Skipped tasks')).toHaveTextContent('1 set aside for now.');
+
     const posts = fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
     expect(posts).toHaveLength(0);
+  });
+
+  it('skips its way off a word and on to the next one', async () => {
+    const fetchMock = installFetchMock(() => [assignment('w1', { etymology: true, audio: true }), assignment('w2')]);
+    const user = userEvent.setup();
+
+    render(<TaskQueue isCurator={true} onOpenWord={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Skip for now' })); // w1 entry
+    await waitFor(() => expect(screen.getByText('Show the word in use')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Skip for now' })); // w1 example
+
+    // Back to an entry task - w2's, not the w1 one that was set aside. Asserted on the
+    // word the screen FETCHED rather than what it renders: every review screen in this
+    // file is served the same fixture regardless of word_id, so its text says nothing
+    // about which word the queue chose.
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/words/w2/entry'))).toBe(true);
+    expect(screen.getByLabelText('Skipped tasks')).toHaveTextContent('2 set aside for now.');
+  });
+
+  it('says so when everything left is set aside, and can bring it all back', async () => {
+    installFetchMock(() => [assignment('w1', { etymology: true, audio: true, example: true })]);
+    const user = userEvent.setup();
+
+    render(<TaskQueue isCurator={true} onOpenWord={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+
+    // Not "All caught up" - that would claim work is finished when it is only postponed.
+    await waitFor(() => expect(screen.getByText('Nothing left but what you set aside')).toBeInTheDocument());
+    expect(screen.queryByText('All caught up')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Bring back skipped tasks' }));
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
+  });
+
+  it('keeps a task set aside across a later submit', async () => {
+    // advance() re-reads the server; the skip set is client-side and must survive that,
+    // or finishing any other task quietly re-serves what was skipped.
+    const done = { etymology: true, audio: true, example: true };
+    let state = [assignment('w1', done), assignment('w2', done)];
+    installFetchMock(() => state);
+    const user = userEvent.setup();
+
+    render(<TaskQueue isCurator={true} onOpenWord={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Confirm the spelling and meaning')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Skip for now' })); // w1 entry
+    await waitFor(() => expect(screen.getByLabelText('Skipped tasks')).toHaveTextContent('1 set aside'));
+
+    state = [assignment('w1', done), assignment('w2', { ...done, entry: true })];
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+
+    // w1's entry is still pending server-side, and the refetch re-read it - but it stays
+    // set aside rather than being handed straight back.
+    await waitFor(() => expect(screen.getByText('Nothing left but what you set aside')).toBeInTheDocument());
   });
 
   it('can still show the whole list as an escape hatch', async () => {

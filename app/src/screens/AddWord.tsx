@@ -282,15 +282,20 @@ function WordTab({
     detailsRef.current?.focus({ preventScroll: true });
   }, [selected?.entryId]);
 
-  // Arrive with the etymology the Phrase tab sent already picked. Keyed on the id so a second request
-  // for a different word takes effect without remounting the tab.
+  // Arrive with the etymology the Phrase tab sent already picked.
+  //
+  // Keyed on the object identity, not on prefill?.entryId. Keying on the id meant a second
+  // handoff of the SAME word did nothing - go back, pick it again, and the form silently kept
+  // whatever had been typed over it. The sender mints a fresh object per handoff, so identity
+  // is what "asked again" actually means; a re-render with the same object still does not
+  // re-seed, which is the behaviour the id key was reaching for.
   useEffect(() => {
     if (!prefill) return;
     setSelected(prefill);
     chooseSpelling(prefill.standardForms[0] ?? prefill.form);
     setDefinitionText(prefill.glosses[0] ?? '');
     setHint(hintFromGloss(prefill.glosses[0]));
-  }, [prefill?.entryId]);
+  }, [prefill]);
 
   useEffect(() => {
     if (!selectedForm) {

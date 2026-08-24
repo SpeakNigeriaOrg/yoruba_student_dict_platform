@@ -120,10 +120,9 @@ describe('App', () => {
 
       render(<App />);
       await waitFor(() => expect(screen.getByLabelText('Tone editor')).toBeInTheDocument());
-      // 'Confirm', not 'Confirm entry': this mock is a volunteer, who proposes rather
-      // than decides. Their submission is a contribution, which axisDecided counts as
-      // their own answer - so the advance works on both paths.
-      await user.click(screen.getByRole('button', { name: 'Confirm' }));
+      // One button for both roles now: everyone records an answer, and axisDecided counts
+      // a person's own active contribution, so the advance works the same either way.
+      await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
       await waitFor(() => expect(window.location.hash).toBe('#/word/some_word/etymology'));
     });

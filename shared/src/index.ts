@@ -21,3 +21,4 @@ export * from './phraseTokens.js';
 export * from './phraseSpelling.js';
 export * from './contributorTerms.js';
 export * from './partsOfSpeech.js';
+export * from './publicationReadiness.js';

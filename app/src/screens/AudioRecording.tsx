@@ -168,6 +168,9 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   // divergence warning is about the RECORD, so quoting the editable field would
   // make the message change as they type.
   const [goldenDisplayText, setGoldenDisplayText] = useState('');
+  /** golden_record's stored split, kept so the seed can prefer it over a re-derived one - see
+   * the load effect. */
+  const [goldenSyllables, setGoldenSyllables] = useState<string[]>([]);
   /** Only used on the unsplittable fallback path, where the split cannot be derived. */
   const [fallbackSyllablesText, setFallbackSyllablesText] = useState('');
 
@@ -179,6 +182,9 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   const [segmentReviews, setSegmentReviews] = useState<SegmentReview[] | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  /** Set when the submission just made will not publish - the server is the authority on that
+   * (registerUtterance returns matchesGolden), not the client's own comparison. */
+  const [submittedDiverged, setSubmittedDiverged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [previousRecordings, setPreviousRecordings] = useState<UtteranceSummary[] | null>(null);
@@ -197,6 +203,7 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
     setTake2Blob(null);
     setSegmentReviews(null);
     setStatus(null);
+    setSubmittedDiverged(false);
     setPreviousRecordings(null);
     setPreviousRecordingsError(null);
     setUnsplittableText(null);
@@ -205,18 +212,32 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
       .then((result) => {
         if (cancelled) return;
         setGoldenDisplayText(result.displayText);
-        // Seeded from the SPELLING, so the grid's syllables and the spelling agree from the first
-        // render. golden_record.syllables can disagree with its own display_text (one production
-        // word does), and seeding from the stored split would carry that disagreement into a
-        // recording that then freezes it.
+        setGoldenSyllables(result.syllables);
+        // The STORED split wins when it reconstitutes the spelling, and that ordering is the fix
+        // for a real defect. An authored split is a claim, not a derivation: applyEntryDecision's
+        // `respell` writes one, and its own comment notes that "freeing a nasal is a respell whose
+        // whole content is the new split". Re-deriving here undid exactly that correction - and
+        // the re-derived split is then precisely what the publish comparison rejects, so a speaker
+        // who changed nothing produced a recording that could never be published.
         //
-        // Three cases, most editable first, exactly as EntryReview routes them:
+        // Deriving is still right when the stored split does NOT reconstitute the spelling, which
+        // is the disagreement the previous comment was written for (one production word:
+        // agunfon_giraffe, 'àgùnfon' vs ['à','gùn','fọn']). Carrying that into a frozen recording
+        // would be worse than re-deriving it. NFC-compared, matching the rule applyEntryDecision
+        // already enforces on write, so a composition difference alone is not a disagreement.
+        //
+        // Three cases after that, most editable first, exactly as EntryReview routes them:
         //
         //   the WHOLE spelling is syllabifiable  -> one syllable row.
         //   only the pieces between separators   -> the composer, one grid per piece.
         //   nothing is                           -> the text fallback below.
         const spans = syllabifySpans(result.displayText);
-        if (spans) {
+        const storedIsFaithful =
+          result.syllables.length > 0 &&
+          result.syllables.join('').normalize('NFC') === result.displayText.normalize('NFC');
+        if (storedIsFaithful && spans) {
+          setWordSyllables(result.syllables);
+        } else if (spans) {
           setWordSyllables(spans);
         } else if (splitPhrase(result.displayText).words.some((w) => w.syllables !== null)) {
           setPhraseText(result.displayText);
@@ -296,10 +317,23 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   // when re-recording their own would fix one - and a curator still sees the true total.
   const divergedCount = (isCurator ? previousRecordings : ownRecordings)?.filter((u) => u.divergesFromGolden).length ?? 0;
 
+  /** Whether what is about to be recorded already differs from the word on record.
+   *
+   * Byte-exact on purpose, mirroring api/src/reviewShared.ts's recordingMatchesGolden and the
+   * publish scripts. An NFC-folding check here would be kinder and wrong: it would promise a
+   * match the server then denies, and the speaker would find out only from the banner after
+   * submitting. Better to agree with what publish does and say so up front. */
+  const willDiverge =
+    loaded &&
+    (pronunciationText !== goldenDisplayText ||
+      recordedSyllables.length !== goldenSyllables.length ||
+      recordedSyllables.some((syllable, i) => syllable !== goldenSyllables[i]));
+
   async function submit() {
     if (!take1Blob || !take2Blob || !segmentReviews || !countsMatch) return;
     setSubmitting(true);
     setStatus(null);
+    setSubmittedDiverged(false);
     try {
       await registerUtterance({
         wordId,
@@ -316,7 +350,7 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
         confidence: review.segment.confidence,
         clip: review.clip,
       }));
-      await registerUtterance({
+      const registered = await registerUtterance({
         wordId,
         takeNumber: 2,
         audio: take2Blob,
@@ -325,7 +359,15 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
         segments,
       });
 
-      setStatus('Recording submitted.');
+      // The task is done either way - that is the fix. A recording that disagrees with the
+      // record is still this speaker's work, and 0006 exists to keep it; what it is not is
+      // publishable, and the outcome message has to say which of those happened rather than
+      // reporting a bare success and letting the queue hand the same task back.
+      //
+      // `=== false`, not falsiness: an older deployment omits the field, and "not known" must
+      // not render as "will not publish".
+      setSubmittedDiverged(registered.matchesGolden === false);
+      setStatus(registered.matchesGolden === false ? null : 'Recording submitted.');
       loadPreviousRecordings();
       onDecided?.();
     } catch (err) {
@@ -349,6 +391,17 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
           say it differently: the recording is tied to the pronunciation you actually produce, not to this word's current
           spelling.
         </p>
+        {/* Said BEFORE recording, not only afterwards. Divergence is allowed and sometimes right -
+            it is the whole reason the grid is editable - but it has a consequence, and the speaker
+            should be choosing it rather than discovering it. Deliberately not a block: the
+            recording is still their answer. */}
+        {willDiverge ? (
+          <p className="warning-banner" aria-label="Pronunciation differs from the record">
+            This is not the word&apos;s current spelling (<strong>{goldenDisplayText}</strong>). Recording it this way is
+            fine — it is kept exactly as you say it and your task counts — but it will not be published until the
+            spelling is settled or you record it again.
+          </p>
+        ) : null}
         {phraseText !== null ? (
           // A phrase: one grid per word, off the same composer the Add Phrase tab and the entry
           // axis use, so the tones are chosen here the way they are chosen everywhere else.
@@ -489,6 +542,17 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
         {submitting ? 'Submitting...' : 'Submit recording'}
       </button>
       {status ? <p role="status">{status}</p> : null}
+      {/* Says what actually happened, instead of the bare "Recording submitted." this used to
+          show whatever the outcome was. It opens with the task being DONE, because that is the
+          behavioural change and the thing the speaker most needs to know - the old build left
+          them staring at the same task with no explanation. */}
+      {submittedDiverged ? (
+        <p className="warning-banner" role="status" aria-label="Recording saved but not publishable">
+          Recording saved, and your audio task is done. You recorded <strong>{pronunciationText}</strong>, which is not
+          this word&apos;s current spelling (<strong>{goldenDisplayText}</strong>) — so it will not be published until
+          the spelling is settled or you record it again. Nothing is lost: it is kept exactly as you said it.
+        </p>
+      ) : null}
 
       {/* Surfaced here rather than only in the publish script's warnings,
           because the speaker is the person who can act on it. The recordings

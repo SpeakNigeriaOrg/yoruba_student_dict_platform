@@ -45,26 +45,33 @@ import type {
   ContributionOutcome,
 } from '@yoruba-student-dict-platform/shared';
 
-const SECTIONS: Array<{ bucket: ConsensusBucket; title: string; blurb: string }> = [
+/** `chooseLabel` is per section rather than one shared word, because choosing a claim is a
+ * different act in each: settling a live argument, overriding a decision you already made,
+ * or promoting something nobody else has checked. The button now says which. */
+const SECTIONS: Array<{ bucket: ConsensusBucket; title: string; blurb: string; chooseLabel: string }> = [
   {
     bucket: 'contested',
     title: 'Conflicts',
     blurb: 'Contributors disagree. Pick the right answer, or decide it yourself.',
+    chooseLabel: 'Settle it with this',
   },
   {
     bucket: 'dissent_on_golden',
     title: 'Disputed after being settled',
     blurb: 'Someone has contradicted a decision you already made. The decision still stands until you act.',
+    chooseLabel: 'Change the record to this',
   },
   {
     bucket: 'ready',
     title: 'Ready to confirm',
     blurb: 'Contributors agree. Confirm in bulk.',
+    chooseLabel: 'Set the record to this',
   },
   {
     bucket: 'single',
     title: 'One vote only',
     blurb: 'Provisional. Nobody has corroborated these yet - confirm, or leave them to gather a second opinion.',
+    chooseLabel: 'Set the record on one vote',
   },
 ];
 
@@ -138,17 +145,26 @@ function ClaimRow({
   claim,
   isWinner,
   onChoose,
+  chooseLabel,
   busy,
 }: {
   claim: ConsensusTallyEntry;
   isWinner: boolean;
   onChoose?: () => void;
+  /** What choosing this claim actually does, which is not the same act in every section.
+   *
+   * It used to read "Use this" everywhere: in Conflicts, where it settles a disagreement
+   * between two people who have both looked; and in One vote only, where it puts a single
+   * unchecked opinion on the record. Same button, same styling, same words. The only thing
+   * telling them apart was a blurb at the top of the section, scrolled off by the time you
+   * reached the button on a phone. */
+  chooseLabel: string;
   busy: boolean;
 }) {
   return (
     <li className={`claim${isWinner ? ' claim-winner' : ''}`}>
       <div className="claim-votes">
-        {claim.count} {claim.count === 1 ? 'vote' : 'votes'}
+        <span className="figure">{claim.count}</span> {claim.count === 1 ? 'vote' : 'votes'}
       </div>
       <div className="claim-outcome">
         <OutcomeSummary outcome={claim.outcome} />
@@ -156,7 +172,7 @@ function ClaimRow({
       </div>
       {onChoose ? (
         <button type="button" className="btn btn-secondary" onClick={onChoose} disabled={busy}>
-          Use this
+          {chooseLabel}
         </button>
       ) : null}
     </li>
@@ -361,6 +377,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
                         // A one-click resolution is offered wherever a claim can
                         // be chosen: on conflicts and dissent that is the point,
                         // and on a single vote it saves opening the word.
+                        chooseLabel={section.chooseLabel}
                         onChoose={
                           section.bucket === 'ready'
                             ? undefined

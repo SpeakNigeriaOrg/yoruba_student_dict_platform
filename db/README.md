@@ -256,7 +256,10 @@ reasoning. In short:
   session are different artifacts by design (take 1 is the whole word, take 2
   carries the syllable segments), so there is one candidate per role. The one
   real gap is the 15 syllables recorded more than once by the same speaker,
-  which first-row-wins resolves arbitrarily.
+  which first-row-wins resolves arbitrarily. Those are now at least VISIBLE -
+  Dictionary -> Coverage lists every syllable one speaker recorded twice
+  (`api/src/handlers/coverageReport.ts`) - but nothing resolves them yet, and a
+  selection table is still what would.
 
   The consumer is `website-games/public/phonics`, not `syllable_game_concept`,
   which was an early proof of concept and is now empty.

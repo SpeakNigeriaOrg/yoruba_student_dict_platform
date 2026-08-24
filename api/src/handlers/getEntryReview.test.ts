@@ -94,7 +94,7 @@ describe('getEntryReview', () => {
     expect(result.definitionStatus).toBeDefined();
     expect(result.definitionCurrent).toBe('a current definition');
     // shared context
-    expect(result.axisDecided).toEqual({ entry: false, etymology: false, audio: false, example: false });
+    expect(result.axisDecided).toEqual({ entry: false, etymology: false, audio: false, audioDiverges: false, example: false });
   });
 
   it('proposes a definition from Kaikki glosses when none has been decided yet', async () => {
