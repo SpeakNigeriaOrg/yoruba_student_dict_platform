@@ -647,59 +647,15 @@ function WordTab({
                   answer. It is recorded as a proposal: the etymology review still asks a curator to
                   confirm it.
                 </p>
-                {components.length === 0 ? (
-                  <p>No components picked yet.</p>
-                ) : (
-                  <ul aria-label="Word components" className="plain-list">
-                    {components.map((c, i) => (
-                      // Keyed by position, not wordId - a reduplication holds the same word twice.
-                      <li key={`${i}-${c.wordId}`} className="search-result-row">
-                        <span className="result-text">
-                          <strong>{c.displayText}</strong>
-                          {c.definition ? ` — ${c.definition}` : ''}
-                        </span>
-                        <button
-                          type="button"
-                          className="btn btn-danger"
-                          onClick={() => setComponents(components.filter((_, j) => j !== i))}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <SearchBox
-                  search={searchVocab}
-                  renderResult={(r) => (
-                    <>
-                      <strong>{r.displayText}</strong>
-                      {r.definition ? ` — ${r.definition}` : ''}
-                    </>
-                  )}
-                  onSelect={(r: VocabSearchResult) =>
-                    setComponents((prev) => [
-                      ...prev,
-                      { wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition },
-                    ])
-                  }
-                  renderAction={(r: VocabSearchResult) => (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() =>
-                        setComponents((prev) => [
-                          ...prev,
-                          { wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition },
-                        ])
-                      }
-                    >
-                      Add as component
-                    </button>
-                  )}
-                  placeholder="Search words already in the dictionary..."
+                <ComponentPicker
+                  components={components}
+                  onAdd={(part) => setComponents((prev) => [...prev, part])}
+                  onRemoveAt={(i) => setComponents(components.filter((_, j) => j !== i))}
+                  onOpenWord={onOpenWord}
+                  listLabel="Word components"
                   resultsAriaLabel="Word component search results"
-                  label="Search words this one is built from"
+                  searchLabel="Search words this one is built from"
+                  emptyNote="No components picked yet."
                 />
               </div>
             ) : (
@@ -759,6 +715,135 @@ interface PhrasePart {
   displayText: string;
   syllables: string[];
   definition: string | null;
+}
+
+/** Picking the words an entry is built from. One control, used by both tabs.
+ *
+ * There were two of these, and the difference between them was not a design decision. The
+ * Phrase tab's is the one that grew: it offers "Open" beside "Add as component" (a curator
+ * who searched for a word and found it usually wanted to look at it), and it says out loud
+ * when a candidate is itself a phrase (nesting is allowed, but it must be a choice rather
+ * than a surprise). The Word tab's was written later, from scratch, and had neither - so the
+ * same search, run from a different tab, gave a strictly worse answer for no reason a
+ * curator could see.
+ *
+ * The two remaining differences are real and stay with the callers:
+ *
+ *   - a phrase's components ARE its identity and at least one is required; a word's are a
+ *     separate claim ABOUT it, correctly absent for most words, and so optional and
+ *     collapsed. That is `emptyNote` and where the caller puts this.
+ *   - the Phrase tab's second search box, over Wiktionary, is not a component picker at all.
+ *     It does double duty as "adopt this whole multi-word entry as the phrase", which has no
+ *     meaning on the Word tab. It stays where it is.
+ *
+ * Deliberately does NOT de-duplicate on add: a reduplication - `méjì méjì`, `mẹ́ta mẹ́ta`, and
+ * several more real corpus entries - is one word in two positions, and the server has never
+ * had that restriction (component_position is the primary key). */
+function ComponentPicker({
+  components,
+  onAdd,
+  onRemoveAt,
+  onOpenWord,
+  listLabel,
+  resultsAriaLabel,
+  searchLabel,
+  emptyNote,
+  searchNote,
+}: {
+  components: PhrasePart[];
+  onAdd: (part: PhrasePart) => void;
+  onRemoveAt: (index: number) => void;
+  /** Optional so a test can render either tab alone - the same reason AddWordProps has it. */
+  onOpenWord?: (wordId: string) => void;
+  listLabel: string;
+  resultsAriaLabel: string;
+  searchLabel: string;
+  /** What "none picked" means here, which is not the same on the two tabs: on a phrase it is
+   * unfinished work, on a word it is the ordinary and usually correct answer. */
+  emptyNote: string;
+  /** Rendered between the list and the search, where an instruction ABOUT the search belongs.
+   * The Word tab's equivalent sits above the whole section, because there it explains why the
+   * section exists at all rather than how to use this box. */
+  searchNote?: React.ReactNode;
+}) {
+  const partOf = (r: VocabSearchResult): PhrasePart => ({
+    wordId: r.wordId,
+    displayText: r.displayText,
+    syllables: r.syllables,
+    definition: r.definition,
+  });
+
+  return (
+    <>
+      {components.length === 0 ? (
+        <p>{emptyNote}</p>
+      ) : (
+        <ul aria-label={listLabel} className="plain-list">
+          {components.map((c, i) => (
+            // Keyed by position, not wordId - a reduplication holds the same word twice.
+            <li key={`${i}-${c.wordId}`} className="search-result-row">
+              {/* The word and its meaning, not the word_id. Picking a word_id IS picking one
+                  etymology - that is the point - but the id is a key, and leading with it made the
+                  list unreadable to anyone who does not already know our naming scheme. The meaning
+                  is what tells two etymologies of one spelling apart, which is the actual choice
+                  being made here. */}
+              <span className="result-text">
+                <strong>{c.displayText}</strong>
+                {c.definition ? ` — ${c.definition}` : ''}
+              </span>
+              <button type="button" className="btn btn-danger" onClick={() => onRemoveAt(i)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {searchNote}
+
+      <SearchBox
+        search={searchVocab}
+        renderResult={(r) => (
+          <>
+            <strong>{r.displayText}</strong>
+            {r.definition ? ` — ${r.definition}` : ''}
+            {/* Said out loud, because a phrase offered as a candidate component read as an
+                invitation to duplicate a word that already existed. Nesting is not forbidden -
+                the schema allows it and a proverb containing an idiom is conceivable - but it
+                must be a choice rather than a surprise. */}
+            {r.entryType === 'phrase' ? (
+              <>
+                {' '}
+                <span className="badge">already a phrase</span>
+              </>
+            ) : null}
+          </>
+        )}
+        onSelect={(r: VocabSearchResult) => onAdd(partOf(r))}
+        // Both actions, because "Add" alone had no object: it means "use as one part of the
+        // entry I am building", and with nothing being built it reads as "create this".
+        // Opening the word is what a curator who found an existing entry actually wanted.
+        renderAction={(r: VocabSearchResult) => (
+          <span>
+            <button type="button" className="btn btn-secondary" onClick={() => onAdd(partOf(r))}>
+              Add as component
+            </button>
+            {onOpenWord ? (
+              <>
+                {' '}
+                <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(r.wordId)}>
+                  Open {r.wordId}
+                </button>
+              </>
+            ) : null}
+          </span>
+        )}
+        placeholder="Search words already in the dictionary..."
+        resultsAriaLabel={resultsAriaLabel}
+        label={searchLabel}
+      />
+    </>
+  );
 }
 
 /** A phrase being built, held by AddWord rather than by the Phrase tab.
@@ -1072,87 +1157,21 @@ function PhraseTab({
         </p>
       ) : null}
 
-      {components.length === 0 ? (
-        <p>No components picked yet.</p>
-      ) : (
-        <ul aria-label="Phrase components" className="plain-list">
-          {components.map((c, i) => (
-            // Keyed by position, not wordId - a reduplication holds the same word twice.
-            <li key={`${i}-${c.wordId}`} className="search-result-row">
-              {/* The word and its meaning, not the word_id. Picking a word_id IS picking one
-                  etymology - that is the point - but the id is a key, and leading with it made the
-                  list unreadable to anyone who does not already know our naming scheme. The meaning
-                  is what tells two etymologies of one spelling apart, which is the actual choice
-                  being made here. */}
-              <span className="result-text">
-                <strong>{c.displayText}</strong>
-                {c.definition ? ` — ${c.definition}` : ''}
-              </span>
-              <button type="button" className="btn btn-danger" onClick={() => removeComponentAt(i)}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <p className="field-note">
-        Add each word of the phrase, in order. This searches words the dictionary already holds - to
-        change an existing phrase, open it and use its Etymology tab.
-      </p>
-      <SearchBox
-        search={searchVocab}
-        renderResult={(r) => (
-          <>
-            <strong>{r.displayText}</strong>
-            {r.definition ? ` — ${r.definition}` : ''}
-            {/* Said out loud, because a phrase offered as a candidate component of a phrase read as an
-                invitation to duplicate a word that already existed. Nesting is not forbidden - the
-                schema allows it and a proverb containing an idiom is conceivable - but it must be a
-                choice rather than a surprise. */}
-            {r.entryType === 'phrase' ? (
-              <>
-                {' '}
-                <span className="badge">already a phrase</span>
-              </>
-            ) : null}
-          </>
-        )}
-        onSelect={(r: VocabSearchResult) =>
-          addComponent({ wordId: r.wordId, displayText: r.displayText, syllables: r.syllables, definition: r.definition })
-        }
-        // Both actions, because "Add" alone had no object: it means "use as one word of the phrase I am
-        // building", and with nothing being built it reads as "create this". Opening the word is what a
-        // curator who found an existing entry actually wanted.
-        renderAction={(r: VocabSearchResult) => (
-          <span>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() =>
-                addComponent({
-                  wordId: r.wordId,
-                  displayText: r.displayText,
-                  syllables: r.syllables,
-                  definition: r.definition,
-                })
-              }
-            >
-              Add as component
-            </button>
-            {onOpenWord ? (
-              <>
-                {' '}
-                <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(r.wordId)}>
-                  Open {r.wordId}
-                </button>
-              </>
-            ) : null}
-          </span>
-        )}
-        placeholder="Search words already in the dictionary..."
+      <ComponentPicker
+        components={components}
+        onAdd={addComponent}
+        onRemoveAt={removeComponentAt}
+        onOpenWord={onOpenWord}
+        listLabel="Phrase components"
         resultsAriaLabel="Vocab search results"
-        label="Search words already in the dictionary"
+        searchLabel="Search words already in the dictionary"
+        emptyNote="No components picked yet."
+        searchNote={
+          <p className="field-note">
+            Add each word of the phrase, in order. This searches words the dictionary already holds - to
+            change an existing phrase, open it and use its Etymology tab.
+          </p>
+        }
       />
 
       <p className="field-note">

@@ -475,10 +475,10 @@ async function searchWith(result: Record<string, unknown>, props: Record<string,
 
 describe('AddWord - a word may say what it is built from, but is not asked to', () => {
   /** Gets to the filled-in word form, which is where the section lives. */
-  async function wordFormWith(fetchMock: ReturnType<typeof mockFetch>) {
+  async function wordFormWith(fetchMock: ReturnType<typeof mockFetch>, onOpenWord?: (wordId: string) => void) {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
-    render(<AddWord />);
+    render(<AddWord onOpenWord={onOpenWord} />);
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => screen.getByText('testform'));
     await user.click(screen.getByRole('button', { name: 'Select' }));
@@ -494,7 +494,10 @@ describe('AddWord - a word may say what it is built from, but is not asked to', 
   async function addComponents(user: ReturnType<typeof userEvent.setup>, count: number) {
     const box = within(screen.getByRole('search', { name: 'Search words this one is built from' }));
     await user.click(box.getByRole('button', { name: 'Search' }));
-    await waitFor(() => screen.getByText('sky', { exact: false }));
+    // Waits on the row's own action rather than on the text 'sky': the picker now renders an
+    // "Open sanma_sky" button beside each result, so a loose text match finds two nodes and
+    // getByText throws on the second.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add as component' })).toHaveLength(2));
     const add = screen.getAllByRole('button', { name: 'Add as component' });
     for (let i = 0; i < count; i += 1) await user.click(add[i]);
   }
@@ -579,6 +582,31 @@ describe('AddWord - a word may say what it is built from, but is not asked to', 
     // first one's parts is the failure this guards.
     expect(screen.queryByLabelText('Word components section')).toBeNull();
     expect(screen.queryByLabelText('Components picked while collapsed')).toBeNull();
+  });
+
+  // Both tabs pick components with the same control now (ComponentPicker). These two behaviours
+  // existed only on the Phrase tab, because the Word tab's picker had been written separately -
+  // so the identical search gave a worse answer depending on which tab it was run from.
+  it('offers to open a candidate as well as add it', async () => {
+    const onOpenWord = vi.fn();
+    const user = await wordFormWith(mockFetch({ vocabResults: TWO_WORDS }), onOpenWord);
+    await openComponents(user);
+    await addComponents(user, 0);
+
+    await user.click(screen.getByRole('button', { name: 'Open oju_face' }));
+    expect(onOpenWord).toHaveBeenCalledWith('oju_face');
+  });
+
+  it('says when a candidate component is itself a phrase', async () => {
+    // Nesting is allowed - the schema permits it and a compound containing an idiom is
+    // conceivable - but it has to be a choice rather than a surprise.
+    const user = await wordFormWith(
+      mockFetch({ vocabResults: [{ ...TWO_WORDS[0], entryType: 'phrase' }] }),
+    );
+    await openComponents(user);
+    const box = within(screen.getByRole('search', { name: 'Search words this one is built from' }));
+    await user.click(box.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('already a phrase'));
   });
 });
 
