@@ -466,6 +466,62 @@ describe('AudioRecording', () => {
     expect(screen.getByLabelText('Pronunciation differs from the record')).toBeInTheDocument();
   });
 
+  it('asks the speaker to say the spelling THEY corrected it to, not the one on record', async () => {
+    // The whole point of correcting a spelling is that you think that is how the word is
+    // said. Seeding from the record offered the old pronunciation to someone who had just
+    // argued against it - and produced a recording publish would drop. Their own answer is
+    // a contribution, which never reaches golden_record, so nothing here could see it until
+    // getEntryReview started reporting it.
+    const proposed = {
+      ...entryFixture,
+      displayText: 'wòhun',
+      syllables: ['wò', 'hun'],
+      myProposedEntry: { displayText: 'wóhun', syllables: ['wó', 'hun'] },
+    };
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => proposed });
+      if (url.includes('/utterances') && url.includes('/register')) {
+        return Promise.resolve({ ok: true, json: async () => ({ utteranceId: 'id', matchesGolden: false }) });
+      }
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByText('wóhun'));
+
+    // And it says whose spelling it is, rather than reporting a bare mismatch.
+    const notice = screen.getByLabelText('Pronunciation differs from the record');
+    expect(notice).toHaveTextContent('your');
+    expect(notice).toHaveTextContent('wòhun');
+
+    await recordBothTakes(user);
+    await waitFor(() => screen.getByRole('button', { name: 'Submit recording' }));
+    await user.click(screen.getByRole('button', { name: 'Submit recording' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter((c) => c[0].includes('/register'))).toHaveLength(2));
+    const body = JSON.parse(fetchMock.mock.calls.filter((c) => c[0].includes('/register'))[0][1].body);
+    expect(body.recordedDisplayText).toBe('wóhun');
+    expect(body.recordedSyllables).toEqual(['wó', 'hun']);
+  });
+
+  it('falls back to the record when the speaker has proposed nothing', async () => {
+    installAudioMocks(TWO_SYLLABLE_SAMPLES);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/entry')) return Promise.resolve({ ok: true, json: async () => ({ ...entryFixture, myProposedEntry: null }) });
+      if (url.includes('/utterances')) return Promise.resolve({ ok: true, json: async () => ({ utterances: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AudioRecording wordId="fixturegenspldef_spellingword" isCurator={false} />);
+    await waitFor(() => screen.getByText('wòhun'));
+    expect(screen.queryByLabelText('Pronunciation differs from the record')).not.toBeInTheDocument();
+  });
+
   it('shows a VOLUNTEER no other speakers at all - not even an empty section', async () => {
     // Hearing someone else say the word first is an anchor, and the point of every participant
     // recording every word themselves is INDEPENDENT pronunciations - the divergence between

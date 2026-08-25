@@ -271,6 +271,12 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
   /** Our spelling against the pinned upstream one - the single question a
    * volunteer is asked about a cited word's written form. */
   spellingVsUpstream: PinSpellingComparison;
+  /** The spelling THIS caller last said the word has, when it differs from the record.
+   *
+   * The audio screen seeds from it: someone who has just corrected a spelling should be
+   * asked to say the word the way they just said it is said, not the way the record still
+   * has it. Null when they have not answered, or answered with what is already on record. */
+  myProposedEntry: { displayText: string; syllables: string[] } | null;
 }
 
 export function getEntryReview(wordId: string): Promise<EntryReviewResult> {

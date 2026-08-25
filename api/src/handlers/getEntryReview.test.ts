@@ -193,3 +193,73 @@ describe('getEntryReview', () => {
     expect(result.definitionCandidateGlosses).toContain('the redirected gloss');
   });
 });
+
+// A speaker who has just corrected a spelling has said what they think the word IS. The
+// recorder used to offer them the old one to read aloud - the wrong prompt, and a recording
+// publish would drop. Nothing in this result could see their answer: displayText is
+// golden_record's, and a contribution never reaches golden_record. Survivable while a
+// curator's answer wrote the record directly; universal once everyone contributes.
+describe('the caller\'s own pending answer about the spelling', () => {
+  async function proposeSpelling(wordId: string, by: string, displayText: string, syllables: string[]): Promise<void> {
+    await pool.query(
+      `insert into contributions (word_id, axis, proposed_value, resolved_value, value_fingerprint, submitted_by)
+       values ($1, 'entry', '{}'::jsonb, $2, $3, $4)`,
+      [wordId, { kind: 'entry', displayText, syllables, definitionText: null, citedEntryId: null }, `fp-${displayText}`, by],
+    );
+  }
+
+  it('is null when they have not answered', async () => {
+    const wordId = `${NS}prop_none`;
+    await insertWord(wordId, 'owo', ['o', 'wo']);
+    expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
+  });
+
+  it('reports the spelling they proposed, with its syllables', async () => {
+    const wordId = `${NS}prop_mine`;
+    await insertWord(wordId, 'owo', ['o', 'wo']);
+    await proposeSpelling(wordId, userId, 'ọwọ́', ['ọ', 'wọ́']);
+
+    const result = await getEntryReview(pool, wordId, userId);
+    expect(result.myProposedEntry).toEqual({ displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'] });
+    // The record itself is untouched - a contribution is not a decision.
+    expect(result.displayText).toBe('owo');
+  });
+
+  it('is null when their answer agrees with the record - there is nothing to prefer', async () => {
+    const wordId = `${NS}prop_same`;
+    await insertWord(wordId, 'owo', ['o', 'wo']);
+    await proposeSpelling(wordId, userId, 'owo', ['o', 'wo']);
+    expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
+  });
+
+  it('ignores a difference of Unicode composition alone', async () => {
+    // Five production words store their text in NFD. Treating those as "you proposed
+    // something different" would put a spurious notice in front of every one of them.
+    const wordId = `${NS}prop_nfd`;
+    await insertWord(wordId, 'ọwọ́'.normalize('NFD'), ['ọ'.normalize('NFD'), 'wọ́'.normalize('NFD')]);
+    await proposeSpelling(wordId, userId, 'ọwọ́'.normalize('NFC'), ['ọ'.normalize('NFC'), 'wọ́'.normalize('NFC')]);
+    expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
+  });
+
+  it("does not hand one person another person's answer", async () => {
+    // The recording is this speaker's own pronunciation, so the prompt has to be their own
+    // claim about the word - not whatever a different contributor last said.
+    const wordId = `${NS}prop_theirs`;
+    await insertWord(wordId, 'owo', ['o', 'wo']);
+    await proposeSpelling(wordId, curatorId, 'ọwọ́', ['ọ', 'wọ́']);
+
+    expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
+    expect((await getEntryReview(pool, wordId, curatorId)).myProposedEntry).toEqual({
+      displayText: 'ọwọ́',
+      syllables: ['ọ', 'wọ́'],
+    });
+  });
+
+  it('ignores an answer they have since superseded', async () => {
+    const wordId = `${NS}prop_superseded`;
+    await insertWord(wordId, 'owo', ['o', 'wo']);
+    await proposeSpelling(wordId, userId, 'ọwọ', ['ọ', 'wọ']);
+    await pool.query("update contributions set status = 'superseded' where word_id = $1", [wordId]);
+    expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
+  });
+});

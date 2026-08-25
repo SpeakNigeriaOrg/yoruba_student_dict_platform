@@ -171,6 +171,9 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
   /** golden_record's stored split, kept so the seed can prefer it over a re-derived one - see
    * the load effect. */
   const [goldenSyllables, setGoldenSyllables] = useState<string[]>([]);
+  /** This speaker's own pending answer about the spelling, when they have one that differs
+   * from the record. What the grid is seeded from - see the load effect. */
+  const [myProposal, setMyProposal] = useState<{ displayText: string; syllables: string[] } | null>(null);
   /** Only used on the unsplittable fallback path, where the split cannot be derived. */
   const [fallbackSyllablesText, setFallbackSyllablesText] = useState('');
 
@@ -208,11 +211,24 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
     setPreviousRecordingsError(null);
     setUnsplittableText(null);
     setPhraseText(null);
+    setMyProposal(null);
     getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
         setGoldenDisplayText(result.displayText);
         setGoldenSyllables(result.syllables);
+        setMyProposal(result.myProposedEntry);
+
+        // What this speaker is about to SAY, which is not always what the record says.
+        //
+        // Someone who has just corrected the spelling on the entry axis has said what they
+        // think the word is; offering them the old spelling to read aloud is the wrong
+        // prompt, and it produces a recording of a pronunciation they have just argued
+        // against. Their own answer wins here.
+        //
+        // It stays a default, not a lock - the grid is still editable, and the notice below
+        // says the recording will not publish until the spelling is settled either way.
+        const source = result.myProposedEntry ?? { displayText: result.displayText, syllables: result.syllables };
         // The STORED split wins when it reconstitutes the spelling, and that ordering is the fix
         // for a real defect. An authored split is a claim, not a derivation: applyEntryDecision's
         // `respell` writes one, and its own comment notes that "freeing a nasal is a respell whose
@@ -231,20 +247,20 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
         //   the WHOLE spelling is syllabifiable  -> one syllable row.
         //   only the pieces between separators   -> the composer, one grid per piece.
         //   nothing is                           -> the text fallback below.
-        const spans = syllabifySpans(result.displayText);
+        const spans = syllabifySpans(source.displayText);
         const storedIsFaithful =
-          result.syllables.length > 0 &&
-          result.syllables.join('').normalize('NFC') === result.displayText.normalize('NFC');
+          source.syllables.length > 0 &&
+          source.syllables.join('').normalize('NFC') === source.displayText.normalize('NFC');
         if (storedIsFaithful && spans) {
-          setWordSyllables(result.syllables);
+          setWordSyllables(source.syllables);
         } else if (spans) {
           setWordSyllables(spans);
-        } else if (splitPhrase(result.displayText).words.some((w) => w.syllables !== null)) {
-          setPhraseText(result.displayText);
+        } else if (splitPhrase(source.displayText).words.some((w) => w.syllables !== null)) {
+          setPhraseText(source.displayText);
         } else {
-          setUnsplittableText(result.displayText);
-          setFallbackSyllablesText(result.syllables.join(','));
-          setWordSyllables(result.syllables);
+          setUnsplittableText(source.displayText);
+          setFallbackSyllablesText(source.syllables.join(','));
+          setWordSyllables(source.syllables);
         }
         setLoaded(true);
       })
@@ -397,9 +413,16 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
             recording is still their answer. */}
         {willDiverge ? (
           <p className="warning-banner" aria-label="Pronunciation differs from the record">
-            This is not the word&apos;s current spelling (<strong>{goldenDisplayText}</strong>). Recording it this way is
-            fine — it is kept exactly as you say it and your task counts — but it will not be published until the
-            spelling is settled or you record it again.
+            {myProposal ? (
+              <>
+                This is <strong>your</strong> spelling, not the one on record (
+                <strong>{goldenDisplayText}</strong>) — you corrected it, so this is what you are being asked to say.
+              </>
+            ) : (
+              <>This is not the word&apos;s current spelling (<strong>{goldenDisplayText}</strong>).</>
+            )}{' '}
+            Recording it this way is fine — it is kept exactly as you say it and your task counts — but it will not be
+            published until the spelling is settled or you record it again.
           </p>
         ) : null}
         {phraseText !== null ? (

@@ -70,6 +70,22 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
    * volunteer is asked about a cited word's written form; see
    * compareSpellingToPin. */
   spellingVsUpstream: PinSpellingComparison;
+  /** The spelling THIS caller last said the word has, if they have an active answer on the
+   * entry axis and it differs from the record.
+   *
+   * Null when they have not answered, or answered with the spelling already on record.
+   *
+   * It exists for the audio screen. Someone who has just corrected a spelling has said what
+   * they think the word IS, and then the recorder offered them the old one to say aloud -
+   * which is both the wrong prompt and a recording that publish will drop. Nothing in this
+   * result could see it: `displayText` above is golden_record's, and a contribution never
+   * reaches golden_record. That was survivable while a curator's answer wrote the record
+   * directly; once everyone contributes, it applied to everyone.
+   *
+   * Read from resolved_value, which is the outcome frozen at submission time (0013) - not
+   * re-derived, so it is what they actually asserted rather than what that assertion would
+   * mean against a record that has since moved. */
+  myProposedEntry: { displayText: string; syllables: string[] } | null;
 }
 
 export async function getEntryReview(client: Queryable, wordId: string, userId: string): Promise<EntryReviewResult> {
@@ -80,6 +96,7 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
   }
   const axisDecided = await loadAxisDecided(client, wordId, userId);
   const citation = await loadCitation(client, wordId);
+  const myProposedEntry = await loadMyProposedEntry(client, wordId, userId, entry);
   const override = await loadAxisOverride(client, wordId, 'entry');
   const lexicon = await loadFullKaikkiLexicon(client);
 
@@ -119,7 +136,36 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
     // in this same session is reflected rather than the screen still asking about
     // the superseded one.
     spellingVsUpstream: compareSpellingToPin(effective.displayText, citation?.pin),
+    myProposedEntry,
   };
+}
+
+/** This caller's own active answer on the entry axis, when it proposes a different spelling
+ * from the one on record.
+ *
+ * Compared NFC-normalised, because a difference of Unicode composition alone is not a
+ * proposal - five production words store their text in NFD, and treating those as "you
+ * proposed something different" would put a spurious notice in front of every one of them. */
+async function loadMyProposedEntry(
+  client: Queryable,
+  wordId: string,
+  userId: string,
+  entry: { displayText: string; syllables: string[] },
+): Promise<{ displayText: string; syllables: string[] } | null> {
+  const { rows } = await client.query<{ resolved_value: { displayText?: string; syllables?: string[] } | null }>(
+    `select resolved_value from contributions
+      where word_id = $1 and submitted_by = $2 and axis = 'entry' and status = 'active'
+      order by submitted_at desc limit 1`,
+    [wordId, userId],
+  );
+  const outcome = rows[0]?.resolved_value;
+  if (!outcome?.displayText || !outcome.syllables?.length) return null;
+
+  const same =
+    outcome.displayText.normalize('NFC') === entry.displayText.normalize('NFC') &&
+    outcome.syllables.length === entry.syllables.length &&
+    outcome.syllables.every((s, i) => s.normalize('NFC') === entry.syllables[i].normalize('NFC'));
+  return same ? null : { displayText: outcome.displayText, syllables: outcome.syllables };
 }
 
 async function loadCitation(client: Queryable, wordId: string): Promise<EntryCitation | null> {
