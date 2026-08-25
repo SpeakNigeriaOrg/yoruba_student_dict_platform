@@ -106,11 +106,90 @@ export function createUser(input: CreateUserInput): Promise<CreatedUser> {
 // Takes effect on the user's NEXT LOGIN, because SWA caches roles into the
 // session token; server-side curator checks re-read the database immediately.
 export function updateUserRole(userId: string, role: 'curator' | 'volunteer'): Promise<CreatedUser> {
+  return updateUser(userId, { role });
+}
+
+/** Edits to one account. Every field optional; an omitted one is left alone, and
+ * displayName accepts null to clear it.
+ *
+ * The email is the login handle rather than a label: getRoles matches on it to decide who
+ * may sign in at all, so correcting a typo here is what repairs an invite that would
+ * otherwise authenticate into nothing. It moves no work - user_id is what every other table
+ * references. The server refuses a curator editing their OWN email (409), because the
+ * lockout would only appear at their next sign-in. */
+export interface UpdateUserInput {
+  role?: 'curator' | 'volunteer';
+  email?: string;
+  displayName?: string | null;
+}
+
+export function updateUser(userId: string, input: UpdateUserInput): Promise<CreatedUser> {
   return fetchJson(`/api/users/${encodeURIComponent(userId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role }),
+    body: JSON.stringify(input),
   });
+}
+
+// Mirrors api/src/handlers/userDossier.ts - everything held about one account, for
+// #/users/{id}. That route is deep-linkable and mounts with only a userId, so it cannot
+// borrow the list's copy of the user: it has to ask.
+export interface UserRights {
+  releaseState: ReleaseState;
+  instrument: string | null;
+  agreedVersion: string | null;
+  statedOn: string | null;
+  noGrantReason: string | null;
+  revokedAt: string | null;
+  revokedReason: string | null;
+  currentTermsVersion: string;
+  coversCurrentTerms: boolean;
+}
+
+export interface UserSpeaker {
+  speakerId: string;
+  displayName: string;
+  dialectRegion: string | null;
+  utteranceCount: number;
+}
+
+export interface UserContributionCounts {
+  axis: string;
+  active: number;
+  superseded: number;
+  excluded: number;
+  applied: number;
+}
+
+export interface UserRecentContribution {
+  contributionId: string;
+  wordId: string | null;
+  displayText: string | null;
+  axis: string;
+  status: string;
+  submittedAt: string;
+}
+
+export interface UserDossier {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: 'curator' | 'volunteer';
+  createdAt: string;
+  rights: UserRights;
+  speakers: UserSpeaker[];
+  contributions: UserContributionCounts[];
+  exampleCount: number;
+  utteranceCount: number;
+  imageCount: number;
+  wordsTouched: number;
+  decisionsMade: number;
+  assignedWordCount: number;
+  recentContributions: UserRecentContribution[];
+}
+
+export function getUserDossier(userId: string): Promise<UserDossier> {
+  return fetchJson(`/api/users/${encodeURIComponent(userId)}`);
 }
 
 // Mirrors api/src/reviewShared.ts's ReviewStatus - per-axis

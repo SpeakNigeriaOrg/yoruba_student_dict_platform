@@ -674,6 +674,18 @@ audio {
   font-size: 0.72rem;
 }
 
+/* The account's own address, under the name it may or may not have. Monospace and
+   selectable: it is a login handle a curator reads character by character to answer "is
+   this the right account?", and a typo in it is why the account may be unreachable. */
+.user-email {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 2px 0 8px;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Tone editor ----
    A grid: one COLUMN per syllable, one ROW per tone, high at the top.
    
