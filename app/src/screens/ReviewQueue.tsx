@@ -37,13 +37,10 @@ import {
   type ConsensusGroup,
   type AuthoringVoteBackfillResult,
 } from '../api.js';
-import type {
-  ClaimField,
-  ConsensusBucket,
-  ConsensusSummary,
-  ConsensusTallyEntry,
-  ContributionOutcome,
-} from '@yoruba-student-dict-platform/shared';
+import type { ConsensusBucket } from '@yoruba-student-dict-platform/shared';
+// One renderer for a claim, shared with the dossier - see ClaimViews.tsx's header for why
+// the two screens are no longer allowed their own.
+import { ClaimRow, CurrentRecord, DisagreementNote } from './ClaimViews.js';
 
 /** `chooseLabel` is per section rather than one shared word, because choosing a claim is a
  * different act in each: settling a live argument, overriding a decision you already made,
@@ -74,110 +71,6 @@ const SECTIONS: Array<{ bucket: ConsensusBucket; title: string; blurb: string; c
     chooseLabel: 'Set the record on one vote',
   },
 ];
-
-/** Renders an outcome as the claim it is, rather than as the action that
- * produced it - the curator is comparing assertions about a word, and two
- * routes to the same assertion should look identical here. */
-function OutcomeSummary({ outcome }: { outcome: ContributionOutcome }) {
-  if (outcome.kind === 'etymology') {
-    return (
-      <span>
-        {outcome.atomic ? (
-          <em>no parts (atomic)</em>
-        ) : outcome.components.length === 0 ? (
-          <em>no components</em>
-        ) : (
-          outcome.components.join(' + ')
-        )}
-      </span>
-    );
-  }
-  return (
-    <span>
-      <strong>{outcome.displayText}</strong>
-      <span className="outcome-syllables"> {outcome.syllables.join(' · ')}</span>
-      <br />
-      {outcome.definitionText ?? <em>(no definition)</em>}
-    </span>
-  );
-}
-
-const FIELD_LABELS: Record<ClaimField, string> = {
-  spelling: 'the spelling',
-  syllables: 'the syllable split',
-  definition: 'the student definition',
-  etymology: 'which etymology it cites',
-  components: 'the components',
-};
-
-/** What the competing claims are actually arguing about.
- *
- * A contested word used to say only that it was contested, so telling a tone-mark dispute from two
- * people wording a gloss differently meant opening the word and diffing the claims by eye.
- *
- * The wording-only case gets its own sentence because it is a different kind of question. Spelling,
- * syllables and cited etymology are identity - one right answer, and a difference is a conflict. A
- * student definition is a rendering, and two good ones can disagree. When the identity is unanimous
- * the curator is picking the better sentence, not adjudicating a dispute, and saying so up front is
- * the difference between a queue of arguments and a queue of small editorial choices. */
-function DisagreementNote({ summary }: { summary: ConsensusSummary }) {
-  if (summary.differingFields.length === 0) return null;
-  const names = summary.differingFields.map((f) => FIELD_LABELS[f]);
-  const joined = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-
-  if (summary.wordingOnly) {
-    return (
-      <p className="field-note" aria-label="Wording only">
-        <strong>Same word, different wording.</strong> Every claim agrees on the spelling, the syllables and the
-        etymology, and they differ only in how the student definition is worded — so this is a choice between good
-        sentences, not a conflict to settle.
-      </p>
-    );
-  }
-  return (
-    <p className="field-note" aria-label="What differs">
-      They differ on {joined}.
-    </p>
-  );
-}
-
-function ClaimRow({
-  claim,
-  isWinner,
-  onChoose,
-  chooseLabel,
-  busy,
-}: {
-  claim: ConsensusTallyEntry;
-  isWinner: boolean;
-  onChoose?: () => void;
-  /** What choosing this claim actually does, which is not the same act in every section.
-   *
-   * It used to read "Use this" everywhere: in Conflicts, where it settles a disagreement
-   * between two people who have both looked; and in One vote only, where it puts a single
-   * unchecked opinion on the record. Same button, same styling, same words. The only thing
-   * telling them apart was a blurb at the top of the section, scrolled off by the time you
-   * reached the button on a phone. */
-  chooseLabel: string;
-  busy: boolean;
-}) {
-  return (
-    <li className={`claim${isWinner ? ' claim-winner' : ''}`}>
-      <div className="claim-votes">
-        <span className="figure">{claim.count}</span> {claim.count === 1 ? 'vote' : 'votes'}
-      </div>
-      <div className="claim-outcome">
-        <OutcomeSummary outcome={claim.outcome} />
-        {claim.voterLabels.length > 0 ? <div className="claim-voters">{claim.voterLabels.join(', ')}</div> : null}
-      </div>
-      {onChoose ? (
-        <button type="button" className="btn btn-secondary" onClick={onChoose} disabled={busy}>
-          {chooseLabel}
-        </button>
-      ) : null}
-    </li>
-  );
-}
 
 export interface ReviewQueueProps {
   /** Opens the full word screen, for a conflict a curator would rather resolve
@@ -367,6 +260,20 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
 
                   <DisagreementNote summary={g.summary} />
 
+                  {/* The baseline the claims are proposing to change. Only where there is a
+                      real choice to make: in 'ready' the queue is a bulk wave-through and a
+                      second block per row is noise, and the claim is unanimous anyway. */}
+                  {section.bucket !== 'ready' && g.axis === 'entry' ? (
+                    <CurrentRecord
+                      axis={g.axis}
+                      displayText={g.displayText}
+                      syllables={g.currentSyllables}
+                      definition={g.currentDefinition}
+                      citedEntryId={g.currentCitedEntryId}
+                      labels={g.labels}
+                    />
+                  ) : null}
+
                   <ul aria-label={`Claims for ${g.displayText}`} className="plain-list claim-list">
                     {g.summary.tally.map((claim) => (
                       <ClaimRow
@@ -374,6 +281,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
                         claim={claim}
                         isWinner={claim.fingerprint === g.summary.winner?.fingerprint}
                         busy={busy}
+                        labels={g.labels}
                         // A one-click resolution is offered wherever a claim can
                         // be chosen: on conflicts and dissent that is the point,
                         // and on a single vote it saves opening the word.

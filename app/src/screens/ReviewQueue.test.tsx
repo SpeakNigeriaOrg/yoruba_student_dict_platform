@@ -29,12 +29,21 @@ function claim(fingerprint: string, count: number, voters: string[], over: Parti
   };
 }
 
-function group(wordId: string, bucket: ConsensusBucket, tally: ConsensusTallyEntry[], winnerIndex: number | null = 0): ConsensusGroup {
+function group(
+  wordId: string,
+  bucket: ConsensusBucket,
+  tally: ConsensusTallyEntry[],
+  winnerIndex: number | null = 0,
+  over: Partial<ConsensusGroup> = {},
+): ConsensusGroup {
   const winner = winnerIndex === null ? null : (tally[winnerIndex] ?? null);
   return {
     wordId,
     displayText: `display_${wordId}`,
     currentDefinition: 'stomach',
+    currentSyllables: ['i', 'kun'],
+    currentCitedEntryId: null,
+    labels: { components: {}, etymologies: {} },
     axis: 'entry',
     decidedAt: bucket === 'dissent_on_golden' ? '2026-08-02T00:00:00.000Z' : null,
     decidedByEmail: bucket === 'dissent_on_golden' ? 'curator@example.com' : null,
@@ -53,6 +62,7 @@ function group(wordId: string, bucket: ConsensusBucket, tally: ConsensusTallyEnt
       differingFields: differingFields(tally.map((t) => t.outcome)),
       wordingOnly: tally.length > 1 && new Set(tally.map((t) => fingerprintIdentity(t.outcome))).size === 1,
     },
+    ...over,
   };
 }
 
@@ -262,10 +272,15 @@ describe('ReviewQueue', () => {
     render(<ReviewQueue onOpenWord={() => {}} />);
 
     await waitFor(() => expect(screen.getByLabelText('Conflicts')).toBeInTheDocument());
-    expect(within(screen.getByLabelText('Conflicts')).getByText('display_con1')).toBeInTheDocument();
-    expect(within(screen.getByLabelText('Ready to confirm')).getByText('display_ready1')).toBeInTheDocument();
-    expect(within(screen.getByLabelText('One vote only')).getByText('display_sing1')).toBeInTheDocument();
-    expect(within(screen.getByLabelText('Disputed after being settled')).getByText('display_dis1')).toBeInTheDocument();
+    // getByRole('button'), not getByText: the spelling now appears twice in a row - once as
+    // the row's title and once in the "on record" baseline the claims propose changing - so
+    // a bare text match is ambiguous. The title is the one that says which section it is in.
+    const titled = (section: string, name: string) =>
+      within(screen.getByLabelText(section)).getByRole('button', { name });
+    expect(titled('Conflicts', 'display_con1')).toBeInTheDocument();
+    expect(titled('Ready to confirm', 'display_ready1')).toBeInTheDocument();
+    expect(titled('One vote only', 'display_sing1')).toBeInTheDocument();
+    expect(titled('Disputed after being settled', 'display_dis1')).toBeInTheDocument();
   });
 
   it('omits a section entirely when it has nothing in it', async () => {

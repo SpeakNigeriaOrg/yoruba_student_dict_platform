@@ -27,16 +27,54 @@ import {
 import type { Queryable } from '../db.js';
 import type { DecisionAxis } from '../reviewShared.js';
 
+/** How one Wiktionary etymology reads to a human.
+ *
+ * An entry claim carries citedEntryId, which is an opaque upstream token
+ * (`en-fa-yo-verb-OFVmd8R8`). Two claims that differ ONLY on which etymology
+ * they cite are a genuine disagreement about which word this is - and rendered
+ * as bare ids, or not rendered at all, they look identical. */
+export interface EtymologyLabel {
+  entryId: string;
+  form: string;
+  /** kaikki_senses.pos is nullable; 'unknown' rather than an empty parenthesis. */
+  pos: string;
+  etymologyNumber: string | null;
+  glosses: string[];
+}
+
+/** What the claims on this group refer to, resolved to something readable.
+ *
+ * Both maps are looked up in batch across every group, not per claim, so this
+ * costs two more queries regardless of how many words are in the queue - the
+ * same "2 queries, not 2N" shape the rest of this handler follows.
+ *
+ * Only ids this group's own claims mention appear here, so a client can render
+ * a claim from its group alone without carrying a corpus-wide index around. */
+export interface ConsensusLabels {
+  /** word_id -> display_text, for the components an etymology claim names. */
+  components: Record<string, string>;
+  /** entry_id -> how it reads, for the etymology an entry claim cites. */
+  etymologies: Record<string, EtymologyLabel>;
+}
+
 export interface ConsensusGroup {
   wordId: string;
   displayText: string;
   /** golden_record's current definition, as context for judging the claims. */
   currentDefinition: string | null;
+  /** golden_record's current spelling and syllables, and the etymology it cites now.
+   *
+   * The claims are proposals ABOUT this, and a curator choosing between them is
+   * choosing against what is on record - which was the one thing the tally never
+   * showed. `displayText` above is the same spelling; these are the rest of it. */
+  currentSyllables: string[];
+  currentCitedEntryId: string | null;
   axis: DecisionAxis;
   /** Present only once a curator has decided. */
   decidedAt: string | null;
   decidedByEmail: string | null;
   summary: ConsensusSummary;
+  labels: ConsensusLabels;
 }
 
 /** Buckets a curator would want to act on, in the order they deserve
@@ -102,8 +140,19 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
   const wordIds = [...new Set(contributions.rows.map((r) => r.word_id))];
 
   const [words, decisions] = await Promise.all([
-    client.query<{ word_id: string; display_text: string; definition: string | null }>(
-      'select word_id, display_text, definition from golden_record where word_id = any($1)',
+    // left join, not join: a word with no upstream_citations row (uncited, i.e. created
+    // before 0014) still has claims worth tallying, and an inner join would drop it.
+    client.query<{
+      word_id: string;
+      display_text: string;
+      definition: string | null;
+      syllables: string[];
+      cited_entry_id: string | null;
+    }>(
+      `select g.word_id, g.display_text, g.definition, g.syllables, c.entry_id as cited_entry_id
+       from golden_record g
+       left join upstream_citations c on c.word_id = g.word_id
+       where g.word_id = any($1)`,
       [wordIds],
     ),
     client.query<{ word_id: string; axis: DecisionAxis; decided_at: string; value_fingerprint: string | null; email: string }>(
@@ -151,12 +200,19 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       wordId,
       displayText: word.display_text,
       currentDefinition: word.definition,
+      currentSyllables: word.syllables ?? [],
+      currentCitedEntryId: word.cited_entry_id,
       axis,
       decidedAt: decision?.decided_at ?? null,
       decidedByEmail: decision?.email ?? null,
       summary,
+      // Filled in below, once every group is known - the lookups are batched
+      // across the whole result rather than run per group.
+      labels: { components: {}, etymologies: {} },
     });
   }
+
+  await attachLabels(client, groups);
 
   // Conflicts first, then dissent, then the bulk-confirmable set; within a
   // bucket, best-supported first so a curator's attention goes to the clearest
@@ -169,4 +225,101 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
   );
 
   return groups;
+}
+
+/** Every id any claim in `groups` refers to, resolved once and handed back to the
+ * groups that mention it.
+ *
+ * The ids in an outcome are keys: a component is a word_id, and a cited etymology is
+ * an opaque upstream token. Both are the actual substance of what a curator is being
+ * asked to choose between, and both were previously either shown raw or not shown at
+ * all - so "which spelling is right?" was answered from a vote count and a username.
+ *
+ * Mutates in place rather than returning a map the caller has to re-attach, which is
+ * why groups are pushed with empty labels above: a group is complete by the time it
+ * leaves this function, and no caller can forget to join the two halves. */
+async function attachLabels(client: Queryable, groups: ConsensusGroup[]): Promise<void> {
+  const componentIds = new Set<string>();
+  const entryIds = new Set<string>();
+
+  const claimedOutcomes = (g: ConsensusGroup): ContributionOutcome[] => g.summary.tally.map((t) => t.outcome);
+
+  for (const g of groups) {
+    // The word's OWN current citation is labelled too, so "what is on record" and "what
+    // is being proposed" read the same way rather than one being prose and one an id.
+    if (g.currentCitedEntryId) entryIds.add(g.currentCitedEntryId);
+    for (const outcome of claimedOutcomes(g)) {
+      if (outcome.kind === 'etymology') for (const c of outcome.components) componentIds.add(c);
+      else if (outcome.citedEntryId) entryIds.add(outcome.citedEntryId);
+    }
+  }
+
+  if (componentIds.size === 0 && entryIds.size === 0) return;
+
+  const [components, senses] = await Promise.all([
+    componentIds.size > 0
+      ? client.query<{ word_id: string; display_text: string }>(
+          'select word_id, display_text from golden_record where word_id = any($1)',
+          [[...componentIds]],
+        )
+      : Promise.resolve({ rows: [] as Array<{ word_id: string; display_text: string }> }),
+    entryIds.size > 0
+      ? client.query<{
+          entry_id: string;
+          canonical_value: string;
+          pos: string | null;
+          etymology_number: string | null;
+          glosses: string[] | null;
+        }>(
+          `select entry_id, canonical_value, pos, etymology_number, glosses
+           from kaikki_senses where entry_id = any($1)`,
+          [[...entryIds]],
+        )
+      : Promise.resolve({
+          rows: [] as Array<{
+            entry_id: string;
+            canonical_value: string;
+            pos: string | null;
+            etymology_number: string | null;
+            glosses: string[] | null;
+          }>,
+        }),
+  ]);
+
+  const componentById = new Map(components.rows.map((r) => [r.word_id, r.display_text]));
+  const senseById = new Map(
+    senses.rows.map((r): [string, EtymologyLabel] => [
+      r.entry_id,
+      {
+        entryId: r.entry_id,
+        // canonical_value is what upstream calls the word - the same field EtymologyLabel
+        // renders as `result.form` on the Add Word screen, so a cited etymology reads
+        // identically wherever it appears.
+        form: r.canonical_value,
+        pos: r.pos ?? 'unknown',
+        etymologyNumber: r.etymology_number,
+        glosses: r.glosses ?? [],
+      },
+    ]),
+  );
+
+  for (const g of groups) {
+    const referenced = (id: string) => {
+      const label = componentById.get(id);
+      // An id with no row is left OUT rather than mapped to itself. The client falls back
+      // to the raw id, and a component naming a word that has since been deleted must not
+      // be dressed up as one that resolved.
+      if (label !== undefined) g.labels.components[id] = label;
+    };
+    const cited = (id: string) => {
+      const label = senseById.get(id);
+      if (label !== undefined) g.labels.etymologies[id] = label;
+    };
+
+    if (g.currentCitedEntryId) cited(g.currentCitedEntryId);
+    for (const outcome of claimedOutcomes(g)) {
+      if (outcome.kind === 'etymology') outcome.components.forEach(referenced);
+      else if (outcome.citedEntryId) cited(outcome.citedEntryId);
+    }
+  }
 }

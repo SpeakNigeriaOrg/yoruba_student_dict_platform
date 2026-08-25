@@ -649,6 +649,31 @@ audio {
   margin-top: 4px;
 }
 
+/* The record as it stands, above the claims that propose changing it.
+   Same two-column geometry as .claim so the fields line up with their
+   counterparts and a difference reads as a difference rather than as two
+   differently-shaped blocks. Deliberately NOT a .claim: it is the baseline,
+   not a candidate, so it carries no border box and no choose button - which
+   is what stops it being clicked as if it were an option. */
+.claim-current {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  border-left: 3px dashed var(--border);
+}
+.claim-current .claim-outcome {
+  color: var(--ink-soft);
+}
+/* The word_id trailing each component: present for checking, never competing with
+   the spelling it follows. */
+.claim-outcome .word-id,
+.claim-current .word-id {
+  font-size: 0.72rem;
+}
+
 /* ---- Tone editor ----
    A grid: one COLUMN per syllable, one ROW per tone, high at the top.
    

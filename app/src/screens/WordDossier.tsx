@@ -11,7 +11,6 @@
 // Deliberately read-only. Working ON a word is the review screens; this is reading it.
 
 import { useEffect, useState } from 'react';
-import { AGREEMENT_THRESHOLD } from '@yoruba-student-dict-platform/shared';
 import {
   confirmConsensus,
   excludeContribution,
@@ -26,6 +25,9 @@ import {
   type WordDossier as Dossier,
 } from '../api.js';
 import { CitationMark } from './StateMarks.js';
+// The same renderer the bulk queue uses, so the two places a curator sets the record cannot
+// show a claim two different ways - see ClaimViews.tsx.
+import { ClaimRow, CurrentRecord, DisagreementNote } from './ClaimViews.js';
 
 function when(iso: string | null): string {
   if (!iso) return '-';
@@ -84,7 +86,10 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
         different act.
       </p>
 
-      <DecideSection wordId={dossier.wordId} />
+      {/* The components come from the dossier rather than a second fetch: this screen has
+          already loaded them for the Composition section below, and the etymology tally
+          needs exactly that list as its baseline. */}
+      <DecideSection wordId={dossier.wordId} components={dossier.components.map((c) => c.wordId)} />
 
       <div className="dossier-grid">
         <div className="dossier-section" aria-label="Record">
@@ -410,8 +415,25 @@ function RecordingRow({ recording }: { recording: DossierRecording }) {
  * item if the tally has moved since this screen loaded (expectedFingerprint). A curator
  * ratifying their own lone vote is allowed and is the ordinary one-person case - it just
  * takes the deliberate second act rather than happening as a side effect of answering.
+ *
+ * ---------------------------------------------------------------------------
+ * What the curator is actually looking at
+ * ---------------------------------------------------------------------------
+ * This section used to render a claim as a vote count and a list of usernames, and nothing
+ * else - no spelling, no syllables, no definition, no components, no cited etymology. The
+ * button under it said "Set the record to this", where "this" was never shown.
+ *
+ * That is not a display bug, it is the wrong model leaking back in. This whole screen exists
+ * because a contribution is EVIDENCE rather than a proposal addressed to a curator, and the
+ * question is "what is true?" rather than "is this person right?" - but a row that shows only
+ * WHO said it can only be answered the second way. Two contributors differing on a single
+ * tone mark produced two indistinguishable rows, and the only thing separating them was the
+ * name attached.
+ *
+ * So the claims are rendered by the same component the bulk queue uses (ClaimViews.tsx),
+ * with the record's current state shown above them as the baseline they propose changing.
  */
-function DecideSection({ wordId }: { wordId: string }) {
+function DecideSection({ wordId, components }: { wordId: string; components: string[] }) {
   const [groups, setGroups] = useState<ConsensusGroup[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -463,32 +485,52 @@ function DecideSection({ wordId }: { wordId: string }) {
                 {g.decidedAt ? ` · decided ${when(g.decidedAt)}${g.decidedByEmail ? ` by ${g.decidedByEmail}` : ''}` : ''}
               </span>
             </p>
-            {g.summary.isContested ? (
-              <p className="field-note">
-                Answers differ on {g.summary.differingFields.join(', ') || 'the outcome'}. Choosing one settles it.
-              </p>
-            ) : null}
-            <ul className="plain-list claim-list">
+
+            {/* Which fields the claims actually differ on, in the queue's own words - a
+                tone-mark dispute and two people wording a gloss differently are not the same
+                question, and this screen used to describe both as "answers differ". */}
+            <DisagreementNote summary={g.summary} />
+
+            {/* The baseline. Without it "set the record to this" cannot be told apart from
+                "leave the record alone", so the no-op looked like a decision. The dossier is
+                the one screen that already holds the word's components, so the etymology
+                axis gets a real baseline here rather than the queue's "not shown". */}
+            <CurrentRecord
+              axis={g.axis}
+              displayText={g.displayText}
+              syllables={g.currentSyllables}
+              definition={g.currentDefinition}
+              citedEntryId={g.currentCitedEntryId}
+              components={components}
+              labels={g.labels}
+            />
+
+            <ul aria-label={`Claims for ${g.axis}`} className="plain-list claim-list">
               {g.summary.tally.map((claim) => (
-                <li key={claim.fingerprint} className="claim">
-                  <span className="claim-votes">
-                    {claim.count} of {g.summary.totalVotes}
-                    {claim.count >= AGREEMENT_THRESHOLD ? ' · corroborated' : ''}
-                  </span>{' '}
-                  <span className="claim-voters">{claim.voterLabels.join(', ')}</span>
-                  <div className="btn-row">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={busy}
-                      onClick={() => void decide(g, claim.fingerprint)}
-                    >
-                      Set the record to this
-                    </button>
-                  </div>
-                </li>
+                <ClaimRow
+                  key={claim.fingerprint}
+                  claim={claim}
+                  isWinner={claim.fingerprint === g.summary.winner?.fingerprint}
+                  busy={busy}
+                  labels={g.labels}
+                  // One verb here, unlike the queue's four. The queue splits by bucket
+                  // because the same button settles an argument in one section and promotes
+                  // an unchecked opinion in another; on a dossier the bucket is named on the
+                  // line above, so the button can simply say what it does.
+                  chooseLabel="Set the record to this"
+                  onChoose={() => void decide(g, claim.fingerprint)}
+                />
               ))}
             </ul>
+
+            {/* Corroboration, which the queue conveys by which section a row is in and a
+                dossier has no sections to convey it with. */}
+            {g.summary.meetsThreshold ? (
+              <p className="field-note">
+                {g.summary.agreementCount} of {g.summary.totalVotes} agree on the leading claim, which is enough to
+                corroborate it.
+              </p>
+            ) : null}
           </div>
         ))
       )}

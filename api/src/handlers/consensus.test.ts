@@ -560,3 +560,107 @@ describe('listConsensus filtering', () => {
     expect(await listConsensus(pool, { wordId, buckets: ['single'] })).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Making a claim readable
+// ---------------------------------------------------------------------------
+//
+// A tally is only useful if a curator can tell what each claim SAYS. Two of the fields a
+// claim asserts are stored as keys - a component is a word_id, a cited etymology is an
+// opaque upstream token - and neither could be read as-is:
+//
+//   - word_ids are orthography-insensitive by construction, so `oju_eye` cannot say whether
+//     the claim is about `ojú` or `òjò`. Tone is the commonest thing being adjudicated.
+//   - an entry id says nothing at all, and it is part of the fingerprint: two claims that
+//     differ ONLY on which etymology they cite are a real disagreement about which word this
+//     is, and they render identically without it.
+//
+// So the handler resolves both, batched across the whole result.
+describe('listConsensus resolves the ids inside a claim', () => {
+  it('labels the etymology an entry claim cites, and the one on record', async () => {
+    const hangId = `${ENTRY_NS}lbl_hang`;
+    const buildId = `${ENTRY_NS}lbl_build`;
+    await insertTestKaikkiSense(pool, {
+      entryId: hangId,
+      headword: 'ikun',
+      canonicalValue: 'ikùn',
+      etymologyNumber: '4',
+      glosses: ['to hang, suspend'],
+    });
+    await insertTestKaikkiSense(pool, {
+      entryId: buildId,
+      headword: 'ikun',
+      canonicalValue: 'ikún',
+      etymologyNumber: '2',
+      glosses: ['to build, construct'],
+    });
+    const wordId = await word('to hang, suspend');
+    await pool.query(`insert into upstream_citations (word_id, entry_id, pin, pinned_by) values ($1, $2, '{}'::jsonb, $3)`, [
+      wordId,
+      hangId,
+      curator,
+    ]);
+
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: { ...KEEP, senseEntryId: buildId } }, ben);
+
+    const g = await group(wordId);
+    expect(g?.summary.bucket).toBe('contested');
+    // Both claims' etymologies, so the row that differs only in its citation can say so.
+    expect(g?.labels.etymologies[hangId]).toEqual({
+      entryId: hangId,
+      form: 'ikùn',
+      pos: 'verb',
+      etymologyNumber: '4',
+      glosses: ['to hang, suspend'],
+    });
+    expect(g?.labels.etymologies[buildId]?.glosses).toEqual(['to build, construct']);
+    // And what the record currently says, so the claims have a baseline to be compared to.
+    expect(g?.currentCitedEntryId).toBe(hangId);
+    expect(g?.currentSyllables).toEqual(['i', 'kun']);
+  });
+
+  it('spells the components an etymology claim names', async () => {
+    const parent = await word('house-front');
+    const eye = await word('eye');
+    const house = await word('house');
+    await pool.query('update golden_record set display_text = $2 where word_id = $1', [eye, 'ojú']);
+    await pool.query('update golden_record set display_text = $2 where word_id = $1', [house, 'ilé']);
+
+    await submitContribution(
+      pool,
+      { axis: 'etymology', wordId: parent, proposedValue: { componentsAction: 'custom', components: [eye, house] } },
+      ada,
+    );
+
+    const groups = await listConsensus(pool, { wordId: parent, axis: 'etymology', buckets: ['single'] });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].labels.components).toEqual({ [eye]: 'ojú', [house]: 'ilé' });
+  });
+
+  it('leaves a component whose word has been deleted unlabelled rather than labelling it with its own id', async () => {
+    // The client falls back to the raw id. Dressing a dangling reference up as one that
+    // resolved would say the word still exists, which is the one thing worth not saying.
+    const parent = await word('gone');
+    const doomed = await word('doomed');
+    await submitContribution(
+      pool,
+      { axis: 'etymology', wordId: parent, proposedValue: { componentsAction: 'custom', components: [doomed] } },
+      ada,
+    );
+    await pool.query('delete from golden_record_components where word_id = $1', [parent]);
+    await pool.query('delete from golden_record where word_id = $1', [doomed]);
+
+    const groups = await listConsensus(pool, { wordId: parent, axis: 'etymology', buckets: ['single'] });
+    expect(groups[0].labels.components).toEqual({});
+  });
+
+  it('does not query at all when no claim refers to anything', async () => {
+    // An uncited word with a plain entry claim names no component and cites no etymology.
+    const wordId = await word();
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    const g = await group(wordId);
+    expect(g?.labels).toEqual({ components: {}, etymologies: {} });
+    expect(g?.currentCitedEntryId).toBeNull();
+  });
+});

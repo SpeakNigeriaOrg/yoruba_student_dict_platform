@@ -897,14 +897,34 @@ export function repinUpstream(wordId: string, entryId: string): Promise<void> {
 // review queue, one row per (word, axis) rather than per contribution.
 // ConsensusSummary/ConsensusBucket come from shared, so the bucketing rules
 // have exactly one definition.
+/** Mirrors listConsensus.ts's EtymologyLabel - one cited etymology, readable. */
+export interface EtymologyLabel {
+  entryId: string;
+  form: string;
+  pos: string;
+  etymologyNumber: string | null;
+  glosses: string[];
+}
+
+/** Mirrors listConsensus.ts's ConsensusLabels. The ids inside a claim's outcome resolved
+ * to what they mean, so a curator choosing between claims is reading words rather than
+ * keys - see screens/ClaimViews.tsx for why that distinction was load-bearing. */
+export interface ConsensusLabels {
+  components: Record<string, string>;
+  etymologies: Record<string, EtymologyLabel>;
+}
+
 export interface ConsensusGroup {
   wordId: string;
   displayText: string;
   currentDefinition: string | null;
+  currentSyllables: string[];
+  currentCitedEntryId: string | null;
   axis: 'entry' | 'etymology';
   decidedAt: string | null;
   decidedByEmail: string | null;
   summary: ConsensusSummary;
+  labels: ConsensusLabels;
 }
 
 export function getConsensus(
