@@ -16,12 +16,23 @@
 // act on a list that went stale, and the UI never has to hold thousands
 // of chips. Both are two-step (click, then confirm) since there's no
 // bulk unassign to walk them back.
+//
+// And a third bulk option that is a browse rather than a shortcut:
+// RecentWordsBrowser, for "we just added a batch, assign all of it". It
+// sits on the OTHER side of that split deliberately - it feeds `pending`
+// like the search box does, because the curator resolved the set by
+// looking at it, and needs no confirm step of its own for the same reason
+// (they saw the list, and Assign is still one more click away).
 
 import { useState } from 'react';
 import { searchVocab, type AssignmentScope } from '../api.js';
 import { SearchBox } from './SearchBox.js';
+import { RecentWordsBrowser } from './RecentWordsBrowser.js';
 
 export interface WordAssignPickerProps {
+  /** The user being assigned to. Needed here (and not only by the parent's
+   * callbacks) because the recent-words browse marks what they already have. */
+  userId: string;
   onAssign: (wordIds: string[]) => Promise<void>;
   onAssignScope: (scope: AssignmentScope) => Promise<void>;
 }
@@ -31,14 +42,19 @@ const SCOPE_LABELS: Record<AssignmentScope, string> = {
   incomplete: 'all incomplete words',
 };
 
-export function WordAssignPicker({ onAssign, onAssignScope }: WordAssignPickerProps) {
+export function WordAssignPicker({ userId, onAssign, onAssignScope }: WordAssignPickerProps) {
   const [pending, setPending] = useState<string[]>([]);
   const [pasteText, setPasteText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [armedScope, setArmedScope] = useState<AssignmentScope | null>(null);
+  const [browsingRecent, setBrowsingRecent] = useState(false);
 
   function addWordId(wordId: string) {
     setPending((prev) => (prev.includes(wordId) ? prev : [...prev, wordId]));
+  }
+
+  function addWordIds(wordIds: string[]) {
+    setPending((prev) => Array.from(new Set([...prev, ...wordIds])));
   }
 
   function removeWordId(wordId: string) {
@@ -146,9 +162,27 @@ export function WordAssignPicker({ onAssign, onAssignScope }: WordAssignPickerPr
             >
               Assign all incomplete words
             </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setBrowsingRecent((open) => !open)}
+              disabled={submitting}
+            >
+              Browse recently added words
+            </button>
           </div>
         )}
       </div>
+      {/* Below the buttons rather than in place of them: the two scope
+          shortcuts stay reachable while the list is open, and closing the
+          browse doesn't move what the curator was about to click. */}
+      {browsingRecent ? (
+        <RecentWordsBrowser
+          userId={userId}
+          onAddSelected={addWordIds}
+          onClose={() => setBrowsingRecent(false)}
+        />
+      ) : null}
     </div>
   );
 }

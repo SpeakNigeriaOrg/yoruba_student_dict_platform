@@ -167,6 +167,24 @@ export function assignWordsByScope(userId: string, scope: AssignmentScope): Prom
   });
 }
 
+// Mirrors api/src/handlers/listRecentWords.ts's RecentWordSummary. Deliberately
+// NOT a third AssignmentScope: the curator resolves this set by looking at it,
+// so what they picked is submitted as explicit wordIds through assignWords.
+export interface RecentWordSummary {
+  wordId: string;
+  displayText: string;
+  definition: string | null;
+  entryType: 'phrase' | null;
+  createdAt: string;
+  alreadyAssigned: boolean;
+}
+
+export function getRecentWords(userId: string, limit?: number): Promise<RecentWordSummary[]> {
+  const params = new URLSearchParams({ userId });
+  if (limit !== undefined) params.set('limit', String(limit));
+  return fetchJson<{ words: RecentWordSummary[] }>(`/api/recent-words?${params.toString()}`).then((r) => r.words);
+}
+
 export function unassignWord(userId: string, wordId: string): Promise<{ userId: string; wordId: string; status: string }> {
   return fetchJson(`/api/assignments/${encodeURIComponent(userId)}/${encodeURIComponent(wordId)}`, {
     method: 'DELETE',

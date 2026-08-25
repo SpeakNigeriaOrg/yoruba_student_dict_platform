@@ -88,7 +88,7 @@ export function AdminUserDetail({ userId, onSelectWord, onBack, onUsersChanged }
         </button>
       ) : null}
 
-      <WordAssignPicker onAssign={handleAssign} onAssignScope={handleAssignScope} />
+      <WordAssignPicker userId={userId} onAssign={handleAssign} onAssignScope={handleAssignScope} />
 
       {error ? <p role="alert" className="error-banner">Couldn't load assignments: {error}</p> : null}
       {!assignments ? (

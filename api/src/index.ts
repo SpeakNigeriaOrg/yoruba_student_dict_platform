@@ -20,6 +20,7 @@ import './functions/etymologyReview.js';
 import './functions/entryReview.js';
 import './functions/kaikkiSearch.js';
 import './functions/vocabSearch.js';
+import './functions/recentWords.js';
 import './functions/duplicateCheck.js';
 import './functions/excludeContribution.js';
 import './functions/consensus.js';

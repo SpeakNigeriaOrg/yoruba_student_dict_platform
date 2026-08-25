@@ -105,6 +105,50 @@ describe('AdminUserDetail', () => {
     expect(JSON.parse((postCall?.[1] as RequestInit).body as string)).toEqual({ userId: 'u1', scope: 'all' });
   });
 
+  it('browsing recently added words assigns the picked ones as explicit wordIds, not a scope', async () => {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ created: ['recentA', 'recentB'], alreadyAssigned: [] }) });
+      }
+      if (String(url).startsWith('/api/recent-words')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            words: [
+              { wordId: 'recentA', displayText: 'recentA', definition: null, entryType: null, createdAt: oneHourAgo, alreadyAssigned: false },
+              { wordId: 'recentB', displayText: 'recentB', definition: null, entryType: null, createdAt: oneHourAgo, alreadyAssigned: false },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => userAssignmentsFixture });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
+    await waitFor(() => screen.getByText('epo'));
+
+    await user.click(screen.getByRole('button', { name: 'Browse recently added words' }));
+    await waitFor(() => screen.getByRole('button', { name: /Add 2 selected/ }));
+    await user.click(screen.getByRole('button', { name: /Add 2 selected/ }));
+
+    // The picks land in the same pending list the search box and paste box
+    // feed, so there is still one Assign button submitting one request.
+    await user.click(screen.getByRole('button', { name: /Assign 2 word\(s\)/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Assigned 2 word(s).');
+    });
+    const postCall = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'POST');
+    expect(postCall?.[0]).toBe('/api/assignments');
+    expect(JSON.parse((postCall?.[1] as RequestInit).body as string)).toEqual({
+      userId: 'u1',
+      wordIds: ['recentA', 'recentB'],
+    });
+  });
+
   it('clicking Unassign calls the delete endpoint and reloads the list', async () => {
     const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') {
