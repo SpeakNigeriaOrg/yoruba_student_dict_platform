@@ -27,6 +27,9 @@ local tool) this repo implements.
 - `vad-service/` - Python Container App: Silero VAD syllable segmentation,
   ported from `yoruba-student-dict/content/parse_word_syllable_audio.py`
   with its logic unchanged, writing to the database instead of local files.
+- `analysis/` - offline Python tone-analysis and non-destructive audio-preparation
+  pipeline. It produces versioned measurements and game-ready derivatives while
+  preserving the captured signal; see `docs/TONE_ANALYSIS_PLAN.md`.
 - `db/` - schema and migrations (Postgres Flexible Server).
 - `fixtures/` - golden test fixtures exported from the real Python engine in
   `yoruba-student-dict` (see its `scripts/export_js_port_fixtures.py`),
