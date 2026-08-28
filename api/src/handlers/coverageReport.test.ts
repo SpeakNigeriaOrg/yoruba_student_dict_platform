@@ -6,6 +6,7 @@ const NS = 'testcov_';
 const pool = getTestPool();
 let speakerAId: string;
 let speakerBId: string;
+const WAVE_CONTAINER = Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
 
 async function cleanUpSpeakers(): Promise<void> {
   await pool.query('delete from utterances where speaker_id in (select speaker_id from speakers where display_name like $1)', [
@@ -56,7 +57,7 @@ async function record(
   await pool.query(
     `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables, audio_data)
      values ($1, $2, 1, 'x', $3, $4, $5)`,
-    [wordId, speakerId, syllables.join(''), syllables, Buffer.from('wav')],
+    [wordId, speakerId, syllables.join(''), syllables, WAVE_CONTAINER],
   );
   const take2 = await pool.query<{ utterance_id: string }>(
     `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables)
@@ -69,7 +70,7 @@ async function record(
          (utterance_id, syllable_position, syllable_text, syllable_tone_insensitive,
           syllable_orthography_insensitive, legacy_syllable_key, start_time_s, end_time_s, blob_path, audio_data)
        values ($1, $2, $3, $3, $3, $3, 0, 0.3, 'x', $4)`,
-      [take2.rows[0].utterance_id, i, syllable, Buffer.from('clip')],
+      [take2.rows[0].utterance_id, i, syllable, WAVE_CONTAINER],
     );
   }
   if (opts.image) {
@@ -127,7 +128,7 @@ describe('per-speaker coverage', () => {
     await pool.query(
       `insert into utterances (word_id, speaker_id, take_number, blob_path, recorded_display_text, recorded_syllables, audio_data)
        values ($1, $2, 1, 'x', 'old-spelling', array['old'], $3)`,
-      [`${NS}wstale`, speakerAId, Buffer.from('wav')],
+      [`${NS}wstale`, speakerAId, WAVE_CONTAINER],
     );
     const alpha = await forSpeaker(speakerAId);
     expect(alpha.staleRecordings).toBe(1);
