@@ -99,7 +99,7 @@ export async function loadCoverageReport(client: Queryable): Promise<CoverageRep
         order by s.display_name`,
     ),
     // One row per (speaker, word) the speaker has a live take-1 recording of, saying whether
-    // that same speaker also covered every syllable and whether the word has any image. The
+    // that same speaker has an exact reusable exemplar for every syllable and whether the word has any image. The
     // three conditions publishToR2 applies, evaluated together rather than corpus-wide.
     client.query<PlayableRow>(
       `select u.speaker_id, u.word_id,
@@ -108,14 +108,19 @@ export async function loadCoverageReport(client: Queryable): Promise<CoverageRep
                  where not exists (
                    select 1 from syllable_observations so
                      join utterances u2 on u2.utterance_id = so.utterance_id
-                    where u2.word_id = g.word_id and u2.speaker_id = u.speaker_id
+                    where u2.speaker_id = u.speaker_id
                       and so.audio_data is not null
+                      and substring(so.audio_data from 1 for 4) = decode('52494646', 'hex')
+                      and substring(so.audio_data from 9 for 4) = decode('57415645', 'hex')
                       and normalize(so.syllable_text, nfc) = normalize(needed.syllable, nfc))
               ) as fully_covered,
               exists (select 1 from word_images i where i.word_id = g.word_id) as has_image
          from utterances u
          join golden_record g on g.word_id = u.word_id
-        where u.take_number = 1 and u.audio_data is not null and ${MATCHES}`,
+        where u.take_number = 1 and u.audio_data is not null
+          and substring(u.audio_data from 1 for 4) = decode('52494646', 'hex')
+          and substring(u.audio_data from 9 for 4) = decode('57415645', 'hex')
+          and ${MATCHES}`,
     ),
     client.query<{ speaker_id: string; n: number }>(
       `select u.speaker_id, count(*)::int as n

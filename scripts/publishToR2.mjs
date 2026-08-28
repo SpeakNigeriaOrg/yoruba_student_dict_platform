@@ -97,12 +97,10 @@
 // naming the exact version - would make `immutable` safe, replacement instant, and stale objects
 // harmless rather than wrong.
 //
-// That is deliberately not done yet, because today a published asset has exactly ONE possible
-// derivation. Verified rather than assumed: raw_audio_data is byte-identical to audio_data for all 96
-// utterances and all 193 segments, so 0008's raw/served split is currently a no-op; all three
-// canonical_*_selections tables are empty; and there is nothing to select between anyway - the two takes
-// per session are different artifacts by design (take 1 is the whole word, take 2 carries the syllable
-// segments), and no word has more than one image variant per style.
+// This remains a transitional overwrite-in-place publisher. It now honors canonical syllable
+// selections, uses a deterministic fallback, and refuses manifest/prune changes after any upload
+// failure. Content-addressed release staging is still required for fully atomic promotion; see
+// docs/GAME_AUDIO_PUBLICATION_PLAN.md.
 //
 // Adopt versioned keys when ANY of those stops being true:
 //   * post-processing lands, so audio_data starts differing from raw_audio_data
@@ -115,7 +113,15 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { reportUpstreamHealth } from './upstreamPublishCheck.mjs';
-import { recordingMatchesGoldenSql } from '../shared/dist/index.js';
+import {
+  fullyCoveredWords,
+  gameSyllableFileName,
+  hasWaveContainer,
+  planLevels,
+  recordingMatchesGoldenSql,
+  selectSyllableAudio,
+  toneOf,
+} from '../shared/dist/index.js';
 import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
 
@@ -295,74 +301,6 @@ async function reportOrphans(s3, bucket, expectedKeys) {
   console.log(`      deleted ${found.length} orphaned object(s)`);
 }
 
-const MIN_THEME_WORDS = 3;
-const REINFORCEMENT_LEVEL_SIZE = 10;
-const MIN_TONE_PATTERN_WORDS = 4;
-const ENDLESS_BUNDLE_SIZE = 8;
-const ENDLESS_BUNDLE_COUNT = 3;
-
-const HIGH_TONE_CHARS = ['á', 'é', 'ẹ́', 'í', 'ó', 'ọ́', 'ú', 'ń'];
-const LOW_TONE_CHARS = ['à', 'è', 'ẹ̀', 'ì', 'ò', 'ọ̀', 'ù', 'ǹ'];
-
-function stripCombiningMarks(s) {
-  return Array.from(s)
-    .filter((ch) => {
-      const code = ch.codePointAt(0);
-      return !(code >= 0x300 && code <= 0x36f);
-    })
-    .join('');
-}
-
-function toneOf(syllable) {
-  const n = syllable.normalize('NFC').toLowerCase();
-  if (HIGH_TONE_CHARS.some((c) => n.includes(c))) return 'high';
-  if (LOW_TONE_CHARS.some((c) => n.includes(c))) return 'low';
-  return 'mid';
-}
-
-// Same port of generate_syllable_info() as exportGameContent.mjs/
-// migrateSpeaker1And2.mjs - kept duplicated here rather than shared,
-// matching this repo's established one-file-per-script convention.
-function safeName(syllable, toneMap) {
-  const normalized = syllable.normalize('NFC').toLowerCase();
-  const suffix = toneOf(normalized) === 'mid' ? '' : `_${toneOf(normalized)}`;
-  let safe = normalized;
-  const keysLongestFirst = Object.keys(toneMap).sort((a, b) => b.length - a.length);
-  for (const key of keysLongestFirst) safe = safe.split(key).join(toneMap[key]);
-  safe = stripCombiningMarks(safe.normalize('NFD')).normalize('NFC');
-  return `${safe}${suffix}.wav`;
-}
-
-function shuffle(array, rng = Math.random) {
-  const out = array.slice();
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function greedyMinimalSyllableSet(words, targetSize) {
-  const remaining = new Map(words.map((w) => [w.wordId, w]));
-  const chosen = [];
-  const pool = new Set();
-  while (chosen.length < targetSize && remaining.size > 0) {
-    let best = null;
-    let bestNew = Infinity;
-    for (const w of remaining.values()) {
-      const newCount = w.syllables.filter((s) => !pool.has(s)).length;
-      if (newCount < bestNew) {
-        best = w;
-        bestNew = newCount;
-      }
-    }
-    chosen.push(best);
-    remaining.delete(best.wordId);
-    best.syllables.forEach((s) => pool.add(s));
-  }
-  return chosen;
-}
-
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = process.env;
@@ -504,35 +442,44 @@ async function main() {
     );
   }
   const wordAudioBySpeaker = new Map();
+  let invalidWordContainers = 0;
   for (const row of wordAudioResult.rows) {
+    if (!hasWaveContainer(row.audio_data)) {
+      invalidWordContainers++;
+      continue;
+    }
     const speaker = speakerNameById.get(row.speaker_id);
     if (!speaker) continue;
     if (!wordAudioBySpeaker.has(speaker)) wordAudioBySpeaker.set(speaker, new Map());
     wordAudioBySpeaker.get(speaker).set(row.word_id, row.audio_data);
   }
+  if (invalidWordContainers) console.warn(`      ${invalidWordContainers} word recording(s) excluded: audio_data is not a WAV container`);
 
   const syllableAudioResult = await pool.query(
-    `select e.speaker_id, e.syllable_text, e.audio_data
-     from syllable_observations_enriched e
-     order by e.speaker_id, e.syllable_text`,
+    `select so.observation_id, u.speaker_id, so.syllable_text, so.audio_data, u.recorded_at,
+            exists (select 1 from canonical_syllable_selections cs
+                     where cs.observation_id = so.observation_id
+                       and cs.speaker_id = u.speaker_id) as explicitly_selected
+       from syllable_observations so
+       join utterances u on u.utterance_id = so.utterance_id
+      where so.audio_data is not null`,
   );
+  const selectedSyllables = selectSyllableAudio(syllableAudioResult.rows.map((row) => ({
+    observationId: row.observation_id,
+    speakerId: row.speaker_id,
+    syllableText: row.syllable_text,
+    audio: hasWaveContainer(row.audio_data) ? row.audio_data : null,
+    recordedAt: new Date(row.recorded_at).toISOString(),
+    explicitlySelected: row.explicitly_selected,
+  })));
+  const invalidSyllableContainers = syllableAudioResult.rows.filter((row) => !hasWaveContainer(row.audio_data)).length;
+  if (invalidSyllableContainers) console.warn(`      ${invalidSyllableContainers} syllable recording(s) excluded: audio_data is not a WAV container`);
   const syllableAudioBySpeaker = new Map();
-  for (const row of syllableAudioResult.rows) {
-    const speaker = speakerNameById.get(row.speaker_id);
+  for (const row of selectedSyllables) {
+    const speaker = speakerNameById.get(row.speakerId);
     if (!speaker) continue;
     if (!syllableAudioBySpeaker.has(speaker)) syllableAudioBySpeaker.set(speaker, new Map());
-    const map = syllableAudioBySpeaker.get(speaker);
-    // NFC, because the game looks a syllable up BY STRING: it takes the syllable out of vocab.json and
-    // indexes syllables.json with it. Stored text is not consistently normalised, and an NFD `ọ`
-    // (o + U+0323) is a different key from an NFC `ọ` (U+1ECD) even though they are the same letter - so
-    // the lookup missed and the button fell silent while the audio sat in the bucket. Live at the time
-    // this was written: `oba_king` and `ose_soap` for speaker1 and speaker2.
-    //
-    // It also de-duplicates deliberately. safeName() strips combining marks, so both forms already
-    // produced the SAME R2 filename - two rows were silently overwriting one object, which is why the
-    // upload count exceeded the number of distinct keys by exactly one.
-    const syllableText = row.syllable_text.normalize('NFC');
-    if (!map.has(syllableText)) map.set(syllableText, row.audio_data);
+    syllableAudioBySpeaker.get(speaker).set(row.syllableText, row.audio);
   }
 
   const imagesResult = await pool.query(
@@ -578,7 +525,7 @@ async function main() {
   for (const [speaker, syllableMap] of syllableAudioBySpeaker) {
     verifiedSyllableAudioKey.set(speaker, new Map());
     for (const [syllableText, buf] of syllableMap) {
-      const key = `syllables/${speaker}/${safeName(syllableText, toneMap)}`;
+      const key = `syllables/${speaker}/${gameSyllableFileName(syllableText, toneMap)}`;
       expectedKeys.add(key);
       // Syllables are not word-scoped, so --word cannot select among them; only --speaker applies.
       if (!wantsSpeaker(speaker) || onlyWords.size > 0 || onlyStyles.size > 0) continue;
@@ -612,6 +559,13 @@ async function main() {
     console.log(`      ${uploaded} uploaded, ${skipped} already identical (skipped), ${failCount} failed`);
   } else {
     console.log(`      ${uploadCount} object(s) would be uploaded, ${failCount} failed`);
+  }
+
+  if (apply && failCount > 0) {
+    console.error('Publication stopped: at least one media object failed verification; manifests and pruning were not changed.');
+    await pool.end();
+    process.exitCode = 1;
+    return;
   }
 
   await reportOrphans(s3, R2_BUCKET_NAME, expectedKeys);
@@ -649,95 +603,19 @@ async function main() {
   for (const speaker of speakers) {
     const wordAudio = verifiedWordAudioKey.get(speaker) ?? new Map();
     const syllableAudio = verifiedSyllableAudioKey.get(speaker) ?? new Map();
-    const covered = [];
-    for (const [wordId, entry] of Object.entries(vocab)) {
-      if (!wordAudio.has(wordId)) continue;
-      const allSyllablesCovered = entry.syllables.every((s) => syllableAudio.has(s));
-      if (!allSyllablesCovered) continue;
-      // A word with no real image must never be presented with a
-      // placeholder standing in for it - that's fabricated content, not
-      // a graceful degrade. Image coverage is a hard gate here, same as
-      // audio, not optional metadata (see conversation: this was
-      // previously NOT gated, and app.js silently substituted a
-      // placeholder graphic for any word missing art).
-      if (!verifiedImageKey.get(wordId)?.size) continue;
-      covered.push({ wordId, displayText: entry.displayText, syllables: entry.syllables });
-    }
+    const words = Object.entries(vocab).map(([wordId, entry]) => ({ wordId, ...entry }));
+    const covered = fullyCoveredWords(
+      words,
+      new Set(wordAudio.keys()),
+      new Set(syllableAudio.keys()),
+      new Set([...verifiedImageKey].filter(([, styles]) => styles.size > 0).map(([wordId]) => wordId)),
+    );
     coveredWordsBySpeaker.set(speaker, covered);
     console.log(`      ${speaker}: ${covered.length} / ${wordsResult.rows.length} words fully playable (audio + image)`);
   }
 
   console.log('[5/6] Building sessions.json (levels)...');
-  const levels = [];
-  for (const theme of sessionsSource) {
-    for (const speaker of speakers) {
-      const covered = coveredWordsBySpeaker.get(speaker);
-      const coveredIds = new Set(covered.map((w) => w.wordId));
-      const themeCoveredWords = theme.words.filter((wordId) => coveredIds.has(wordId));
-      if (themeCoveredWords.length < MIN_THEME_WORDS) continue;
-      const sorted = themeCoveredWords
-        .map((wordId) => vocab[wordId])
-        .map((entry, i) => ({ wordId: themeCoveredWords[i], ...entry }))
-        .sort((a, b) => a.syllables.length - b.syllables.length);
-      levels.push({
-        levelId: `${theme.levelId} — ${speaker}`,
-        category: 'themed',
-        validSpeakers: [speaker],
-        words: sorted.map((w) => w.wordId),
-      });
-    }
-  }
-  for (const speaker of speakers) {
-    const covered = coveredWordsBySpeaker.get(speaker);
-    if (covered.length < MIN_THEME_WORDS) continue;
-    let remaining = covered.slice();
-    let bundleNum = 1;
-    while (remaining.length >= MIN_THEME_WORDS) {
-      const chunkTarget = Math.min(REINFORCEMENT_LEVEL_SIZE, remaining.length);
-      const chosen = greedyMinimalSyllableSet(remaining, chunkTarget);
-      const chosenIds = new Set(chosen.map((w) => w.wordId));
-      remaining = remaining.filter((w) => !chosenIds.has(w.wordId));
-      levels.push({
-        levelId: `Syllable Practice ${bundleNum} — ${speaker}`,
-        category: 'syllable_reinforcement',
-        validSpeakers: [speaker],
-        words: chosen.sort((a, b) => a.syllables.length - b.syllables.length).map((w) => w.wordId),
-      });
-      bundleNum++;
-    }
-  }
-  for (const speaker of speakers) {
-    const covered = coveredWordsBySpeaker.get(speaker);
-    const byPattern = new Map();
-    for (const w of covered) {
-      const pattern = w.syllables.map(toneOf).join('-');
-      if (!byPattern.has(pattern)) byPattern.set(pattern, []);
-      byPattern.get(pattern).push(w);
-    }
-    for (const [pattern, words] of byPattern) {
-      if (words.length < MIN_TONE_PATTERN_WORDS) continue;
-      levels.push({
-        levelId: `Tone Pattern (${pattern}) — ${speaker}`,
-        category: 'tone_pattern',
-        validSpeakers: [speaker],
-        words: words.sort((a, b) => a.syllables.length - b.syllables.length).map((w) => w.wordId),
-      });
-    }
-  }
-  for (const speaker of speakers) {
-    const covered = coveredWordsBySpeaker.get(speaker);
-    if (covered.length < MIN_THEME_WORDS) continue;
-    for (let i = 0; i < ENDLESS_BUNDLE_COUNT; i++) {
-      const sampleSize = Math.min(ENDLESS_BUNDLE_SIZE, covered.length);
-      const words = shuffle(covered).slice(0, sampleSize);
-      levels.push({
-        levelId: `Endless Practice ${i + 1} — ${speaker}`,
-        category: 'endless_practice',
-        validSpeakers: [speaker],
-        words: words.map((w) => w.wordId),
-      });
-    }
-  }
+  const levels = planLevels(coveredWordsBySpeaker, sessionsSource);
   console.log(`      ${levels.length} level(s) generated across ${speakers.length} speaker(s)`);
 
   console.log('[6/6] Writing vocab.json / syllables.json / sessions.json (local, small - still committed+deployed with app code)...');
