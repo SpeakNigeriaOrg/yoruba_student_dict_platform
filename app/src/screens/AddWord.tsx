@@ -772,12 +772,15 @@ function ComponentPicker({
     syllables: r.syllables,
     definition: r.definition,
   });
+  const selectedCount = (wordId: string) => components.filter((c) => c.wordId === wordId).length;
 
   return (
     <>
       {components.length === 0 ? (
         <p>{emptyNote}</p>
       ) : (
+        <div className="selection-tray" aria-label={`${components.length} selected components`}>
+          <strong>{components.length} {components.length === 1 ? 'component' : 'components'} selected</strong>
         <ul aria-label={listLabel} className="plain-list">
           {components.map((c, i) => (
             // Keyed by position, not wordId - a reduplication holds the same word twice.
@@ -797,6 +800,7 @@ function ComponentPicker({
             </li>
           ))}
         </ul>
+        </div>
       )}
 
       {searchNote}
@@ -820,6 +824,7 @@ function ComponentPicker({
           </>
         )}
         onSelect={(r: VocabSearchResult) => onAdd(partOf(r))}
+        isSelected={(r: VocabSearchResult) => selectedCount(r.wordId) > 0}
         // Both actions, because "Add" alone had no object: it means "use as one part of the
         // entry I am building", and with nothing being built it reads as "create this".
         // Opening the word is what a curator who found an existing entry actually wanted.

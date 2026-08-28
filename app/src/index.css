@@ -574,6 +574,20 @@ audio {
 .search-result-row .result-text {
   font-size: 0.88rem;
 }
+.selection-tray {
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  background: var(--green-bg);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+}
+.selection-tray .plain-list {
+  margin: 8px 0;
+}
 
 /* ---- Contribution queue ---- */
 

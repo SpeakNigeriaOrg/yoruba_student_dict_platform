@@ -9,13 +9,15 @@
 // resolver.js's kaikkiSearchHtml/etymologyManualPickerHtml, both hitting
 // Enter-to-submit + a "Use this"/"Add" button per result.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface SearchBoxProps<T> {
   search: (query: string) => Promise<T[]>;
   renderResult: (result: T) => React.ReactNode;
-  onSelect: (result: T) => void;
+  onSelect: (result: T) => void | Promise<void>;
   selectLabel?: string;
+  selectedLabel?: string;
+  selectingLabel?: string;
   placeholder?: string;
   resultsAriaLabel: string;
   /** Pre-fills the query and runs the search once on mount - for callers
@@ -47,6 +49,8 @@ export interface SearchBoxProps<T> {
    * as two identical anonymous searches with two identical "Search" buttons. Ambiguous to assistive
    * technology, not merely to a test. Omitted by the other callers, which have only one. */
   label?: string;
+  /** Single-pick searches can get out of the user's way once a choice is made. */
+  collapseOnSelect?: boolean;
 }
 
 export function SearchBox<T>({
@@ -54,6 +58,8 @@ export function SearchBox<T>({
   renderResult,
   onSelect,
   selectLabel = 'Use this',
+  selectedLabel = 'Selected ✓',
+  selectingLabel = 'Selecting…',
   placeholder,
   resultsAriaLabel,
   initialQuery,
@@ -61,17 +67,40 @@ export function SearchBox<T>({
   renderAction,
   onQueryChange,
   label,
+  collapseOnSelect = false,
 }: SearchBoxProps<T>) {
   const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<T[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [selectingIndex, setSelectingIndex] = useState<number | null>(null);
+  const searchSequence = useRef(0);
 
   async function runSearch(searchQuery = query) {
+    const sequence = ++searchSequence.current;
+    setError(null);
+    setSearching(true);
+    try {
+      const next = await search(searchQuery);
+      if (sequence === searchSequence.current) setResults(next);
+    } catch (err) {
+      if (sequence === searchSequence.current) setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (sequence === searchSequence.current) setSearching(false);
+    }
+  }
+
+  async function select(result: T, index: number) {
+    if (selectingIndex !== null) return;
+    setSelectingIndex(index);
     setError(null);
     try {
-      setResults(await search(searchQuery));
+      await onSelect(result);
+      if (collapseOnSelect) setResults(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSelectingIndex(null);
     }
   }
 
@@ -84,7 +113,7 @@ export function SearchBox<T>({
   }, []);
 
   return (
-    <div role={label ? 'search' : undefined} aria-label={label}>
+    <div role={label ? 'search' : undefined} aria-label={label} aria-busy={searching || selectingIndex !== null}>
       <div className="search-row">
         <input
           type="text"
@@ -98,8 +127,8 @@ export function SearchBox<T>({
             if (e.key === 'Enter') runSearch();
           }}
         />
-        <button type="button" className="btn btn-secondary" onClick={() => runSearch()}>
-          Search
+        <button type="button" className="btn btn-secondary" onClick={() => runSearch()} disabled={searching}>
+          {searching ? 'Searching…' : 'Search'}
         </button>
       </div>
       {error ? <p role="alert" className="error-banner">{error}</p> : null}
@@ -121,8 +150,13 @@ export function SearchBox<T>({
                 >
                   <span className="result-text">{renderResult(result)}</span>
                   {action ?? (
-                    <button type="button" className="btn btn-secondary" onClick={() => onSelect(result)}>
-                      {selectLabel}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => void select(result, i)}
+                      disabled={selected || selectingIndex !== null}
+                    >
+                      {selectingIndex === i ? selectingLabel : selected ? selectedLabel : selectLabel}
                     </button>
                   )}
                 </li>

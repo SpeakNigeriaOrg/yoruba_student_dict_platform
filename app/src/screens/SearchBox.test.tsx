@@ -161,4 +161,47 @@ describe('SearchBox', () => {
     expect(row).not.toHaveAttribute('aria-current');
     expect(row.className).toBe('search-result-row');
   });
+
+  it('shows pending feedback while an asynchronous selection is being applied', async () => {
+    let finish!: () => void;
+    const selecting = new Promise<void>((resolve) => { finish = resolve; });
+    const user = userEvent.setup();
+    render(
+      <SearchBox<TestResult>
+        search={vi.fn().mockResolvedValue([{ id: 'a', label: 'Result A' }])}
+        renderResult={(r) => r.label}
+        onSelect={() => selecting}
+        resultsAriaLabel="Test results"
+        selectingLabel="Adding…"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Result A');
+    await user.click(screen.getByRole('button', { name: 'Use this' }));
+
+    expect(screen.getByRole('button', { name: 'Adding…' })).toBeDisabled();
+    finish();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Use this' })).toBeEnabled());
+  });
+
+  it('does not let a slower old search overwrite newer results', async () => {
+    let finishOld!: (rows: TestResult[]) => void;
+    const old = new Promise<TestResult[]>((resolve) => { finishOld = resolve; });
+    const search = vi.fn((query: string) => query === 'old' ? old : Promise.resolve([{ id: 'new', label: 'New result' }]));
+    const user = userEvent.setup();
+    render(<SearchBox<TestResult> search={search} renderResult={(r) => r.label} onSelect={vi.fn()} resultsAriaLabel="Test results" />);
+
+    await user.type(screen.getByRole('textbox'), 'old');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.clear(screen.getByRole('textbox'));
+    await user.type(screen.getByRole('textbox'), 'new');
+    // Enter starts the newer request even while the first search button is disabled.
+    await user.keyboard('{Enter}');
+    await screen.findByText('New result');
+    finishOld([{ id: 'old', label: 'Old result' }]);
+    await Promise.resolve();
+
+    expect(screen.queryByText('Old result')).not.toBeInTheDocument();
+    expect(screen.getByText('New result')).toBeInTheDocument();
+  });
 });

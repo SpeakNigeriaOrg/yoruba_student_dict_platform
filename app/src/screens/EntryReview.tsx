@@ -720,10 +720,19 @@ function CuratorTools({
               </>
             )}
             onSelect={onUseSearchResult}
+            isSelected={(r) =>
+              Boolean(r.entryId && spelling?.action === 'select_candidate' && spelling.senseEntryId === r.entryId)
+            }
+            collapseOnSelect
             selectLabel="Use this record"
             placeholder="Search Kaikki..."
             resultsAriaLabel="Kaikki search results"
           />
+          {spelling?.action === 'select_candidate' && spelling.candidateForm ? (
+            <p className="status-banner" aria-live="polite">
+              Selected etymology: <strong>{spelling.candidateForm}</strong>
+            </p>
+          ) : null}
 
           <div className="field">
             <label htmlFor="entry-note-field">Note</label>

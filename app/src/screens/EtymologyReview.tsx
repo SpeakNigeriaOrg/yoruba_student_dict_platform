@@ -378,6 +378,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
    * submitting. Available to volunteers - it was curator-only, which is precisely what
    * left the screen with a single clickable answer. */
   const [claimsHasParts, setClaimsHasParts] = useState(false);
+  const [answerRecorded, setAnswerRecorded] = useState(false);
+  const [selectedCandidateWordIds, setSelectedCandidateWordIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -387,6 +389,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setDraftLabels({});
     setShowTools(false);
     setClaimsHasParts(false);
+    setAnswerRecorded(false);
+    setSelectedCandidateWordIds({});
     getEtymologyReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -427,6 +431,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       // A curator's grasp of a word's parts is not better than a volunteer's; it is one more
       // reading of the same evidence, which is exactly what the consensus tally is for.
       await submitEtymologyContribution(wordId, input);
+      setAnswerRecorded(true);
       setStatus(`Recorded as your answer: ${successMessage}`);
       onDecided?.();
     } catch (err) {
@@ -464,6 +469,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   }
 
   function addDraftComponent(componentWordId: string, label: DraftComponentLabel) {
+    setAnswerRecorded(false);
     setDraftComponents((prev) => (prev.includes(componentWordId) ? prev : [...prev, componentWordId]));
     setDraftLabels((prev) => ({ ...prev, [componentWordId]: label }));
   }
@@ -495,19 +501,26 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   async function pickCandidate(candidate: ComponentCandidate) {
     if (candidate.kind === 'held') {
       addDraftComponent(candidate.wordId, { displayText: candidate.displayText, pending: false });
+      setSelectedCandidateWordIds((selected) => ({ ...selected, [`held:${candidate.wordId}`]: candidate.wordId }));
       return;
     }
     // Only the server can tell whether this etymology is one we already hold. It answers with
     // the word_id either way, so the submission below never waits on a curator.
     try {
-      acceptRequestResult(await requestComponent(candidate.entryId));
+      const result = await requestComponent(candidate.entryId);
+      acceptRequestResult(result);
+      setSelectedCandidateWordIds((selected) => ({ ...selected, [`corpus:${candidate.entryId}`]: result.wordId }));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
   }
 
   function removeManualComponent(componentWordId: string) {
+    setAnswerRecorded(false);
     setDraftComponents((prev) => prev.filter((id) => id !== componentWordId));
+    setSelectedCandidateWordIds((selected) =>
+      Object.fromEntries(Object.entries(selected).filter(([, wordId]) => wordId !== componentWordId)),
+    );
   }
 
   const isPhrase = review?.entryType === 'phrase';
@@ -843,6 +856,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
             </p>
           ) : null}
           {draftComponents.length === 0 ? null : (
+            <div className="selection-tray" aria-label="Selected parts tray">
+              <strong>{draftComponents.length} {draftComponents.length === 1 ? 'part' : 'parts'} selected</strong>
             <ul aria-label="Draft components" className="plain-list">
               {draftComponents.map((componentWordId) => {
                 const drafted = draftLabels[componentWordId];
@@ -864,6 +879,10 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
                 );
               })}
             </ul>
+              <button type="button" className="btn btn-primary" onClick={saveCustomComponents} disabled={answerRecorded}>
+                {answerRecorded ? 'Answer recorded ✓' : label('Save these parts')}
+              </button>
+            </div>
           )}
           <SearchBox
             search={searchComponentCandidates}
@@ -882,7 +901,12 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               )
             }
             onSelect={pickCandidate}
+            isSelected={(r) =>
+              (r.kind === 'held' ? `held:${r.wordId}` : `corpus:${r.entryId}`) in selectedCandidateWordIds
+            }
             selectLabel="Add"
+            selectedLabel="Added ✓"
+            selectingLabel="Adding…"
             placeholder="Search for a part..."
             resultsAriaLabel="Component search results"
           />
@@ -891,13 +915,6 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           </div>
           {/* Only offered once something is actually picked - saving an empty custom
               list asserted "these are the parts" about nothing. */}
-          {draftComponents.length > 0 ? (
-            <div className="btn-row">
-              <button type="button" className="btn btn-primary" onClick={saveCustomComponents}>
-                {label('Save these parts')}
-              </button>
-            </div>
-          ) : null}
         </div>
       ) : null}
 
