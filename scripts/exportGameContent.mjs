@@ -209,11 +209,14 @@ async function main() {
   // were current). Confirmed 0/96 live recordings actually diverge as
   // of this writing, but nothing previously enforced it.
   const wordAudioResult = await pool.query(
-    `select u.word_id, u.speaker_id, u.audio_data
+    `select u.word_id, u.speaker_id, coalesce(a.audio_data, u.audio_data) as audio_data
      from utterances u
      join golden_record w on w.word_id = u.word_id
+     left join lateral (select * from audio_artifacts aa where aa.utterance_id=u.utterance_id
+       and aa.profile='game-pcm-v1' and aa.source_sha256=u.raw_sha256 order by aa.created_at desc limit 1) a on true
      where u.take_number = 1
        and u.audio_data is not null
+       and (u.raw_container is null or a.artifact_id is not null)
        and ${recordingMatchesGoldenSql('u', 'w')}`,
   );
   // Say what was dropped, and name WHY.
@@ -257,13 +260,23 @@ async function main() {
   if (invalidWordContainers) console.warn(`      ${invalidWordContainers} word recording(s) excluded: audio_data is not a WAV container`);
 
   const syllableAudioResult = await pool.query(
-    `select so.observation_id, u.speaker_id, so.syllable_text, so.audio_data, u.recorded_at,
+    `select so.observation_id, u.speaker_id, so.syllable_text, coalesce(a.audio_data, so.audio_data) as audio_data, u.recorded_at,
             exists (select 1 from canonical_syllable_selections cs
                      where cs.observation_id = so.observation_id
-                       and cs.speaker_id = u.speaker_id) as explicitly_selected
+                       and cs.speaker_id = u.speaker_id)
+            or exists (select 1 from game_syllable_artifact_selections gs
+                       where gs.artifact_id = a.artifact_id and gs.speaker_id = u.speaker_id) as explicitly_selected
        from syllable_observations so
        join utterances u on u.utterance_id = so.utterance_id
-      where so.audio_data is not null`,
+       left join game_syllable_artifact_selections chosen
+         on chosen.speaker_id=u.speaker_id
+        and chosen.normalized_syllable_text=normalize(so.syllable_text, nfc)
+        and chosen.profile='game-pcm-v1'
+       left join lateral (select * from audio_artifacts aa where aa.observation_id=so.observation_id
+         and aa.profile='game-pcm-v1' and aa.source_sha256=so.raw_sha256
+         order by (aa.artifact_id=chosen.artifact_id) desc, aa.created_at desc limit 1) a on true
+      where so.audio_data is not null
+        and (so.raw_container is null or a.artifact_id is not null)`,
   );
   const selectedSyllables = selectSyllableAudio(syllableAudioResult.rows.map((row) => ({
     observationId: row.observation_id,

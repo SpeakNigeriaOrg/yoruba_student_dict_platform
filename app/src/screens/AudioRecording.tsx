@@ -43,7 +43,7 @@ import { decodeToSamples } from '../audio/decodeToSamples.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { ToneGrid } from './ToneGrid.js';
-import { sliceAndEncodeWav } from '../audio/encodeWav.js';
+import { encodeWavFromPCM, sliceAndEncodeWav } from '../audio/encodeWav.js';
 import { segmentSyllables, type SyllableSegment } from '../audio/segmentSyllables.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
 import { base64ToAudioUrl, getEntryReview, listUtterances, registerUtterance, type UtteranceSummary } from '../api.js';
@@ -351,12 +351,19 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
     setStatus(null);
     setSubmittedDiverged(false);
     try {
+      // MediaRecorder remains inclusive: preserve whichever native container the browser emitted,
+      // while AudioContext (which already decoded take 2 for segmentation) creates the actual WAV
+      // delivery copy. The API independently verifies both byte signatures.
+      const [take1Decoded, take2Decoded] = await Promise.all([decodeToSamples(take1Blob), decodeToSamples(take2Blob)]);
       await registerUtterance({
         wordId,
         takeNumber: 1,
-        audio: take1Blob,
+        audio: encodeWavFromPCM(take1Decoded.samples, take1Decoded.sampleRate),
+        rawAudio: take1Blob,
         recordedDisplayText: pronunciationText,
         recordedSyllables,
+        durationS: take1Decoded.samples.length / take1Decoded.sampleRate,
+        sampleRate: take1Decoded.sampleRate,
       });
 
       const segments = segmentReviews.map((review) => ({
@@ -369,9 +376,12 @@ export function AudioRecording({ wordId, isCurator, onDecided }: AudioRecordingP
       const registered = await registerUtterance({
         wordId,
         takeNumber: 2,
-        audio: take2Blob,
+        audio: encodeWavFromPCM(take2Decoded.samples, take2Decoded.sampleRate),
+        rawAudio: take2Blob,
         recordedDisplayText: pronunciationText,
         recordedSyllables,
+        durationS: take2Decoded.samples.length / take2Decoded.sampleRate,
+        sampleRate: take2Decoded.sampleRate,
         segments,
       });
 

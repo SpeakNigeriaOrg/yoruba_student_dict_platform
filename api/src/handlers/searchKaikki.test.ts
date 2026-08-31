@@ -55,7 +55,9 @@ describe('searchKaikkiHandler', () => {
   });
 
   it('returns an empty array when nothing matches', async () => {
-    expect(await searchKaikkiHandler(pool, `${NS}totallyunmatchedqueryxyz`)).toEqual([]);
+    // Avoid ordinary English lexemes such as "test" in this negative query:
+    // the local Kaikki corpus legitimately contains those in unrelated glosses.
+    expect(await searchKaikkiHandler(pool, 'qzxvnomatchqueryxyz')).toEqual([]);
   });
 });
 
@@ -182,6 +184,6 @@ describe('searchKaikkiHandler reports whether an etymology is already taken', ()
   });
 
   it('still returns nothing for a query that matches nothing, without running the claim lookups', async () => {
-    expect(await searchKaikkiHandler(pool, `${NS}nothingmatchesthisxyz`)).toEqual([]);
+    expect(await searchKaikkiHandler(pool, 'qzxvnothingmatchesthisxyz')).toEqual([]);
   });
 });

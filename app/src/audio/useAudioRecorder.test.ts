@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { useAudioRecorder } from './useAudioRecorder.js';
+import { preferredRecordingType, useAudioRecorder } from './useAudioRecorder.js';
 
 class FakeMediaRecorder {
+  static isTypeSupported = vi.fn((type: string) => type === 'audio/webm;codecs=opus');
+  static options: MediaRecorderOptions | undefined;
   mimeType = 'audio/webm';
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
-  constructor(public stream: MediaStream) {}
+  constructor(public stream: MediaStream, options?: MediaRecorderOptions) { FakeMediaRecorder.options = options; }
   start() {}
   stop() {
     this.ondataavailable?.({ data: new Blob(['chunk-a']) });
@@ -19,9 +21,18 @@ class FakeMediaRecorder {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  FakeMediaRecorder.isTypeSupported.mockImplementation((type: string) => type === 'audio/webm;codecs=opus');
+  FakeMediaRecorder.options = undefined;
 });
 
 describe('useAudioRecorder', () => {
+  it('prefers a supported efficient format without rejecting the browser default fallback', () => {
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder as unknown as typeof MediaRecorder);
+    expect(preferredRecordingType()).toBe('audio/webm;codecs=opus');
+    FakeMediaRecorder.isTypeSupported.mockReturnValue(false);
+    expect(preferredRecordingType()).toBeUndefined();
+  });
+
   it('starts recording, requesting a microphone stream', async () => {
     const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [] });
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true });
@@ -34,6 +45,7 @@ describe('useAudioRecorder', () => {
 
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
     await waitFor(() => expect(result.current.isRecording).toBe(true));
+    expect(FakeMediaRecorder.options).toEqual({ mimeType: 'audio/webm;codecs=opus' });
   });
 
   it('stops recording and resolves a Blob built from every ondataavailable chunk', async () => {

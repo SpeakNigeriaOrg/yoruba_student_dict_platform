@@ -11,10 +11,23 @@ import { getPool } from '../db.js';
 import { ForbiddenError, requireUser, UnauthenticatedError } from '../httpAuth.js';
 import { registerUtterance, type RegisterSegmentInput, type RegisterUtteranceInput } from '../handlers/registerUtterance.js';
 import { WordNotFoundError } from '../handlers/errors.js';
+import { detectAudioContainer, isPcmWave } from '@yoruba-student-dict-platform/shared';
+
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+
+function parseMediaType(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0 || value.length > 200 || !/^[\x20-\x7e]+$/.test(value)) {
+    throw new Error('rawMediaType must be a short printable media type');
+  }
+  return value;
+}
 
 function parseAudioData(value: unknown, field: string): Buffer {
   if (typeof value !== 'string' || !value) throw new Error(`${field} is required (base64-encoded audio bytes)`);
-  return Buffer.from(value, 'base64');
+  const bytes = Buffer.from(value, 'base64');
+  if (bytes.length === 0 || bytes.length > MAX_AUDIO_BYTES) throw new Error(`${field} must be between 1 byte and 15 MB`);
+  return bytes;
 }
 
 function parseOptionalAudioData(value: unknown, field: string): Buffer | undefined {
@@ -29,13 +42,20 @@ function parseSegment(s: unknown): RegisterSegmentInput {
   if (typeof seg.startTimeS !== 'number') throw new Error('segment.startTimeS must be a number');
   if (typeof seg.endTimeS !== 'number') throw new Error('segment.endTimeS must be a number');
   if (typeof seg.confidence !== 'number') throw new Error('segment.confidence must be a number');
+  const audioData = parseAudioData(seg.audioDataBase64, 'segment.audioDataBase64');
+  if (!isPcmWave(audioData)) throw new Error('segment.audioDataBase64 must be a PCM WAV delivery artifact');
+  const rawAudioData = parseOptionalAudioData(seg.rawAudioDataBase64, 'segment.rawAudioDataBase64');
+  const detected = detectAudioContainer(rawAudioData ?? audioData);
+  if (!detected) throw new Error('segment raw audio container is not recognized');
   return {
     syllablePosition: seg.syllablePosition,
     startTimeS: seg.startTimeS,
     endTimeS: seg.endTimeS,
     confidence: seg.confidence,
-    audioData: parseAudioData(seg.audioDataBase64, 'segment.audioDataBase64'),
-    rawAudioData: parseOptionalAudioData(seg.rawAudioDataBase64, 'segment.rawAudioDataBase64'),
+    audioData,
+    rawAudioData,
+    rawMediaType: parseMediaType(seg.rawMediaType),
+    rawContainer: detected.container,
   };
 }
 
@@ -53,11 +73,18 @@ function parseRegisterInput(body: unknown): RegisterUtteranceInput {
   if (typeof b.takeNumber !== 'number') throw new Error('takeNumber is required');
   if (typeof b.recordedDisplayText !== 'string' || !b.recordedDisplayText) throw new Error('recordedDisplayText is required');
   if (b.segments !== undefined && !Array.isArray(b.segments)) throw new Error('segments must be an array if provided');
+  const audioData = parseAudioData(b.audioDataBase64, 'audioDataBase64');
+  if (!isPcmWave(audioData)) throw new Error('audioDataBase64 must be a PCM WAV delivery artifact');
+  const rawAudioData = parseOptionalAudioData(b.rawAudioDataBase64, 'rawAudioDataBase64');
+  const detected = detectAudioContainer(rawAudioData ?? audioData);
+  if (!detected) throw new Error('raw audio container is not recognized');
   return {
     wordId: b.wordId,
     takeNumber: b.takeNumber,
-    audioData: parseAudioData(b.audioDataBase64, 'audioDataBase64'),
-    rawAudioData: parseOptionalAudioData(b.rawAudioDataBase64, 'rawAudioDataBase64'),
+    audioData,
+    rawAudioData,
+    rawMediaType: parseMediaType(b.rawMediaType),
+    rawContainer: detected.container,
     recordedDisplayText: b.recordedDisplayText,
     recordedSyllables: parseRecordedSyllables(b.recordedSyllables),
     durationS: typeof b.durationS === 'number' ? b.durationS : undefined,

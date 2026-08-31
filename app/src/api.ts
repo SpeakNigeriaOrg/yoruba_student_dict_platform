@@ -1084,12 +1084,15 @@ export interface RegisterSegmentInput {
   endTimeS: number;
   confidence: number;
   clip: Blob;
+  rawClip?: Blob;
 }
 
 export interface RegisterUtteranceInput {
   wordId: string;
   takeNumber: number;
   audio: Blob;
+  /** Native browser capture, preserved unchanged when audio is a derived PCM-WAV delivery copy. */
+  rawAudio?: Blob;
   // The pronunciation actually spoken in this recording - may diverge
   // from golden_record's current spelling/syllabification (e.g. recorded
   // before a later spelling decision converged on something else).
@@ -1116,6 +1119,9 @@ export async function registerUtterance(input: RegisterUtteranceInput): Promise<
     wordId: input.wordId,
     takeNumber: input.takeNumber,
     audioDataBase64: await blobToBase64(input.audio),
+    audioMediaType: input.audio.type || 'application/octet-stream',
+    rawAudioDataBase64: input.rawAudio ? await blobToBase64(input.rawAudio) : undefined,
+    rawMediaType: input.rawAudio?.type || input.audio.type || 'application/octet-stream',
     recordedDisplayText: input.recordedDisplayText,
     recordedSyllables: input.recordedSyllables,
     durationS: input.durationS,
@@ -1128,6 +1134,9 @@ export async function registerUtterance(input: RegisterUtteranceInput): Promise<
             endTimeS: segment.endTimeS,
             confidence: segment.confidence,
             audioDataBase64: await blobToBase64(segment.clip),
+            audioMediaType: segment.clip.type || 'application/octet-stream',
+            rawAudioDataBase64: segment.rawClip ? await blobToBase64(segment.rawClip) : undefined,
+            rawMediaType: segment.rawClip?.type || segment.clip.type || 'application/octet-stream',
           })),
         )
       : undefined,
@@ -1154,6 +1163,9 @@ export interface UtteranceSegmentSummary {
   // Exactly as sliced, before any trimming/normalization - equal to
   // audioDataBase64 until a real processing step exists.
   rawAudioDataBase64: string;
+  rawMediaType: string | null;
+  rawContainer: string | null;
+  deliveryMediaType: string;
 }
 
 export interface UtteranceSummary {
@@ -1177,6 +1189,9 @@ export interface UtteranceSummary {
   recordedAt: string;
   audioDataBase64: string | null;
   rawAudioDataBase64: string | null;
+  rawMediaType: string | null;
+  rawContainer: string | null;
+  deliveryMediaType: string;
   segments: UtteranceSegmentSummary[];
 }
 

@@ -53,6 +53,9 @@ import type pg from 'pg';
 import { recordingMatchesGolden } from '../reviewShared.js';
 import { getOrCreateSpeakerForUser } from '../speakers.js';
 import { WordNotFoundError } from './errors.js';
+import { createHash } from 'node:crypto';
+
+const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 export interface RegisterSegmentInput {
   syllablePosition: number;
@@ -63,6 +66,8 @@ export interface RegisterSegmentInput {
   // Exactly as sliced, before any trimming/normalization - defaults to
   // audioData when omitted (see file header).
   rawAudioData?: Buffer;
+  rawMediaType?: string;
+  rawContainer?: 'wav' | 'webm' | 'ogg' | 'mp4';
 }
 
 export interface RegisterUtteranceInput {
@@ -72,6 +77,8 @@ export interface RegisterUtteranceInput {
   // Exactly as captured, before any trimming/normalization - defaults to
   // audioData when omitted (see file header).
   rawAudioData?: Buffer;
+  rawMediaType?: string;
+  rawContainer?: 'wav' | 'webm' | 'ogg' | 'mp4';
   // The pronunciation actually spoken in this recording - independent of
   // (and may later diverge from) golden_record's current spelling/
   // syllabification. See file header.
@@ -123,18 +130,23 @@ async function registerUtteranceInTransaction(
   // there's no real upload step to generate one from, so it's derived
   // from the same key the unique constraint already uses.
   const blobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}.wav`;
-  const rawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}-raw.wav`;
+  const rawExtension = input.rawContainer === 'mp4' ? 'm4a' : (input.rawContainer ?? 'wav');
+  const rawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}-raw.${rawExtension}`;
   const rawAudioData = input.rawAudioData ?? input.audioData;
 
   const utteranceResult = await client.query<{ utterance_id: string }>(
     `insert into utterances
        (word_id, speaker_id, take_number, submitted_by, blob_path, raw_blob_path, duration_s, sample_rate, status,
-        audio_data, raw_audio_data, recorded_display_text, recorded_syllables)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        audio_data, raw_audio_data, raw_media_type, raw_container, raw_sha256, delivery_media_type,
+        recorded_display_text, recorded_syllables)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'audio/wav', $15, $16)
      on conflict (word_id, speaker_id, take_number) do update set
        submitted_by = excluded.submitted_by, blob_path = excluded.blob_path, raw_blob_path = excluded.raw_blob_path,
        duration_s = excluded.duration_s, sample_rate = excluded.sample_rate,
        status = excluded.status, audio_data = excluded.audio_data, raw_audio_data = excluded.raw_audio_data,
+       raw_media_type = excluded.raw_media_type, raw_container = excluded.raw_container,
+       raw_sha256 = excluded.raw_sha256,
+       delivery_media_type = excluded.delivery_media_type,
        recorded_display_text = excluded.recorded_display_text, recorded_syllables = excluded.recorded_syllables,
        recorded_at = now()
      returning utterance_id`,
@@ -150,6 +162,9 @@ async function registerUtteranceInTransaction(
       status,
       input.audioData,
       rawAudioData,
+      input.rawMediaType ?? null,
+      input.rawContainer ?? null,
+      rawAudioData ? sha256(rawAudioData) : null,
       input.recordedDisplayText,
       input.recordedSyllables,
     ],
@@ -169,13 +184,15 @@ async function registerUtteranceInTransaction(
       );
     }
     const segmentBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}/syllable${segment.syllablePosition}.wav`;
-    const segmentRawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}/syllable${segment.syllablePosition}-raw.wav`;
+    const segmentRawExtension = segment.rawContainer === 'mp4' ? 'm4a' : (segment.rawContainer ?? 'wav');
+    const segmentRawBlobPath = `utterances/${input.wordId}/${speakerId}/take${input.takeNumber}/syllable${segment.syllablePosition}-raw.${segmentRawExtension}`;
     const segmentRawAudioData = segment.rawAudioData ?? segment.audioData;
     await client.query(
       `insert into syllable_observations
          (utterance_id, syllable_position, syllable_text, syllable_tone_insensitive, syllable_orthography_insensitive,
-          legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data, raw_blob_path, raw_audio_data)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          legacy_syllable_key, start_time_s, end_time_s, vad_confidence, blob_path, audio_data, raw_blob_path, raw_audio_data,
+          raw_media_type, raw_container, raw_sha256, delivery_media_type)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'audio/wav')`,
       [
         utteranceId,
         segment.syllablePosition,
@@ -196,6 +213,9 @@ async function registerUtteranceInTransaction(
         segment.audioData,
         segmentRawBlobPath,
         segmentRawAudioData,
+        segment.rawMediaType ?? null,
+        segment.rawContainer ?? null,
+        sha256(segmentRawAudioData),
       ],
     );
   }

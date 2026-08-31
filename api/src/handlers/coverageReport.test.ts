@@ -117,6 +117,31 @@ describe('per-speaker coverage', () => {
     expect(alpha.wordsPlayable).toBe(0);
   });
 
+  it('does not publish a newly captured client WAV until a backend artifact exists', async () => {
+    const wordId = `${NS}wtrust`;
+    await word(wordId, ['ka']);
+    await record(wordId, speakerAId, ['ka'], { image: true });
+    const utterance = await pool.query<{ utterance_id: string }>(
+      "update utterances set raw_container='webm', raw_sha256=$2 where word_id=$1 and take_number=1 returning utterance_id",
+      [wordId, 'a'.repeat(64)],
+    );
+    expect((await forSpeaker(speakerAId)).wordsRecorded).toBe(0);
+
+    const run = await pool.query<{ run_id: string }>(`insert into audio_processing_runs
+      (processor, processor_version, profile, config, status, finished_at)
+      values ('test','1','game-pcm-v1','{}','completed',now()) returning run_id`);
+    const job = await pool.query<{ job_id: string }>(`insert into audio_processing_jobs
+      (run_id, utterance_id, status, finished_at) values ($1,$2,'ready',now()) returning job_id`,
+      [run.rows[0].run_id, utterance.rows[0].utterance_id]);
+    await pool.query(`insert into audio_artifacts
+      (job_id, utterance_id, purpose, profile, source_sha256, artifact_sha256, audio_data, sample_rate, duration_s, manifest)
+      values ($1,$2,'game_word','game-pcm-v1',$3,$4,$5,48000,1,'{}')`, [
+      job.rows[0].job_id, utterance.rows[0].utterance_id, 'a'.repeat(64), 'b'.repeat(64), WAVE_CONTAINER,
+    ]);
+    expect((await forSpeaker(speakerAId)).wordsRecorded).toBe(1);
+    await pool.query('delete from audio_processing_runs where run_id=$1', [run.rows[0].run_id]);
+  });
+
   it('flags a speaker below the floor at which any level is generated', async () => {
     await word(`${NS}wone`, ['ka']);
     await record(`${NS}wone`, speakerAId, ['ka'], { image: true });

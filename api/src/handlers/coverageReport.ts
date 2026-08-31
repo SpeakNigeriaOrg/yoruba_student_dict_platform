@@ -112,6 +112,10 @@ export async function loadCoverageReport(client: Queryable): Promise<CoverageRep
                       and so.audio_data is not null
                       and substring(so.audio_data from 1 for 4) = decode('52494646', 'hex')
                       and substring(so.audio_data from 9 for 4) = decode('57415645', 'hex')
+                      and (so.raw_container is null or exists (
+                        select 1 from audio_artifacts aa
+                         where aa.observation_id = so.observation_id and aa.profile = 'game-pcm-v1'
+                           and aa.source_sha256 = so.raw_sha256))
                       and normalize(so.syllable_text, nfc) = normalize(needed.syllable, nfc))
               ) as fully_covered,
               exists (select 1 from word_images i where i.word_id = g.word_id) as has_image
@@ -120,6 +124,10 @@ export async function loadCoverageReport(client: Queryable): Promise<CoverageRep
         where u.take_number = 1 and u.audio_data is not null
           and substring(u.audio_data from 1 for 4) = decode('52494646', 'hex')
           and substring(u.audio_data from 9 for 4) = decode('57415645', 'hex')
+          and (u.raw_container is null or exists (
+            select 1 from audio_artifacts aa
+             where aa.utterance_id = u.utterance_id and aa.profile = 'game-pcm-v1'
+               and aa.source_sha256 = u.raw_sha256))
           and ${MATCHES}`,
     ),
     client.query<{ speaker_id: string; n: number }>(

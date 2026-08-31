@@ -10,6 +10,20 @@
 
 import { useRef, useState } from 'react';
 
+// Preferences, not an acceptance allowlist. If none is available the browser's native default is
+// still recorded and decoded below; inclusivity comes from accepting whatever it can produce.
+export const PREFERRED_RECORDING_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/ogg;codecs=opus',
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4',
+] as const;
+
+export function preferredRecordingType(): string | undefined {
+  if (typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return PREFERRED_RECORDING_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+}
+
 export interface UseAudioRecorderResult {
   isRecording: boolean;
   error: string | null;
@@ -29,7 +43,8 @@ export function useAudioRecorder(): UseAudioRecorderResult {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
+      const preferred = preferredRecordingType();
+      const recorder = preferred ? new MediaRecorder(stream, { mimeType: preferred }) : new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -52,7 +67,7 @@ export function useAudioRecorder(): UseAudioRecorderResult {
         return;
       }
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || chunksRef.current[0]?.type || '' });
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         mediaRecorderRef.current = null;
