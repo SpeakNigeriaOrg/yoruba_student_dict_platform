@@ -20,6 +20,16 @@ const MAX_DURATION_S = 120;
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+function sourceMedia(format = '') {
+  if (format.split(',').includes('wav')) return { container: 'wav', mediaType: 'audio/wav' };
+  if (format.includes('webm') || format.includes('matroska')) return { container: 'webm', mediaType: 'audio/webm' };
+  if (format.includes('ogg')) return { container: 'ogg', mediaType: 'audio/ogg' };
+  if (['mov', 'mp4', 'm4a', '3gp', '3g2', 'mj2'].some((name) => format.split(',').includes(name))) {
+    return { container: 'mp4', mediaType: 'audio/mp4' };
+  }
+  return { container: null, mediaType: null };
+}
+
 async function toolVersion(tool) {
   const { stdout } = await exec(tool, ['-version'], { maxBuffer: 1024 * 1024 });
   return stdout.split('\n')[0];
@@ -72,6 +82,44 @@ async function sources(client) {
   return rows.filter((row) => sha256(row.bytes) !== row.processed_source_sha256);
 }
 
+// Artifacts created before source metadata reconciliation still carry the verified source hash
+// and ffprobe manifest. Backfill only when that hash matches the raw bytes currently stored, so
+// an artifact from an earlier recording can never make a re-recording look current.
+async function reconcileProcessedMetadata(client) {
+  const reconcile = async (table, idColumn, artifactIdColumn) => client.query(`
+    with latest as (
+      select distinct on (${artifactIdColumn}) ${artifactIdColumn} as source_id, source_sha256,
+             manifest->'source'->>'format' as source_format
+        from audio_artifacts
+       where ${artifactIdColumn} is not null and profile=$1
+       order by ${artifactIdColumn}, created_at desc
+    )
+    update ${table} source
+       set raw_sha256 = latest.source_sha256,
+           raw_container = coalesce(source.raw_container, case
+             when latest.source_format = 'wav' then 'wav'
+             when latest.source_format like '%webm%' or latest.source_format like '%matroska%' then 'webm'
+             when latest.source_format like '%ogg%' then 'ogg'
+             when latest.source_format ~ '(^|,)(mov|mp4|m4a|3gp|3g2|mj2)(,|$)' then 'mp4'
+           end),
+           raw_media_type = coalesce(source.raw_media_type, case
+             when latest.source_format = 'wav' then 'audio/wav'
+             when latest.source_format like '%webm%' or latest.source_format like '%matroska%' then 'audio/webm'
+             when latest.source_format like '%ogg%' then 'audio/ogg'
+             when latest.source_format ~ '(^|,)(mov|mp4|m4a|3gp|3g2|mj2)(,|$)' then 'audio/mp4'
+           end)
+      from latest
+     where source.${idColumn} = latest.source_id
+       and encode(digest(source.raw_audio_data, 'sha256'), 'hex') = latest.source_sha256
+       and (source.raw_sha256 is distinct from latest.source_sha256
+         or source.raw_container is null or source.raw_media_type is null)`, [PROFILE]);
+  const utterances = await reconcile('utterances', 'utterance_id', 'utterance_id');
+  const observations = await reconcile('syllable_observations', 'observation_id', 'observation_id');
+  if (utterances.rowCount + observations.rowCount > 0) {
+    console.log(`Reconciled source metadata for ${utterances.rowCount + observations.rowCount} processed legacy row(s)`);
+  }
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
   const versions = { ffmpeg: await toolVersion('ffmpeg'), ffprobe: await toolVersion('ffprobe') };
@@ -80,6 +128,7 @@ async function main() {
   const temp = await mkdtemp(path.join(tmpdir(), 'yoruba-audio-'));
   let runId;
   try {
+    if (APPLY) await reconcileProcessedMetadata(client);
     const pending = await sources(client);
     console.log(`${pending.length} raw source(s) need ${PROFILE}; mode=${APPLY ? 'apply' : 'preview'}`);
     if (!APPLY) return;
@@ -100,6 +149,7 @@ async function main() {
         const output = path.join(temp, `${jobId}.wav`);
         await writeFile(input, source.bytes);
         const sourceInfo = await inspect(input);
+        const sourceMetadata = sourceMedia(sourceInfo.format);
         const outputInfo = await transcode(input, output);
         const artifact = await readFile(output);
         const purpose = source.source_kind === 'utterance' ? 'game_word' : 'game_syllable';
@@ -114,9 +164,13 @@ async function main() {
           sha256(source.bytes), sha256(artifact), artifact, outputInfo.duration, manifest,
         ]);
         if (source.source_kind === 'utterance') {
-          await client.query("update utterances set audio_data=$1, delivery_media_type='audio/wav' where utterance_id=$2", [artifact, source.source_id]);
+          await client.query(`update utterances set audio_data=$1, delivery_media_type='audio/wav', raw_sha256=$3,
+            raw_container=coalesce(raw_container,$4), raw_media_type=coalesce(raw_media_type,$5) where utterance_id=$2`,
+          [artifact, source.source_id, sha256(source.bytes), sourceMetadata.container, sourceMetadata.mediaType]);
         } else {
-          await client.query("update syllable_observations set audio_data=$1, delivery_media_type='audio/wav' where observation_id=$2", [artifact, source.source_id]);
+          await client.query(`update syllable_observations set audio_data=$1, delivery_media_type='audio/wav', raw_sha256=$3,
+            raw_container=coalesce(raw_container,$4), raw_media_type=coalesce(raw_media_type,$5) where observation_id=$2`,
+          [artifact, source.source_id, sha256(source.bytes), sourceMetadata.container, sourceMetadata.mediaType]);
           await client.query(`insert into game_syllable_artifact_selections
             (speaker_id, syllable_text, profile, artifact_id, selection_method, rationale)
             values ($1,$2,$3,$4,'automatic',$5)
