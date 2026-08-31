@@ -48,7 +48,7 @@ export interface UtteranceSegmentSummary {
   rawAudioDataBase64: string;
   rawMediaType: string | null;
   rawContainer: string | null;
-  deliveryMediaType: string;
+  deliveryMediaType: string | null;
 }
 
 export interface UtteranceSummary {
@@ -88,7 +88,7 @@ export interface UtteranceSummary {
   rawAudioDataBase64: string | null;
   rawMediaType: string | null;
   rawContainer: string | null;
-  deliveryMediaType: string;
+  deliveryMediaType: string | null;
   segments: UtteranceSegmentSummary[];
 }
 
@@ -135,7 +135,7 @@ export async function listUtterances(
     raw_audio_data: Buffer | null;
     raw_media_type: string | null;
     raw_container: string | null;
-    delivery_media_type: string;
+    delivery_media_type: string | null;
   }>(
     `select u.utterance_id, u.speaker_id, s.display_name as speaker_display_name, s.user_id = $2 as is_own_recording,
             u.take_number, u.status, u.recorded_display_text, u.recorded_syllables, u.duration_s, u.sample_rate,
@@ -161,7 +161,7 @@ export async function listUtterances(
     raw_audio_data: Buffer;
     raw_media_type: string | null;
     raw_container: string | null;
-    delivery_media_type: string;
+    delivery_media_type: string | null;
   }>(
     `select utterance_id, syllable_position, syllable_text, start_time_s, end_time_s, vad_confidence,
             audio_data, raw_audio_data, raw_media_type, raw_container, delivery_media_type

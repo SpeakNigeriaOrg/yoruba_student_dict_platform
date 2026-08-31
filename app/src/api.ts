@@ -1165,7 +1165,7 @@ export interface UtteranceSegmentSummary {
   rawAudioDataBase64: string;
   rawMediaType: string | null;
   rawContainer: string | null;
-  deliveryMediaType: string;
+  deliveryMediaType: string | null;
 }
 
 export interface UtteranceSummary {
@@ -1191,7 +1191,7 @@ export interface UtteranceSummary {
   rawAudioDataBase64: string | null;
   rawMediaType: string | null;
   rawContainer: string | null;
-  deliveryMediaType: string;
+  deliveryMediaType: string | null;
   segments: UtteranceSegmentSummary[];
 }
 
