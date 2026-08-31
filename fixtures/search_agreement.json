@@ -56,6 +56,11 @@
       "query": "moon",
       "form": "òṣùpá",
       "note": "same: soft prefix took it from #3 to #1 in both engines"
+    },
+    {
+      "query": "sadnes",
+      "form": "ìbànújẹ́",
+      "note": "the query that started the partial-matching work. ìbànújẹ́ is defined 'sadness, depression', and before English query tokens could expand to the words they are a prefix of, a half-typed word matched nothing at all - the search box runs on every keystroke, so this is what a reader sees on their way to 'sadness'."
     }
   ],
   "expectedInTopThree": [
@@ -79,6 +84,11 @@
     {
       "query": "book",
       "form": "ìwé"
+    },
+    {
+      "query": "depres",
+      "form": "ìbànújẹ́",
+      "note": "same mechanism, and a reminder that it is about the word the reader is still typing rather than about this one entry."
     }
   ],
   "rootBonusMustNotPromote": [
@@ -96,6 +106,194 @@
   "knownDifferences": [
     "An English query that is ALSO a whole Yoruba word gets that word first, in both engines. The three whole-string tiers (exact, tone-insensitive, underdot-insensitive) are identifications and stay absolute: if you typed the word, you get the word. 'eye' orthography-insensitively IS ẹyẹ (bird), and there are several tone variants of it, so ojú reaches about #9 in BOTH engines rather than #1. The PREFIX tier is no longer hard - it competes with English on score - which is what took ojú from #18 to #9 and lifted dog and moon to #1 in both. Softening the whole-string tiers too was measured and rejected: it lifts ojú to #1 but pushes the Yoruba query `owo` from #5 to #11 in the platform, trading a Yoruba answer for an English one.",
     "The platform disables its English pass entirely for a query containing ẹ/ọ/ṣ or a combining mark (looksLikeYoruba); yorubadict has no such guard. So a query like 'kaṣu' returns 0 results here and non-empty there. Deliberate on this side.",
-    "yorubadict indexes example-sentence translations (down-weighted); the platform's corpus rows carry no examples at all, so it cannot."
+    "yorubadict indexes example-sentence translations (down-weighted); the platform's corpus rows carry no examples at all, so it cannot.",
+    "yorubadict indexes the synonym lists Wiktionary attaches to individual definitions, in two ways: as a soft Yoruba tier, so a spelling some entry calls a synonym also finds that entry, and as down-weighted inherited English documents, so a word becomes findable by what the meaning that named it says. The platform's corpus rows carry no relation lists, so it can do neither.",
+    "yorubadict expands an English query token to the indexed words it is a prefix of, and to the one indexed word that is a prefix of it, each damped by how much of the word the query covers. The platform scores gloss lists directly rather than through a prebuilt index, so it needs no token list to do the same thing - but until it does, a half-typed English word finds nothing there. expectedTopResult's 'sadnes' is the tripwire.",
+    "yorubadict indexes the one English word each entry's web address is named after (/yo/ibanuje/sadness), as a fourth document band below inherited meanings. It cannot displace a real definition match, because an entry scores as its best document and this one is short and lightly weighted - it only reaches entries nothing else reached. The platform has no address ledger; its deriveWordId is a different thing, an internal spelling_meaning id for its own database."
+  ],
+  "synonymSpellingReachesDeclarer": [
+    {
+      "query": "jona",
+      "form": "sun",
+      "note": "jona has no entry of its own, so it found nothing at all before. sun's meaning 'to burn; to set on fire' names it as another word for that, and sun is the useful answer."
+    },
+    {
+      "query": "abara",
+      "form": "àó",
+      "note": "àó means 'slap' and names abara as another word for it."
+    },
+    {
+      "query": "laagun",
+      "form": "gùn",
+      "note": "gùn 'to sweat'."
+    },
+    {
+      "query": "teere",
+      "form": "tin",
+      "note": "tin 'to be thin; to be skinny'."
+    },
+    {
+      "query": "ayiri",
+      "form": "wèrè",
+      "note": "wèrè 'insanity, madness, imbecile'."
+    },
+    {
+      "query": "seje",
+      "form": "dú",
+      "note": "dú 'to bleed'."
+    },
+    {
+      "query": "nawo",
+      "form": "ná",
+      "note": "ná 'to spend'."
+    },
+    {
+      "query": "jera",
+      "form": "rà",
+      "note": "rà 'to rot, to decay'."
+    },
+    {
+      "query": "ofe",
+      "form": "fèrè",
+      "note": "fèrè 'flute; small type of whistle'."
+    },
+    {
+      "query": "yan",
+      "form": "sun",
+      "note": "The one case where the query did return something before, and all of it was irrelevant: yangí, yanjú, yànnàná share a prefix and nothing else. sun's 'to roast' names yan."
+    }
+  ],
+  "synonymTierRanksBelowTheWordItself": [
+    {
+      "query": "wi",
+      "mustBeFirst": "wí",
+      "mustAlsoAppear": "sun",
+      "note": "The guarantee that matters. wì is a real word AND is named as a synonym by sun, so both are answers - but a spelling you typed is an identification and must win. The three whole-string tiers run before the soft block and dedupe against it, so this holds structurally rather than by tuning: wí/wí/wi/wì take the first four places, sun follows."
+    },
+    {
+      "query": "gun",
+      "mustBeFirst": "gùn",
+      "mustAlsoAppear": "ìbọn",
+      "note": "Six gùn/gun/gún homographs first; ìbọn ('gun, pistol, rifle') is reached through English and sits below all of them."
+    }
+  ],
+  "inheritedMeaningReachesTarget": [
+    {
+      "query": "stomach",
+      "form": "ikùn",
+      "via": "inú",
+      "note": "ikùn's own definition is 'abdomen, belly' and never says stomach. inú means 'stomach, abdomen' and names ikùn as another word for it, so ikùn becomes reachable by the word a learner actually typed."
+    },
+    {
+      "query": "venom",
+      "form": "májèlé",
+      "via": "oró",
+      "note": "májèlé's own definition is 'poison'. oró means 'venom, poison, sting'."
+    },
+    {
+      "query": "burrow",
+      "form": "ihò",
+      "via": "isà",
+      "note": "ihò's own definition is 'hole'. isà means 'burrow'."
+    },
+    {
+      "query": "mad person",
+      "form": "asínwín",
+      "via": "wèrè",
+      "note": "asínwín's own definition is 'lunatic, demented person, insane person'."
+    },
+    {
+      "query": "to roast",
+      "form": "wì",
+      "via": "sun",
+      "note": "wì's own definition is 'to singe; to scorch'."
+    }
+  ],
+  "inheritedMeaningMustNotSurface": [
+    {
+      "query": "moon",
+      "mustNotBeFirst": "oṣù",
+      "note": "oṣù ('month; new moon') is a declared synonym of òṣùpá ('moon'). If an inherited document could earn the exact-clause bonus it takes the full +2 for the clause 'moon' and beats the actual word for moon. The bonus means 'this word IS the query', which inherited text never says. Guarded twice: the index keeps inherited documents out of exactClauses, and the scorer ignores any that got there."
+    },
+    {
+      "query": "child",
+      "mustNotContain": "èwe",
+      "withinTop": 6,
+      "note": "èwe ('adolescent, youth') is named as a synonym by a meaning that says child, so it inherits the word legitimately - but it is not a word for child. Measured: absent from the top twelve at SYNONYM_DOC_WEIGHT 0.4 and 0.6, arriving at #6 at 1.0 and #5 at 2.0. So this assertion is the tripwire on that constant, and top-six is where it actually fires."
+    },
+    {
+      "query": "mother",
+      "mustNotContain": "iyè",
+      "withinTop": 40,
+      "note": "iyè means 'mind; consciousness' and shares an untoned headword with iye ('mother, a title of respect'). Inheriting a meaning onto every homograph of an ambiguous spelling is what would make mind findable by mother; only a single candidate, or one the naming meaning itself picked out, may inherit."
+    },
+    {
+      "query": "horse",
+      "mustNotContain": "Ìjẹ̀bú",
+      "withinTop": 40,
+      "note": "ẹṣin 'horse' carries a flattened dialect table in its synonym list, with variety names, family names and a bare dash as peer items. Unfiltered, Ìjẹ̀bú and eight other variety names each inherit a dozen meanings including horse, cow and broom. kaikki-yoruba drops those lists whole before publishing."
+    },
+    {
+      "query": "to sleep",
+      "mustNotContain": "kòríkòsùn",
+      "withinTop": 40,
+      "note": "sun 'to sleep' lists kòríkòsùn ('close friend') as a DERIVED term. A derived term is built from the root, it does not mean it, so only synonyms feed inherited English. The relationship a reader wants here is served by 'used in' and by the root bonus."
+    },
+    {
+      "query": "bottle",
+      "mustNotContain": "koríko",
+      "withinTop": 40,
+      "note": "A definition reading 'alternative form of X' points at another entry rather than saying anything about meaning, so it is never inherited - otherwise ìgò ('bottle') would carry 'grass, weed'."
+    }
+  ],
+  "synonymTierMustNotDisplaceEnglish": [
+    {
+      "query": "abode",
+      "form": "ilé",
+      "withinTop": 3,
+      "note": "Guards the synonym tier being SOFT rather than hard. ilé ('house, home') is a real English match for abode; àbọ̀dè and àbọ̀dé win on spelling, which is right. Two further entries merely list 'abode' in a synonym list, and if the tier were hard they would outrank ilé and push it to #5 - an entry that names your query outranking one that means it. yorubadict only: the platform has no synonym tier."
+    }
+  ],
+  "rootBonusCountsDirectMatchesOnly": [
+    {
+      "query": "to wear a hat",
+      "form": "àkẹtẹ̀",
+      "withinTop": 3,
+      "note": "Guards the root bonus counting only entries the query matched ITSELF. Entries reached through someone else's synonym list are scored but must not vote on another word's root bonus, since the bonus is defined over 'this result set'. Let them vote and àkẹtẹ̀ (a hat) drops behind ètú. Small effect - 6 of 10,111 definition clauses reorder - but silent, so it gets a tripwire. yorubadict only: the platform indexes no inherited documents."
+    }
+  ],
+  "partialSpellingFindsTheWord": [
+    {
+      "query": "happines",
+      "form": "ọ̀yị̀n",
+      "note": "'joy, happiness'. Returned nothing before."
+    },
+    {
+      "query": "mourn",
+      "form": "àfèìmòjò",
+      "note": "forward expansion onto 'mourning'. Returned nothing before."
+    },
+    {
+      "query": "walking",
+      "form": "rìn",
+      "note": "the REVERSE direction: an indexed word that starts the query, so 'walking' reaches a definition reading 'to walk'. Without it this query returns four onomatopoeia entries about the noise of walking on mud and nothing that means walk. rìn sits below those four because they match the typed word exactly, which is correct."
+    }
+  ],
+  "distilledWordReachesEntry": [
+    {
+      "query": "misery",
+      "form": "àre",
+      "note": "defined 'miserableness, the state of being miserable and aimless', which never says misery. Its address is /yo/are/misery, and that word is now a document of its own."
+    },
+    {
+      "query": "redden",
+      "form": "pupa",
+      "note": "defined 'to be red; to become red'. Address /yo/pupa/redden."
+    },
+    {
+      "query": "mama",
+      "form": "èyé",
+      "note": "defined 'mother, mom; term of familiarity or respect'. Address /yo/eye/mama."
+    }
   ]
 }

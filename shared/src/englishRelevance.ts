@@ -80,6 +80,46 @@ export function prefixMatchScore(queryLength: number, formLength: number): numbe
   return (queryLength / formLength) * PREFIX_SCALE;
 }
 
+/** How much of a match a partially-typed ENGLISH word is.
+ *
+ * The Yoruba tiers have always matched a partial spelling - that is what PREFIX_SCALE above is
+ * for - while the English half compared whole tokens with `===`. So a reader typing towards
+ * "sadness" saw nothing at all until the final letter, and `sad` could not reach `ìbànújẹ́`
+ * ("sadness, depression") even though the search box runs on every keystroke.
+ *
+ * A partial spelling is a guess about which word was meant, so it is weaker evidence than the
+ * word itself, and 0.4 is the same notch a declared synonym gets in yorubadict for the same
+ * reason. Scaled again by how much of the word the query covers, so `sadnes` counts for far
+ * more than `sad` does.
+ *
+ * Mirrors expandToken in yorubadict's public/english-relevance.js. That engine scores a prebuilt
+ * inverted index and has to binary-search a sorted list of all 8,915 tokens to find the words a
+ * query is a prefix of, with a cap on how many it may reach; this one already walks the tokens of
+ * one gloss, so it needs neither. The comparison itself is the part that must not drift. */
+const PARTIAL_TOKEN_WEIGHT = 0.4;
+
+/** Below this a query token is too short to guess from: two letters prefix half the dictionary. */
+const MIN_PARTIAL_LENGTH = 3;
+
+/** The reverse direction - a gloss token that STARTS the query, so "walking" reaches a gloss
+ * reading "to walk" and "runs" reaches "to run". Longer than the forward minimum, because a short
+ * gloss token is the start of a great many longer queries. */
+const MIN_REVERSE_LENGTH = 4;
+
+/** What one gloss token is worth against one query token: 1 for the word itself, less for a
+ * partial spelling of it in either direction, 0 for no relation. */
+function tokenMatchWeight(queryToken: string, glossToken: string): number {
+  if (glossToken === queryToken) return 1;
+  if (queryToken.length < MIN_PARTIAL_LENGTH) return 0;
+  if (glossToken.startsWith(queryToken)) {
+    return PARTIAL_TOKEN_WEIGHT * (queryToken.length / glossToken.length);
+  }
+  if (glossToken.length >= MIN_REVERSE_LENGTH && queryToken.startsWith(glossToken)) {
+    return PARTIAL_TOKEN_WEIGHT * (glossToken.length / queryToken.length);
+  }
+  return 0;
+}
+
 /** Corpus-wide document frequency, for IDF. Built once per index build. */
 export interface GlossStats {
   /** How many glosses contain each token. */
@@ -146,15 +186,32 @@ export function scoreGlossesAgainstQuery(
     if (tokens.length === 0) continue;
 
     let score = 0;
+    const lengthNorm = 1 - B + B * (tokens.length / stats.averageGlossLength);
     for (const queryToken of queryTokens) {
-      let termFrequency = 0;
-      for (const token of tokens) if (token === queryToken) termFrequency += 1;
-      if (termFrequency === 0) continue;
+      // Grouped by the GLOSS token that matched, because that is what idf is about. "sadnes" is
+      // not a word this corpus has ever seen, and what makes ìbànújẹ́ the answer is that "sadness"
+      // occurs exactly once - so weighing the query token's own df would weigh nothing at all.
+      // A partial spelling is a guess about which word was meant, and there is nothing to guess in
+      // a gloss that already contains the word - so within one gloss an exact match suppresses the
+      // partial ones. Without this, "house" scores `ulé` ("home, house, household") twice, once
+      // for house and again for household, and a dialect form overtakes the glosses that just say
+      // house. Mirrors the same rule in yorubadict, applied there per document.
+      const hasExact = tokens.includes(queryToken);
+      const matched = new Map<string, { termFrequency: number; weight: number }>();
+      for (const token of tokens) {
+        if (hasExact && token !== queryToken) continue;
+        const weight = tokenMatchWeight(queryToken, token);
+        if (weight === 0) continue;
+        const seen = matched.get(token);
+        if (seen) seen.termFrequency += 1;
+        else matched.set(token, { termFrequency: 1, weight });
+      }
 
-      const df = stats.documentFrequency.get(queryToken) ?? 1;
-      const idf = Math.log(1 + (stats.glossCount - df + 0.5) / (df + 0.5));
-      const lengthNorm = 1 - B + B * (tokens.length / stats.averageGlossLength);
-      score += idf * ((termFrequency * (K1 + 1)) / (termFrequency + K1 * lengthNorm));
+      for (const [token, { termFrequency, weight }] of matched) {
+        const df = stats.documentFrequency.get(token) ?? 1;
+        const idf = Math.log(1 + (stats.glossCount - df + 0.5) / (df + 0.5));
+        score += idf * ((termFrequency * (K1 + 1)) / (termFrequency + K1 * lengthNorm)) * weight;
+      }
     }
 
     if (score === 0) continue;
