@@ -62,6 +62,34 @@ jobs:
           # isolated install phase failed to recognize the monorepo root.
           ###### End of Repository/Build Configurations ######
 
+      # Oryx runs inside a Docker container, where its npm writes crash logs to
+      # /github/home/.npm/_logs - a path that does not exist on the runner and dies with the
+      # container. It IS mounted from the host, though, so these two steps read the host side
+      # of that same mount (container /github/home is runner
+      # /home/runner/work/_temp/_github_home) while the job is still alive.
+      #
+      # Added while chasing "Cannot read properties of null (reading 'edgesOut')" from Oryx's
+      # own `npm install --production` inside api/. The build log prints only that one line
+      # and points at a debug log nobody could reach; the trace in it names which node of the
+      # dependency tree npm choked on, which is the difference between a guess and a fix.
+      #
+      # if: always() is what makes them run at all - the deploy step above has already failed
+      # by this point, and without it the job stops there and takes the evidence with it. The
+      # job still ends red; this only adds the log to it.
+      - name: Show Oryx's npm debug log
+        if: always()
+        run: |
+          ls -la /home/runner/work/_temp/_github_home/.npm/_logs/ || true
+          tail -n 200 /home/runner/work/_temp/_github_home/.npm/_logs/*-debug-0.log || true
+
+      - name: Upload Oryx's npm debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-debug-logs
+          path: /home/runner/work/_temp/_github_home/.npm/_logs/
+          if-no-files-found: warn
+
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
