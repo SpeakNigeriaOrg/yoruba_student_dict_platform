@@ -45,7 +45,11 @@ export type Route =
   /** The curating surface. */
   | { view: 'dictionary'; tab: DictionaryView }
   /** Everything held about one word - the deep view, distinct from working ON the word. */
-  | { view: 'dossier'; wordId: string };
+  | { view: 'dossier'; wordId: string }
+  /** What ONE person contributed, read-only. Nested under the user rather than the word
+   * because that is where it is reached from and what it is about - and because a
+   * 'new_entry' proposal has no word to nest under at all. */
+  | { view: 'contribution'; userId: string; contributionId: string };
 
 export const DEFAULT_ROUTE: Route = { view: 'queue' };
 
@@ -89,7 +93,15 @@ export function parseHash(hash: string): Route {
     case 'users':
       // #/users and #/users/{id} are the same stack, which is what collapses
       // AdminUsers' former private selectedUserId state.
-      return segments[1] ? { view: 'user', userId: segments[1] } : { view: 'users' };
+      if (!segments[1]) return { view: 'users' };
+      // #/users/{id}/contribution/{cid} - deeper in the same stack, so Back from a
+      // contribution lands on the person whose page it was reached from.
+      if (segments[2] === 'contribution') {
+        return segments[3]
+          ? { view: 'contribution', userId: segments[1], contributionId: segments[3] }
+          : { view: 'user', userId: segments[1] };
+      }
+      return { view: 'user', userId: segments[1] };
     case 'word': {
       if (!segments[1]) return DEFAULT_ROUTE;
       const axis = segments[2];
@@ -116,6 +128,8 @@ export function formatRoute(route: Route): string {
       return '#/users';
     case 'user':
       return `#/users/${encodeURIComponent(route.userId)}`;
+    case 'contribution':
+      return `#/users/${encodeURIComponent(route.userId)}/contribution/${encodeURIComponent(route.contributionId)}`;
     case 'word':
       return `#/word/${encodeURIComponent(route.wordId)}/${route.axis}`;
   }
