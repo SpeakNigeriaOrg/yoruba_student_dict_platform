@@ -17,7 +17,6 @@ import { AdminUsers } from './screens/AdminUsers.js';
 import { ContributorTerms } from './screens/ContributorTerms.js';
 import { Dictionary } from './screens/Dictionary.js';
 import { TaskQueue } from './screens/TaskQueue.js';
-import { UserContribution } from './screens/UserContribution.js';
 import { WordDossier } from './screens/WordDossier.js';
 import { WordReview } from './screens/WordReview.js';
 import { getMyGrant } from './api.js';
@@ -84,14 +83,10 @@ export default function App() {
   }
 
   // Which bottom-nav tab reads as current, including for the routes nested under one: a
-  // user's detail page and one of their contributions both belong to Users, and a word's
-  // dossier belongs to Dictionary, which is where it is reached from.
+  // user's detail page belongs to Users, and a word's dossier belongs to Dictionary, which
+  // is where it is reached from.
   const activeView: MainView =
-    route.view === 'user' || route.view === 'contribution'
-      ? 'users'
-      : route.view === 'dossier'
-        ? 'dictionary'
-        : route.view;
+    route.view === 'user' ? 'users' : route.view === 'dossier' ? 'dictionary' : route.view;
 
   return (
     <main>
@@ -170,28 +165,7 @@ export default function App() {
               <button type="button" className="back-btn" onClick={() => window.history.back()}>
                 ← Back
               </button>
-              <AdminUserDetail
-                userId={route.userId}
-                onSelectWord={(wordId) => openWord(wordId, 'entry')}
-                onOpenContribution={(contributionId) =>
-                  navigate({ view: 'contribution', userId: route.userId, contributionId })
-                }
-              />
-            </>
-          ) : /* Gated with its siblings: it carries other people's unpublished recordings
-                and examples in full. */
-          route.view === 'contribution' && isCurator ? (
-            <>
-              <button type="button" className="back-btn" onClick={() => window.history.back()}>
-                ← Back
-              </button>
-              <UserContribution
-                userId={route.userId}
-                contributionId={route.contributionId}
-                onOpenUser={(userId) => navigate({ view: 'user', userId })}
-                onOpenDossier={(wordId) => navigate({ view: 'dossier', wordId })}
-                onOpenWord={(wordId) => openWord(wordId, 'entry')}
-              />
+              <AdminUserDetail userId={route.userId} onSelectWord={(wordId) => openWord(wordId, 'entry')} />
             </>
           ) : route.view === 'dictionary' && isCurator ? (
             <Dictionary
