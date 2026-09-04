@@ -1,6 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
 
+  // The API uses the v4 Node programming model (app.http(...) in api/src/functions),
+  // where SWA does not reliably infer a runtime and registers no function at all - the
+  // site serves fine and every /api route answers 404. Added as a9ab37f, dropped again
+  // by e698188 on the theory that run #78's config was known-good; it was not, because
+  // the smoke test that would have caught this arrived in that same commit.
+  "platform": {
+    "apiRuntime": "node:20"
+  },
+
   "auth": {
     "rolesSource": "/api/GetRoles",
     "identityProviders": {
