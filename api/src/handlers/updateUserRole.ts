@@ -37,7 +37,7 @@ import { EmailAlreadyExistsError, UserNotFoundError } from './errors.js';
  * "leave it alone" rather than "set it to null". displayName is the one field that can be
  * deliberately CLEARED, so it distinguishes undefined from null. */
 export interface UpdateUserInput {
-  role?: 'curator' | 'volunteer';
+  role?: 'curator' | 'volunteer' | 'observer';
   email?: string;
   displayName?: string | null;
 }
@@ -46,7 +46,7 @@ export interface UpdatedUser {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: 'curator' | 'volunteer' | 'observer';
 }
 
 export class CannotDemoteLastCuratorError extends Error {

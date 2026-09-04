@@ -124,3 +124,45 @@ describe('requireUser and the contributor agreement', () => {
     await expect(requireUser(request('POST', EMAIL))).resolves.toMatchObject({ email: EMAIL });
   });
 });
+
+describe('the observer role', () => {
+  const OBSERVER = `${NS}board@example.org`;
+
+  beforeEach(async () => {
+    await pool.query('insert into users (email, display_name, role) values ($1, $2, $3)', [
+      OBSERVER,
+      `${NS}A Board Member`,
+      'observer',
+    ]);
+  });
+
+  it('reads anything a curator can read', async () => {
+    const user = await requireCurator(request('GET', OBSERVER));
+    expect(user.role).toBe('observer');
+  });
+
+  it('is refused every method that changes something', async () => {
+    for (const method of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+      await expect(requireCurator(request(method, OBSERVER)), `${method} must be refused`).rejects.toThrow(
+        /curator role required/,
+      );
+    }
+  });
+
+  it('does not need a contributor agreement to read - it never contributes', async () => {
+    // A curator who declined is blocked from writing but keeps reading; an observer
+    // has nothing to decline, and must not be locked out by paperwork it cannot sign.
+    const user = await requireCurator(request('GET', OBSERVER));
+    expect(user.email).toBe(OBSERVER);
+  });
+
+  it('leaves a volunteer refused on reads too - observer is not a rank above volunteer', async () => {
+    const volunteer = `${NS}volunteer@example.com`;
+    await pool.query('insert into users (email, display_name, role) values ($1, $2, $3)', [
+      volunteer,
+      `${NS}A Volunteer`,
+      'volunteer',
+    ]);
+    await expect(requireCurator(request('GET', volunteer))).rejects.toThrow(/curator role required/);
+  });
+});

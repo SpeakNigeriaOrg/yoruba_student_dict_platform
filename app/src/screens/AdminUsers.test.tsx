@@ -101,8 +101,8 @@ describe('AdminUsers', () => {
       const user = userEvent.setup();
 
       render(<AdminUsers onSelectUser={() => {}} />);
-      await waitFor(() => screen.getByRole('button', { name: /Promote Fixture Volunteer to curator/ }));
-      await user.click(screen.getByRole('button', { name: /Promote Fixture Volunteer to curator/ }));
+      await waitFor(() => screen.getByRole('button', { name: /Make Fixture Volunteer a curator/ }));
+      await user.click(screen.getByRole('button', { name: /Make Fixture Volunteer a curator/ }));
 
       await waitFor(() => {
         expect(screen.getByRole('status')).toHaveTextContent(/is now a curator/);
@@ -120,7 +120,7 @@ describe('AdminUsers', () => {
       stubFetchByPath();
       render(<AdminUsers onSelectUser={() => {}} />);
 
-      await waitFor(() => screen.getByRole('button', { name: /Demote Fixture Curator to volunteer/ }));
+      await waitFor(() => screen.getByRole('button', { name: /Make Fixture Curator a volunteer/ }));
     });
 
     it('surfaces the last-curator guard as an error', async () => {
@@ -138,8 +138,8 @@ describe('AdminUsers', () => {
       const user = userEvent.setup();
 
       render(<AdminUsers onSelectUser={() => {}} />);
-      await waitFor(() => screen.getByRole('button', { name: /Demote Fixture Curator to volunteer/ }));
-      await user.click(screen.getByRole('button', { name: /Demote Fixture Curator to volunteer/ }));
+      await waitFor(() => screen.getByRole('button', { name: /Make Fixture Curator a volunteer/ }));
+      await user.click(screen.getByRole('button', { name: /Make Fixture Curator a volunteer/ }));
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toHaveTextContent(/cannot demote the last curator/);

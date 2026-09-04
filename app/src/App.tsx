@@ -78,6 +78,14 @@ export default function App() {
   }, [principal?.userId]);
 
   const isCurator = principal?.userRoles.includes('curator') ?? false;
+  // Board members (users.role 'observer', migration 0027) see every curator screen and
+  // none of its controls. Two flags rather than one because the distinction is real:
+  // canOversee decides which SCREENS exist, isCurator decides which BUTTONS do, and the
+  // screens already take isCurator as a prop for exactly that. Passing canOversee down
+  // instead would put working Confirm buttons in front of someone whose every write the
+  // API refuses - a UI that lies about what it can do.
+  const isObserver = principal?.userRoles.includes('observer') ?? false;
+  const canOversee = isCurator || isObserver;
 
   function openWord(wordId: string, axis: Axis) {
     navigate({ view: 'word', wordId, axis });
@@ -151,7 +159,7 @@ export default function App() {
                 }}
               />
             </>
-          ) : route.view === 'dossier' && isCurator ? (
+          ) : route.view === 'dossier' && canOversee ? (
             <>
               <button type="button" className="back-btn" onClick={() => window.history.back()}>
                 ← Back
@@ -165,7 +173,7 @@ export default function App() {
           ) : /* Gated like its four siblings. It was the one route that was not, so a
                 volunteer reaching #/users/{id} rendered the whole admin screen - a live
                 assign-all-words control above a list that 403s. */
-          route.view === 'user' && isCurator ? (
+          route.view === 'user' && canOversee ? (
             <>
               <button type="button" className="back-btn" onClick={() => window.history.back()}>
                 ← Back
@@ -180,7 +188,7 @@ export default function App() {
             </>
           ) : /* Gated with its siblings: it carries other people's unpublished recordings
                 and examples in full. */
-          route.view === 'contribution' && isCurator ? (
+          route.view === 'contribution' && canOversee ? (
             <>
               <button type="button" className="back-btn" onClick={() => window.history.back()}>
                 ← Back
@@ -193,7 +201,7 @@ export default function App() {
                 onOpenWord={(wordId) => openWord(wordId, 'entry')}
               />
             </>
-          ) : route.view === 'dictionary' && isCurator ? (
+          ) : route.view === 'dictionary' && canOversee ? (
             <Dictionary
               tab={route.tab}
               onTabChange={(tab) => navigate({ view: 'dictionary', tab }, { replace: true })}
@@ -202,7 +210,7 @@ export default function App() {
             />
           ) : route.view === 'add' && isCurator ? (
             <AddWord onOpenWord={(wordId) => openWord(wordId, 'entry')} />
-          ) : route.view === 'users' && isCurator ? (
+          ) : route.view === 'users' && canOversee ? (
             <AdminUsers onSelectUser={(userId) => navigate({ view: 'user', userId })} />
           ) : (
             <TaskQueue isCurator={isCurator} onOpenWord={openWord} />
@@ -212,9 +220,12 @@ export default function App() {
               whenever a word was open, which removed the only escape from
               the longest screens in the app while still reserving its
               height in main's padding. */}
-          {isCurator ? (
+          {canOversee ? (
             <nav aria-label="Main navigation" className="bottom-nav">
-              {MAIN_VIEWS.map((view) => (
+              {/* Add is the one main view that exists to write, so it is not offered to an
+                  observer - a nav button whose screen falls through to the task queue is
+                  worse than no button. */}
+              {MAIN_VIEWS.filter((v) => v.view !== 'add' || isCurator).map((view) => (
                 <button
                   key={view.view}
                   type="button"

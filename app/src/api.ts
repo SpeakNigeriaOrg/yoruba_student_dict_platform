@@ -41,6 +41,10 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 // Mirrors api/src/handlers/listMyAssignments.ts's AssignmentSummary.
+/** Mirrors api/src/auth.ts's AppRole and the users_role_check constraint that
+ * migration 0027 widened: a peer set, not a ladder. */
+export type AppRole = 'curator' | 'volunteer' | 'observer';
+
 export interface AssignmentSummary {
   wordId: string;
   displayText: string;
@@ -60,7 +64,7 @@ export interface UserSummary {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
   assignedWordCount: number;
   inReviewCount: number;
   passedCount: number;
@@ -81,14 +85,14 @@ export function getUsers(): Promise<UserSummary[]> {
 export interface CreateUserInput {
   email: string;
   displayName?: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
 }
 
 export interface CreatedUser {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
 }
 
 export function createUser(input: CreateUserInput): Promise<CreatedUser> {
@@ -105,7 +109,7 @@ export function createUser(input: CreateUserInput): Promise<CreatedUser> {
 //
 // Takes effect on the user's NEXT LOGIN, because SWA caches roles into the
 // session token; server-side curator checks re-read the database immediately.
-export function updateUserRole(userId: string, role: 'curator' | 'volunteer'): Promise<CreatedUser> {
+export function updateUserRole(userId: string, role: AppRole): Promise<CreatedUser> {
   return updateUser(userId, { role });
 }
 
@@ -118,7 +122,7 @@ export function updateUserRole(userId: string, role: 'curator' | 'volunteer'): P
  * references. The server refuses a curator editing their OWN email (409), because the
  * lockout would only appear at their next sign-in. */
 export interface UpdateUserInput {
-  role?: 'curator' | 'volunteer';
+  role?: AppRole;
   email?: string;
   displayName?: string | null;
 }
@@ -174,7 +178,7 @@ export interface UserDossier {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
   createdAt: string;
   rights: UserRights;
   speakers: UserSpeaker[];

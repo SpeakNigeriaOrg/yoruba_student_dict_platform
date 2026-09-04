@@ -33,29 +33,39 @@
     }
   },
 
+  // "observer" appears beside "curator" on every rule an observer may READ through
+  // (migration 0027: board members who need oversight without curation power). Rules
+  // already restricted to PATCH/DELETE/POST keep curator alone, so the edge refuses a
+  // write before it reaches a function at all.
+  //
+  // For the rest, this layer admits the request and httpAuth.ts's requireCurator decides:
+  // it returns an observer only on GET. That is deliberate rather than lazy - splitting
+  // every rule by method would double this file and make ordering load-bearing, and a
+  // misordered rule fails silently in the dangerous direction. One server-side gate is
+  // checkable by a test; twenty ordered config rules are not.
   "routes": [
-    { "route": "/api/words", "allowedRoles": ["curator"] },
+    { "route": "/api/words", "allowedRoles": ["curator", "observer"] },
     { "route": "/api/words/*", "methods": ["PATCH", "DELETE"], "allowedRoles": ["curator"] },
     { "route": "/api/words/*", "allowedRoles": ["member"] },
-    { "route": "/api/phrases", "allowedRoles": ["curator"] },
-    { "route": "/api/decisions/*", "allowedRoles": ["curator"] },
+    { "route": "/api/phrases", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/decisions/*", "allowedRoles": ["curator", "observer"] },
 
-    { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator"] },
+    { "route": "/api/contributions", "methods": ["GET"], "allowedRoles": ["curator", "observer"] },
     { "route": "/api/contributions", "methods": ["POST"], "allowedRoles": ["member"] },
-    { "route": "/api/contributions/*", "allowedRoles": ["curator"] },
+    { "route": "/api/contributions/*", "allowedRoles": ["curator", "observer"] },
 
-    { "route": "/api/consensus", "allowedRoles": ["curator"] },
-    { "route": "/api/consensus/*", "allowedRoles": ["curator"] },
+    { "route": "/api/consensus", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/consensus/*", "allowedRoles": ["curator", "observer"] },
 
-    { "route": "/api/upstream-drift", "allowedRoles": ["curator"] },
-    { "route": "/api/upstream-drift/*", "allowedRoles": ["curator"] },
+    { "route": "/api/upstream-drift", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/upstream-drift/*", "allowedRoles": ["curator", "observer"] },
 
     { "route": "/api/assignments/me", "allowedRoles": ["member"] },
     { "route": "/api/assignments", "methods": ["POST"], "allowedRoles": ["curator"] },
-    { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
-    { "route": "/api/users", "allowedRoles": ["curator"] },
-    { "route": "/api/users/*", "allowedRoles": ["curator"] },
-    { "route": "/api/user-contributions/*", "allowedRoles": ["curator"] },
+    { "route": "/api/assignments/*", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/users", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/users/*", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/user-contributions/*", "allowedRoles": ["curator", "observer"] },
 
     { "route": "/api/utterances/*", "allowedRoles": ["member"] },
     { "route": "/api/syllables/*", "allowedRoles": ["member"] },
@@ -65,15 +75,15 @@
 
     { "route": "/api/kaikki-search", "allowedRoles": ["member"] },
     { "route": "/api/vocab-search", "allowedRoles": ["member"] },
-    { "route": "/api/recent-words", "allowedRoles": ["curator"] },
-    { "route": "/api/duplicate-check", "allowedRoles": ["curator"] },
+    { "route": "/api/recent-words", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/duplicate-check", "allowedRoles": ["curator", "observer"] },
 
-    { "route": "/api/dictionary", "allowedRoles": ["curator"] },
-    { "route": "/api/dictionary/*", "allowedRoles": ["curator"] },
-    { "route": "/api/images/*", "allowedRoles": ["curator"] },
-    { "route": "/api/examples/*", "allowedRoles": ["curator"] },
+    { "route": "/api/dictionary", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/dictionary/*", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/images/*", "allowedRoles": ["curator", "observer"] },
+    { "route": "/api/examples/*", "allowedRoles": ["curator", "observer"] },
 
-    { "route": "/api/maintenance/*", "allowedRoles": ["curator"] },
+    { "route": "/api/maintenance/*", "allowedRoles": ["curator", "observer"] },
 
     { "route": "/login", "redirect": "/.auth/login/google" },
     { "route": "/logout", "redirect": "/.auth/logout" },

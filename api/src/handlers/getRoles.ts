@@ -86,5 +86,9 @@ export async function getRoles(db: Queryable, body: RolesRequestBody | null | un
   // No row = not invited. This is the gate.
   if (!role) return { roles: [] };
 
-  return { roles: role === 'curator' ? ['member', 'curator'] : ['member'] };
+  // 'observer' is named here so staticwebapp.config.json can let board members reach
+  // the curator screens' GETs; requireCurator is what stops them writing.
+  if (role === 'curator') return { roles: ['member', 'curator'] };
+  if (role === 'observer') return { roles: ['member', 'observer'] };
+  return { roles: ['member'] };
 }

@@ -67,11 +67,15 @@ export function parseClientPrincipal(headerValue: string | null | undefined): Cl
   }
 }
 
+/** A peer set, not a ladder: a volunteer contributes and cannot review, a
+ * curator does both, an observer does neither and only reads. */
+export type AppRole = 'curator' | 'volunteer' | 'observer';
+
 export interface AppUser {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
 }
 
 const EMAIL_CLAIM_TYPES = [
@@ -112,7 +116,7 @@ export async function resolveUser(db: Queryable, principal: ClientPrincipal): Pr
     user_id: string;
     email: string;
     display_name: string | null;
-    role: 'curator' | 'volunteer';
+    role: AppRole;
   }>('select user_id, email, display_name, role from users where lower(email) = $1', [email]);
 
   const row = result.rows[0];

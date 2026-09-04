@@ -111,6 +111,20 @@ export async function requireCurator(request: HttpRequest, options: RequireUserO
   // are authored content too, and 0019 makes no distinction by role about whose work may
   // be published.
   const user = await requireUser(request, options);
-  if (user.role !== 'curator') throw new ForbiddenError('curator role required');
-  return user;
+  if (user.role === 'curator') return user;
+
+  // An observer sees everything a curator sees and changes nothing (migration 0027).
+  // Board members were previously made curators just to get oversight, which handed
+  // dictionary-editing power to people who have said they do not want it.
+  //
+  // The rule lives here rather than in each read endpoint for the same reason the
+  // contributor agreement does, a few lines up: a per-endpoint check is a dozen files
+  // and a permanent invitation to forget one, and the one forgotten would be silent -
+  // a missing check looks exactly like a passing one. The method is the signal, which
+  // holds because no GET registration in api/src/functions writes (asserted by a test
+  // in httpAuth.test.ts, so a future GET that writes fails the build rather than
+  // quietly handing observers a way in).
+  if (user.role === 'observer' && request.method === 'GET') return user;
+
+  throw new ForbiddenError('curator role required');
 }

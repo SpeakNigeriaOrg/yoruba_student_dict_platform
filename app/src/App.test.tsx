@@ -332,3 +332,31 @@ describe('App - a declined account cannot contribute', () => {
     expect(screen.getByLabelText('Contributions paused')).toHaveTextContent('turned off');
   });
 });
+
+describe('an observer (board member)', () => {
+  // The role exists so board members stop being made curators just to see the project.
+  // What has to hold is both halves: the oversight screens are reachable, and nothing
+  // that writes is offered - a visible Confirm button an observer cannot actually use
+  // would be a UI lying about what it can do.
+
+  it('gets the main navigation, so the curator screens are reachable at all', async () => {
+    installFetchMock(['authenticated', 'member', 'observer']);
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument());
+  });
+
+  it('is not offered Add, the one main view that exists to write', async () => {
+    installFetchMock(['authenticated', 'member', 'observer']);
+    render(<App />);
+    await waitFor(() => screen.getByRole('navigation', { name: 'Main navigation' }));
+    expect(screen.queryByRole('button', { name: /Add/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dictionary/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Users/ })).toBeInTheDocument();
+  });
+
+  it('gives a plain volunteer no navigation, as before', async () => {
+    installFetchMock(['authenticated', 'member']);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument());
+  });
+});

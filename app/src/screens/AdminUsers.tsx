@@ -12,12 +12,14 @@
 // a row just reports the selection upward.
 
 import { useEffect, useState } from 'react';
-import { getUsers, updateUserRole, type UserSummary } from '../api.js';
+import { getUsers, updateUserRole, type UserSummary, type AppRole } from '../api.js';
 import { AddUserForm } from './AddUserForm.js';
 
 export interface AdminUsersProps {
   onSelectUser: (userId: string) => void;
 }
+
+const ASSIGNABLE_ROLES: AppRole[] = ['curator', 'volunteer', 'observer'];
 
 export function AdminUsers({ onSelectUser }: AdminUsersProps) {
   const [users, setUsers] = useState<UserSummary[] | null>(null);
@@ -33,7 +35,7 @@ export function AdminUsers({ onSelectUser }: AdminUsersProps) {
 
   useEffect(reload, []);
 
-  async function changeRole(userId: string, role: 'curator' | 'volunteer') {
+  async function changeRole(userId: string, role: AppRole) {
     setRoleError(null);
     setRoleStatus(null);
     try {
@@ -66,25 +68,21 @@ export function AdminUsers({ onSelectUser }: AdminUsersProps) {
               {/* Role management lives here rather than in the Azure Portal
                   now that the roles-source function reads users.role. */}
               <div className="btn-row">
-                {u.role === 'curator' ? (
+                {/* Three roles no longer fit a toggle, so each account offers the two it
+                    is not. 'observer' is the board-member role from migration 0027: sees
+                    every curator screen, changes nothing. It exists because board members
+                    were being made curators purely to get oversight. */}
+                {ASSIGNABLE_ROLES.filter((role) => role !== u.role).map((role) => (
                   <button
+                    key={role}
                     type="button"
                     className="btn btn-secondary"
-                    aria-label={`Demote ${u.displayName ?? u.email} to volunteer`}
-                    onClick={() => void changeRole(u.userId, 'volunteer')}
+                    aria-label={`Make ${u.displayName ?? u.email} a ${role}`}
+                    onClick={() => void changeRole(u.userId, role)}
                   >
-                    Make volunteer
+                    Make {role}
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    aria-label={`Promote ${u.displayName ?? u.email} to curator`}
-                    onClick={() => void changeRole(u.userId, 'curator')}
-                  >
-                    Make curator
-                  </button>
-                )}
+                ))}
               </div>
             </li>
           ))}
