@@ -45,4 +45,13 @@ delete manifest.devDependencies;
 delete manifest.scripts;
 writeFileSync(`${OUT}/package.json`, `${JSON.stringify(manifest, null, 2)}\n`);
 
-console.log(`assembled ${OUT}/ (dist + vendor + host.json + a runtime-only manifest)`);
+// build-info.json - so the running API can say which commit it is. During the
+// 2026-09-03 deploy hunt the question "is the code I just pushed actually the
+// code that is live?" could not be answered from outside at all; /api/health
+// reads this file to answer it. GITHUB_SHA is set by Actions and absent locally.
+writeFileSync(
+  `${OUT}/build-info.json`,
+  `${JSON.stringify({ commit: process.env.GITHUB_SHA ?? 'unknown', builtAt: new Date().toISOString() }, null, 2)}\n`,
+);
+
+console.log(`assembled ${OUT}/ (dist + vendor + host.json + build-info.json + a runtime-only manifest)`);

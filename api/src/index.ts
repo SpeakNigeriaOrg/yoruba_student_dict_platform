@@ -3,6 +3,7 @@
 // Functions host entrypoint (package.json's "main") - each import below
 // registers one HTTP function as a side effect of module load (app.http(...)).
 
+import './functions/health.js';
 import './functions/maintenance.js';
 import './functions/words.js';
 import './functions/wordAdmin.js';
