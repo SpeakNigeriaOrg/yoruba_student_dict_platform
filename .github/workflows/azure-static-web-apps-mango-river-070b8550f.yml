@@ -40,6 +40,21 @@ jobs:
         run: npm run build:api
       - name: Build app (builds shared first, then app's own dist)
         run: npm run build:app
+      # Oryx runs `npm install --production` inside api/ with no lockfile, and npm builds its
+      # ideal tree with devDependencies INCLUDED before pruning them - so api's dev tooling is
+      # resolved on every deploy even though none of it ships. On 2026-09-03 that crashed
+      # Oryx's npm (10.9.4) while loading vitest's peer set, with no change on our side:
+      # `vitest` alone in a devDependencies block reproduces it under that npm, even pinned to
+      # the version that had deployed successfully days before, so what moved was the peer
+      # graph on the registry. See scripts/vendorSharedForApi.mjs, which does the same for the
+      # vendored copy of shared - both had to go, either one alone still crashed it.
+      #
+      # This edits the checked-out file only, never the repo, and runs after every build step
+      # that could want those packages. What Oryx installs is the production Function app,
+      # where devDependencies mean nothing anyway.
+      - name: Keep api's devDependencies out of Oryx's install
+        run: cd api && npm pkg delete devDependencies
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1

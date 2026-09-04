@@ -15,7 +15,7 @@
   "scripts": {
     "build:shared": "npm run build --workspace=shared",
     "test:shared": "npm run test --workspace=shared",
-    "vendor:shared:api": "rm -rf api/vendor/shared && mkdir -p api/vendor/shared && cp -r shared/dist shared/package.json api/vendor/shared/",
+    "vendor:shared:api": "node scripts/vendorSharedForApi.mjs",
     "test:api": "npm run build:shared && npm run vendor:shared:api && npm run test --workspace=api",
     "test:ingest": "npm run build:shared && npm run test --workspace=ingest",
     "dev:app": "npm run build:shared && npm run dev --workspace=app",
