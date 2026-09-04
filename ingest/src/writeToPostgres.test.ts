@@ -3,19 +3,44 @@ import pg from 'pg';
 import { writeSensesToPostgres } from './writeToPostgres.js';
 import type { DerivedKaikkiSense } from './types.js';
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '']);
+
+// Duplicated from api/src/testSupport.ts rather than imported - ingest/ does
+// not depend on api/, and this is the more destructive of the two callers.
+// Parsed rather than string-matched: "postgres://user@localhost.evil.com/"
+// contains "localhost" and is not local.
+function assertLocalDatabaseUrl(connectionString: string): void {
+  let host: string;
+  try {
+    host = new URL(connectionString).hostname;
+  } catch {
+    throw new Error('DATABASE_URL is not a parseable connection string; refusing to truncate against it');
+  }
+  if (!LOCAL_HOSTS.has(host.toLowerCase())) {
+    throw new Error(
+      `Refusing to run the ingest tests against non-local database host "${host}". ` +
+        'This file truncates kaikki_senses and kaikki_ingestion_runs outright, which against a real ' +
+        'database destroys the entire ingested corpus. Point DATABASE_URL at your local Postgres.',
+    );
+  }
+}
+
 function getTestPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set - export it before running `npm test` (see the other workspaces\' local.settings.json.example)');
   }
+  assertLocalDatabaseUrl(connectionString);
   return new pg.Pool({ connectionString });
 }
 
 // This is the only test file that touches the kaikki_* tables (they're
 // exclusively owned by this ingestion pipeline, unlike golden_record/users
 // which many api/ test files share) - so a plain whole-table
-// truncate-before-each is safe, no per-file namespacing needed the way
-// api/'s tests required.
+// truncate-before-each needs no per-file namespacing the way api/'s tests
+// required. What it DOES need is the host check above: "no namespacing" and
+// "restores nothing afterwards" together mean that against the wrong
+// database this file deletes the real corpus and its ingestion history.
 const pool = getTestPool();
 
 beforeEach(async () => {

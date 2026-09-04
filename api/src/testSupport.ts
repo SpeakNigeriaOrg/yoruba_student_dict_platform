@@ -36,11 +36,42 @@ function likePrefix(namespace: string): string {
   return `${namespace.replace(/([%_\\])/g, '\\$1')}%`;
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '']);
+
+/** Refuses any DATABASE_URL that does not point at this machine.
+ *
+ * cleanUpTestData below issues unqualified DELETEs, createAssignments'
+ * scope: 'all' writes a row for every word in golden_record, and
+ * ingest/src/writeToPostgres.test.ts truncates the entire Kaikki corpus.
+ * None of that is guarded by anything but the connection string, and
+ * api/local.settings.json holds the production Azure URL - so the one
+ * thing standing between `npm run test:api` and the live database is
+ * which value happens to be exported. On 2026-09-03 it was the wrong one.
+ *
+ * Parsed rather than string-matched: "postgres://user@localhost.evil.com/"
+ * contains "localhost" and is not local. */
+export function assertLocalDatabaseUrl(connectionString: string): void {
+  let host: string;
+  try {
+    host = new URL(connectionString).hostname;
+  } catch {
+    throw new Error('DATABASE_URL is not a parseable connection string; refusing to run the test suite against it');
+  }
+  if (!LOCAL_HOSTS.has(host.toLowerCase())) {
+    throw new Error(
+      `Refusing to run the test suite against non-local database host "${host}". ` +
+        'These tests DELETE and TRUNCATE without a namespace in places, so they may only run ' +
+        'against localhost. Point DATABASE_URL at your local Postgres (see local.settings.json.example).',
+    );
+  }
+}
+
 export function getTestPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set - export it before running `npm test` (see local.settings.json.example)');
   }
+  assertLocalDatabaseUrl(connectionString);
   return new pg.Pool({ connectionString });
 }
 
