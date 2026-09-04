@@ -34,6 +34,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          # 20 here builds the app and the api's dist; app/public/staticwebapp.config.json's
+          # platform.apiRuntime pins the same version for the FUNCTIONS RUNTIME, which is a
+          # separate thing and was never pinned at all. Left unset, Azure infers it from
+          # whatever Node its build image ships - and on 2026-09-03 that image moved to Node
+          # 22.22.0 / npm 10.9.4 (both named in Oryx's own crash log), which is when deploys
+          # started failing and then shipping an API where no function registers.
       - name: Install all workspace dependencies
         run: npm ci
       # Assembles api-deploy/ as well as api/dist - see scripts/buildApiDeploy.mjs. api/
