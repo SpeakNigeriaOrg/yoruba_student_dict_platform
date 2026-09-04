@@ -103,7 +103,12 @@ jobs:
         run: |
           SITE=https://mango-river-070b8550f.7.azurestaticapps.net
           for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$SITE/api/GetRoles" || echo 000)
+            # POST, not GET: GetRoles is registered POST-only (app.http in getRoles.ts, and
+            # it is how the platform's rolesSource calls it). A GET is a method mismatch, which
+            # the Functions host answers with the same 404 as a missing function - so a GET here
+            # reports failure even when every function is registered and healthy.
+            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -X POST \
+              -H 'Content-Type: application/json' -d '{}' "$SITE/api/GetRoles" || echo 000)
             if [ "$code" != "404" ] && [ "$code" != "000" ]; then
               echo "API is answering (HTTP $code) - functions registered."
               exit 0

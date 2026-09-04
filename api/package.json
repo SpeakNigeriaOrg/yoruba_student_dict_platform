@@ -4,14 +4,13 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "prestart": "npm run build",
     "start": "func start",
     "test": "vitest run"
   },
   "dependencies": {
     "@azure/functions": "^4.16.2",
-    "@azure/storage-blob": "^12.33.0",
     "@yoruba-student-dict-platform/shared": "file:./vendor/shared",
     "pg": "^8.22.0"
   },
