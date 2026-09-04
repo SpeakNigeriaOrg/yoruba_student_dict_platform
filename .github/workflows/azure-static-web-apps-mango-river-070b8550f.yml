@@ -59,9 +59,8 @@ jobs:
       # it exactly as the Functions host does - every app.http registration executes - and
       # fails the job if a dependency is missing. Cheap, and it fails LOUD instead of
       # deploying a site where every route 403s.
-      # api-deploy/ is built and loaded purely as a CHECK - what deploys is api/, exactly as
-      # in run #78. This catches a dist that cannot start (a missing dependency, a bad
-      # import) before the upload, without changing what gets uploaded.
+      # api-deploy/ is what actually deploys, so loading it here exercises the very tree that
+      # ships - a missing dependency or bad import fails the job instead of the site.
       - name: Verify the api's compiled output actually loads
         run: |
           cd api-deploy
@@ -78,10 +77,16 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "app/dist" # already-built app content - see custom build steps above
-          api_location: "api" # exactly as run #78 (the last deploy that worked) shipped it - Oryx installs and builds the API itself
+          api_location: "api-deploy" # NOT api/ - see the packaging step above. api/ is a workspace
+          # member, so Oryx's `npm install` inside it finds the monorepo root, hoists every
+          # dependency there and empties api/node_modules - shipping a Function app with no
+          # @azure/functions to import. Confirmed in run #93's Oryx log: "found workspace root
+          # at /github/workspace" followed by 46 REMOVE lines. api-deploy/ is not in the
+          # workspaces globs, so npm installs into it normally.
           output_location: "" # app_location IS the built output already; nothing further to append
           skip_app_build: true
-          # skip_app_build only, as in run #78: the app is prebuilt above, the API is not.
+          # skip_app_build only: the app is prebuilt above. Oryx still installs inside
+          # api-deploy/, which is what we want - it just resolves locally now.
           ###### End of Repository/Build Configurations ######
 
       # A green deploy has twice now meant a dead site: the upload succeeds, no function
