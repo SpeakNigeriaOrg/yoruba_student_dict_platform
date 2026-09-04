@@ -18,7 +18,6 @@ import {
   type UpdateUserInput,
 } from '../handlers/updateUserRole.js';
 import { loadUserDossier } from '../handlers/userDossier.js';
-import { ContributionNotFoundError, loadUserContribution } from '../handlers/userContribution.js';
 import { EmailAlreadyExistsError, UserNotFoundError } from '../handlers/errors.js';
 
 export async function listUsersFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
@@ -177,42 +176,4 @@ app.http('GetUser', {
   authLevel: 'anonymous',
   route: 'users/{userId}',
   handler: getUserFunction,
-});
-
-/** GET /api/users/{userId}/contributions/{contributionId} - one person's work on one word.
- *
- * Read-only, and curator-only like its siblings: it carries other people's unpublished
- * recordings and examples in full, which is exactly what the "/api/users/*" rule in
- * staticwebapp.config.json already gates. No route rule changes.
- *
- * Scoped by BOTH ids on purpose - see the handler. A contribution id that exists but
- * belongs to another account 404s here rather than rendering under the wrong name.
- */
-export async function getUserContributionFunction(
-  request: HttpRequest,
-  _context: InvocationContext,
-): Promise<HttpResponseInit> {
-  try {
-    await requireCurator(request);
-    const userId = request.params.userId;
-    const contributionId = request.params.contributionId;
-    if (!userId) throw new Error('userId is required in the route');
-    if (!contributionId) throw new Error('contributionId is required in the route');
-    const detail = await loadUserContribution(getPool(), userId, contributionId);
-    return { status: 200, jsonBody: detail };
-  } catch (err) {
-    if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
-    if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
-    if (err instanceof UserNotFoundError) return { status: 404, jsonBody: { error: err.message } };
-    if (err instanceof ContributionNotFoundError) return { status: 404, jsonBody: { error: err.message } };
-    if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
-    throw err;
-  }
-}
-
-app.http('GetUserContribution', {
-  methods: ['GET'],
-  authLevel: 'anonymous',
-  route: 'users/{userId}/contributions/{contributionId}',
-  handler: getUserContributionFunction,
 });

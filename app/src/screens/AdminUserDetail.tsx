@@ -40,14 +40,7 @@ import { WordAssignPicker } from './WordAssignPicker.js';
 
 export interface AdminUserDetailProps {
   userId: string;
-  /** Opening a word to WORK on it - what the assigned-words list is for. */
   onSelectWord: (wordId: string) => void;
-  /** Reading what this person contributed, which is what the activity list is for.
-   *
-   * The two were the same link until now, and it went to the review screens: clicking
-   * "entry · 3 days ago" on Ada's page opened a form asking the curator for their own
-   * opinion, with no trace of Ada's. See screens/UserContribution.tsx. */
-  onOpenContribution: (contributionId: string) => void;
   /** Both optional since this is now its own route (#/users/{id}) rather
    * than a child of AdminUsers: the shell renders the back affordance from
    * real history, and the user list re-fetches its counts when it re-mounts,
@@ -231,7 +224,7 @@ function EditProfile({ user, onSaved }: { user: UserDossier; onSaved: () => void
   );
 }
 
-export function AdminUserDetail({ userId, onSelectWord, onOpenContribution, onBack, onUsersChanged }: AdminUserDetailProps) {
+export function AdminUserDetail({ userId, onSelectWord, onBack, onUsersChanged }: AdminUserDetailProps) {
   const [user, setUser] = useState<UserDossier | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<UserAssignmentSummary[] | null>(null);
@@ -397,14 +390,15 @@ export function AdminUserDetail({ userId, onSelectWord, onOpenContribution, onBa
                 <ul className="plain-list">
                   {user.recentContributions.map((c) => (
                     <li key={c.contributionId} className={c.status !== 'active' ? 'set-aside' : undefined}>
-                      {/* Keyed on the contribution, not the word - which is what makes a
-                          'new_entry' proposal clickable at all. It has no word by
-                          construction, so this row used to be dead text: the work of
-                          someone whose main activity is proposing new words was the one
-                          thing their own page would not open. */}
-                      <button type="button" className="btn btn-link" onClick={() => onOpenContribution(c.contributionId)}>
-                        {c.displayText ?? c.wordId ?? 'a new word'}
-                      </button>{' '}
+                      {/* A 'new_entry' proposal has no word yet, by construction - so the
+                          row says what it is rather than rendering an empty button. */}
+                      {c.wordId ? (
+                        <button type="button" className="btn btn-link" onClick={() => onSelectWord(c.wordId!)}>
+                          {c.displayText ?? c.wordId}
+                        </button>
+                      ) : (
+                        <em>a new word</em>
+                      )}{' '}
                       <span className="badge">{c.axis}</span>{' '}
                       <span className="field-note">
                         {c.status} · {when(c.submittedAt)}
