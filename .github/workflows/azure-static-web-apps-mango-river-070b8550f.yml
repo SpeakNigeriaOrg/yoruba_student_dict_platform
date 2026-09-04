@@ -40,8 +40,13 @@ jobs:
           # whatever Node its build image ships - and on 2026-09-03 that image moved to Node
           # 22.22.0 / npm 10.9.4 (both named in Oryx's own crash log), which is when deploys
           # started failing and then shipping an API where no function registers.
+      # --no-audit is not cosmetic: `npm ci` spent SIX MINUTES on run #84 (01:58:08 to
+      # 02:04:09), and the "This endpoint is being retired ... #tag/Audit" notice lands in
+      # the same second the install finally reports. npm audits at the end of ci, and that
+      # endpoint is being retired and hanging. The install itself is 194 packages, seconds
+      # of work. Vulnerability scanning belongs in Dependabot, not in the deploy path.
       - name: Install all workspace dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
       # Assembles api-deploy/ as well as api/dist - see scripts/buildApiDeploy.mjs. api/
       # itself cannot be uploaded: it is a workspace, so installing in it hoists every
       # dependency to the monorepo root and ships an app with no @azure/functions in it.
@@ -54,10 +59,13 @@ jobs:
       # it exactly as the Functions host does - every app.http registration executes - and
       # fails the job if a dependency is missing. Cheap, and it fails LOUD instead of
       # deploying a site where every route 403s.
-      - name: Verify the packaged api actually loads
+      # api-deploy/ is built and loaded purely as a CHECK - what deploys is api/, exactly as
+      # in run #78. This catches a dist that cannot start (a missing dependency, a bad
+      # import) before the upload, without changing what gets uploaded.
+      - name: Verify the api's compiled output actually loads
         run: |
           cd api-deploy
-          npm install --omit=dev
+          npm install --omit=dev --no-audit --no-fund
           node --input-type=module -e "await import('./dist/index.js')"
 
       - name: Build And Deploy
@@ -70,17 +78,36 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "app/dist" # already-built app content - see custom build steps above
-          api_location: "api-deploy" # the self-contained bundle assembled above - NOT api/, which is a workspace and would ship without its dependencies
+          api_location: "api" # exactly as run #78 (the last deploy that worked) shipped it - Oryx installs and builds the API itself
           output_location: "" # app_location IS the built output already; nothing further to append
           skip_app_build: true
-          # No skip_api_build here (unsupported by this action version) -
-          # Oryx runs its own npm install/build inside api/. This now
-          # works correctly: api/package.json points at shared via
-          # "file:../shared" (a plain relative path, resolved without any
-          # npm-workspace detection or registry lookup), rather than the
-          # bare "*" workspace-style version spec that 404'd when Oryx's
-          # isolated install phase failed to recognize the monorepo root.
+          # skip_app_build only, as in run #78: the app is prebuilt above, the API is not.
           ###### End of Repository/Build Configurations ######
+
+      # A green deploy has twice now meant a dead site: the upload succeeds, no function
+      # registers, and the platform's rolesSource call to /api/GetRoles gets nothing - which
+      # leaves every signed-in account with no roles and every /api/* route returning 403.
+      # Nothing in the build notices. This asks the deployed site the one question that
+      # matters, and turns "green build, broken site" into a red build.
+      #
+      # 404 is the platform's own not-found page, i.e. no function is answering. Any other
+      # status means the app is up (GetRoles is a POST endpoint, so a GET reaching it is a
+      # success signal here, not a failure).
+      - name: Smoke-test the deployed API
+        if: success()
+        run: |
+          SITE=https://mango-river-070b8550f.7.azurestaticapps.net
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$SITE/api/GetRoles" || echo 000)
+            if [ "$code" != "404" ] && [ "$code" != "000" ]; then
+              echo "API is answering (HTTP $code) - functions registered."
+              exit 0
+            fi
+            echo "attempt $i: /api/GetRoles -> $code"
+            sleep 15
+          done
+          echo "::error::Deploy reported success but /api/GetRoles still returns 404 - no function is registering."
+          exit 1
 
       # Oryx runs inside a Docker container, where its npm writes crash logs to
       # /github/home/.npm/_logs - a path that does not exist on the runner and dies with the
