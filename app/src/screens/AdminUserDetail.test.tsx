@@ -56,7 +56,7 @@ describe('AdminUserDetail', () => {
   it('renders assigned words with both AxisStatusBadges and AxisReviewBadges', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(respond(url))));
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByText('epo')).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('AdminUserDetail', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
     await waitFor(() => screen.getByText('epo'));
 
     const textarea = screen.getByLabelText(/Or paste word IDs/);
@@ -107,7 +107,7 @@ describe('AdminUserDetail', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
     await waitFor(() => screen.getByText('epo'));
 
     await user.click(screen.getByRole('button', { name: 'Assign all incomplete words' }));
@@ -133,7 +133,7 @@ describe('AdminUserDetail', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
     await waitFor(() => screen.getByText('epo'));
 
     await user.click(screen.getByRole('button', { name: 'Assign all words' }));
@@ -168,7 +168,7 @@ describe('AdminUserDetail', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
     await waitFor(() => screen.getByText('epo'));
 
     await user.click(screen.getByRole('button', { name: 'Browse recently added words' }));
@@ -203,7 +203,7 @@ describe('AdminUserDetail', () => {
     vi.stubGlobal('fetch', fetchMock);
     const user = userEvent.setup();
 
-    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onOpenContribution={() => {}} onUsersChanged={() => {}} />);
+    render(<AdminUserDetail userId="u1" onBack={() => {}} onSelectWord={() => {}} onUsersChanged={() => {}} />);
     await waitFor(() => screen.getByText('epo'));
 
     await user.click(screen.getByRole('button', { name: 'Unassign' }));
@@ -230,7 +230,7 @@ describe('AdminUserDetail identity', () => {
       return Promise.resolve(respond(url, over));
     });
     vi.stubGlobal('fetch', fetchMock);
-    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} onOpenContribution={() => {}} />);
+    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} />);
     return fetchMock;
   }
 
@@ -283,76 +283,11 @@ describe('AdminUserDetail identity', () => {
     expect(activity).toHaveTextContent('1 superseded');
   });
 
-  it('opens what the person contributed, not the form asking the curator for their own view', async () => {
-    // The defect this replaced: every activity row linked into WordReview, which shows
-    // nobody's contribution - least of all the one whose row was clicked.
-    const onOpenContribution = vi.fn();
-    const onSelectWord = vi.fn();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string) =>
-        Promise.resolve(
-          respond(url, {
-            recentContributions: [
-              {
-                contributionId: 'c1',
-                wordId: 'owo_hand',
-                displayText: 'ọwọ́',
-                axis: 'entry',
-                status: 'active',
-                submittedAt: '2026-08-01T10:00:00.000Z',
-              },
-            ],
-          }),
-        ),
-      ),
-    );
-    render(<AdminUserDetail userId="u1" onSelectWord={onSelectWord} onOpenContribution={onOpenContribution} />);
-    const user = userEvent.setup();
-
-    const recent = await waitFor(() => screen.getByLabelText('Recent contributions'));
-    await user.click(within(recent).getByRole('button', { name: 'ọwọ́' }));
-    expect(onOpenContribution).toHaveBeenCalledWith('c1');
-    expect(onSelectWord).not.toHaveBeenCalled();
-  });
-
-  it('makes a new-word proposal clickable, which it never was', async () => {
-    // 'new_entry' has a null word_id by construction, so a word-keyed link had nothing to
-    // point at and the row was rendered as dead text - hiding exactly the work of someone
-    // whose main activity is proposing new words.
-    const onOpenContribution = vi.fn();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string) =>
-        Promise.resolve(
-          respond(url, {
-            recentContributions: [
-              {
-                contributionId: 'c9',
-                wordId: null,
-                displayText: null,
-                axis: 'new_entry',
-                status: 'active',
-                submittedAt: '2026-08-01T10:00:00.000Z',
-              },
-            ],
-          }),
-        ),
-      ),
-    );
-    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} onOpenContribution={onOpenContribution} />);
-    const user = userEvent.setup();
-
-    const recent = await waitFor(() => screen.getByLabelText('Recent contributions'));
-    await user.click(within(recent).getByRole('button', { name: 'a new word' }));
-    expect(onOpenContribution).toHaveBeenCalledWith('c9');
-  });
-
   it('still renders the assignments when the user payload is the wrong shape', async () => {
     // A deploy where the API is older than the app must not blank the page: the dossier is
     // supplementary to the assignment manager that was here first.
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: async () => userAssignmentsFixture })));
-    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} onOpenContribution={() => {}} />);
+    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} />);
     await waitFor(() => expect(screen.getByText('epo')).toBeInTheDocument());
   });
 
@@ -391,7 +326,7 @@ describe('AdminUserDetail identity', () => {
       }),
     );
     const user = userEvent.setup();
-    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} onOpenContribution={() => {}} />);
+    render(<AdminUserDetail userId="u1" onSelectWord={() => {}} />);
     await waitFor(() => screen.getByText('ada@example.com'));
 
     await user.click(screen.getByRole('button', { name: 'Edit this account' }));

@@ -46,19 +46,6 @@ describe('parseHash', () => {
     expect(parseHash('#/users/abc-123')).toEqual({ view: 'user', userId: 'abc-123' });
   });
 
-  it("parses one person's contribution, and falls back to their page without an id", () => {
-    expect(parseHash('#/users/abc-123/contribution/c-9')).toEqual({
-      view: 'contribution',
-      userId: 'abc-123',
-      contributionId: 'c-9',
-    });
-    // Nested under the user on purpose, so a truncated URL lands on the person rather than
-    // on the queue - and so Back from a contribution goes to whose page it was.
-    expect(parseHash('#/users/abc-123/contribution')).toEqual({ view: 'user', userId: 'abc-123' });
-    // An unknown third segment is not a contribution route and must not silently read as one.
-    expect(parseHash('#/users/abc-123/nonsense')).toEqual({ view: 'user', userId: 'abc-123' });
-  });
-
   it('parses a word route, defaulting to the entry axis', () => {
     expect(parseHash('#/word/epo_oil')).toEqual({ view: 'word', wordId: 'epo_oil', axis: 'entry' });
     expect(parseHash('#/word/epo_oil/etymology')).toEqual({ view: 'word', wordId: 'epo_oil', axis: 'etymology' });
@@ -95,7 +82,6 @@ describe('formatRoute', () => {
       { view: 'dictionary', tab: 'rights' },
       { view: 'dossier', wordId: 'epo_oil' },
       { view: 'user', userId: 'abc-123' },
-      { view: 'contribution', userId: 'abc-123', contributionId: 'c-9' },
       { view: 'word', wordId: 'epo_oil', axis: 'entry' },
       { view: 'word', wordId: 'epo_oil', axis: 'etymology' },
       { view: 'word', wordId: 'epo_oil', axis: 'audio' },
