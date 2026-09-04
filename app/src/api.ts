@@ -272,10 +272,8 @@ export interface UserContributionDetail {
 }
 
 export function getUserContribution(userId: string, contributionId: string): Promise<UserContributionDetail> {
-  // Flat rather than nested under /api/users/ - see the route comment in
-  // api/src/functions/users.ts. The shape of this URL is load-bearing for deployment.
   return fetchJson(
-    `/api/user-contributions/${encodeURIComponent(userId)}/${encodeURIComponent(contributionId)}`,
+    `/api/users/${encodeURIComponent(userId)}/contributions/${encodeURIComponent(contributionId)}`,
   );
 }
 

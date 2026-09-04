@@ -213,11 +213,6 @@ export async function getUserContributionFunction(
 app.http('GetUserContribution', {
   methods: ['GET'],
   authLevel: 'anonymous',
-  // Deliberately NOT users/{userId}/contributions/{contributionId}, which is what this
-  // started as. That four-segment route deployed green and left the whole Function app
-  // unindexed - every /api/* route 404ing, twice, reproducibly (runs #82-#85 and #88),
-  // while the same bundle indexes all 46 functions under a local Functions host. Nothing
-  // else in the app has a four-segment route. Flattened until that is understood.
-  route: 'user-contributions/{userId}/{contributionId}',
+  route: 'users/{userId}/contributions/{contributionId}',
   handler: getUserContributionFunction,
 });

@@ -46,7 +46,6 @@
     { "route": "/api/assignments/*", "allowedRoles": ["curator"] },
     { "route": "/api/users", "allowedRoles": ["curator"] },
     { "route": "/api/users/*", "allowedRoles": ["curator"] },
-    { "route": "/api/user-contributions/*", "allowedRoles": ["curator"] },
 
     { "route": "/api/utterances/*", "allowedRoles": ["member"] },
     { "route": "/api/syllables/*", "allowedRoles": ["member"] },

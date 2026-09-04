@@ -70,7 +70,7 @@ function mount(over: Partial<UserContributionDetail> = {}, handlers: Partial<Par
 describe('one person\'s contribution', () => {
   it('asks for the contribution scoped to the person whose page it was reached from', async () => {
     const fetchMock = mount();
-    await waitFor(() => expect(fetchMock.mock.calls[0][0]).toBe('/api/user-contributions/u1/c1'));
+    await waitFor(() => expect(fetchMock.mock.calls[0][0]).toBe('/api/users/u1/contributions/c1'));
   });
 
   it('shows the claim they made, as the claim rather than as the action', async () => {
