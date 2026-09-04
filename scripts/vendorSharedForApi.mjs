@@ -23,6 +23,11 @@
 // earlier, so what moved was vitest's peer graph on the registry. npm 11 does not crash on
 // it, which is why it never showed up locally.
 //
+// vitest itself now lives in the ROOT package.json's devDependencies rather than in api's
+// and shared's, so neither manifest drags it into a deploy; workspaces hoist it and the test
+// scripts still find it on PATH. This rewrite is the second line of defence, for whatever
+// dev tooling shared grows next.
+//
 // A vendored dist has no use for dev tooling or scripts in any case: nothing builds or
 // tests this copy - shared/ itself is where that happens. Dropping both keeps the deploy's
 // dependency graph to what actually runs in production, which is also the smallest graph
