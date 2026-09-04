@@ -22,6 +22,7 @@
     "build:app": "npm run build:shared && npm run build --workspace=app",
     "test:app": "npm run build:shared && npm run test --workspace=app",
     "build:api": "npm run build:shared && npm run vendor:shared:api && npm run build --workspace=api",
+    "package:api": "npm run build:api && node scripts/buildApiDeploy.mjs",
     "build:ingest": "npm run build:shared && npm run build --workspace=ingest",
     "db:migrate": "npm run migrate --workspace=db",
     "audio:process": "npm run build:shared && node scripts/processAudioArtifacts.mjs"

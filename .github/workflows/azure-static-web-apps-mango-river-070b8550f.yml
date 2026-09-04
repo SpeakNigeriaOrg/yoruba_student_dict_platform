@@ -36,10 +36,24 @@ jobs:
           node-version: '20'
       - name: Install all workspace dependencies
         run: npm ci
-      - name: Build api (builds shared first, then api's own dist)
-        run: npm run build:api
+      # Assembles api-deploy/ as well as api/dist - see scripts/buildApiDeploy.mjs. api/
+      # itself cannot be uploaded: it is a workspace, so installing in it hoists every
+      # dependency to the monorepo root and ships an app with no @azure/functions in it.
+      - name: Build and package api (builds shared first, then assembles api-deploy/)
+        run: npm run package:api
       - name: Build app (builds shared first, then app's own dist)
         run: npm run build:app
+      # The guard that would have caught the dead deploy of 2026-09-03 before it shipped.
+      # A directory upload succeeds whether or not the app inside it can run, so this loads
+      # it exactly as the Functions host does - every app.http registration executes - and
+      # fails the job if a dependency is missing. Cheap, and it fails LOUD instead of
+      # deploying a site where every route 403s.
+      - name: Verify the packaged api actually loads
+        run: |
+          cd api-deploy
+          npm install --omit=dev
+          node --input-type=module -e "await import('./dist/index.js')"
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -50,7 +64,7 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "app/dist" # already-built app content - see custom build steps above
-          api_location: "api" # api's own dist is pre-built above; Oryx installs api's node_modules itself (see api/package.json's file:../shared dependency)
+          api_location: "api-deploy" # the self-contained bundle assembled above - NOT api/, which is a workspace and would ship without its dependencies
           output_location: "" # app_location IS the built output already; nothing further to append
           skip_app_build: true
           # No skip_api_build here (unsupported by this action version) -

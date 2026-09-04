@@ -35,3 +35,6 @@ out/
 
 # OS
 .DS_Store
+
+# Assembled by scripts/buildApiDeploy.mjs on every deploy - never edited by hand.
+api-deploy/
