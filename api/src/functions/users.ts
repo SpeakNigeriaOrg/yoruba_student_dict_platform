@@ -5,6 +5,7 @@
 // their first login (see createUser.ts's header for the curator-role
 // caveat). Both curator-only.
 
+import { isAppRole, describeAppRoles } from '../auth.js';
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from '@azure/functions';
 import { CONTRIBUTOR_TERMS_VERSION } from '@yoruba-student-dict-platform/shared';
 import { getPool } from '../db.js';
@@ -55,7 +56,7 @@ function parseCreateUserInput(body: unknown): CreateUserInput {
   if (b.displayName !== undefined && b.displayName !== null && typeof b.displayName !== 'string') {
     throw new Error('displayName must be a string if provided');
   }
-  if (b.role !== 'curator' && b.role !== 'volunteer') throw new Error("role must be 'curator' or 'volunteer'");
+  if (!isAppRole(b.role)) throw new Error(`role must be ${describeAppRoles()}`);
   return {
     email: b.email,
     displayName: (b.displayName as string | null | undefined) ?? null,
@@ -97,7 +98,7 @@ function parseUpdateUserInput(body: unknown): UpdateUserInput {
   const input: UpdateUserInput = {};
 
   if (b.role !== undefined) {
-    if (b.role !== 'curator' && b.role !== 'volunteer') throw new Error("role must be 'curator' or 'volunteer'");
+    if (!isAppRole(b.role)) throw new Error(`role must be ${describeAppRoles()}`);
     input.role = b.role;
   }
   if (b.email !== undefined) {

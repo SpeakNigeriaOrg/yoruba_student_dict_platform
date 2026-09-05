@@ -71,6 +71,25 @@ export function parseClientPrincipal(headerValue: string | null | undefined): Cl
  * curator does both, an observer does neither and only reads. */
 export type AppRole = 'curator' | 'volunteer' | 'observer';
 
+/** The single list of assignable roles, and the guard that validates one off the
+ * wire. Both exist because the roles were previously spelled out as literals in
+ * every place that checked them: widening the TYPE to add 'observer' left two
+ * runtime checks in functions/users.ts still comparing against the old pair, and
+ * TypeScript cannot catch that - they compare an `unknown` from a JSON body, where
+ * every string is as good as another. The result was a role the API accepted in
+ * principle and rejected in practice. Adding a role now means editing this line. */
+export const APP_ROLES = ['curator', 'volunteer', 'observer'] as const satisfies readonly AppRole[];
+
+export function isAppRole(value: unknown): value is AppRole {
+  return typeof value === 'string' && (APP_ROLES as readonly string[]).includes(value);
+}
+
+/** "'curator', 'volunteer' or 'observer'" - so the error text cannot drift from the list. */
+export function describeAppRoles(): string {
+  const quoted = APP_ROLES.map((r) => `'${r}'`);
+  return `${quoted.slice(0, -1).join(', ')} or ${quoted[quoted.length - 1]}`;
+}
+
 export interface AppUser {
   userId: string;
   email: string;

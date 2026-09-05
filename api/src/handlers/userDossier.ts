@@ -31,6 +31,7 @@
 // browser.
 
 import type { Queryable } from '../db.js';
+import type { AppRole } from '../auth.js';
 import { UserNotFoundError } from './errors.js';
 
 export type ReleaseState = 'agreed' | 'declined' | 'revoked' | 'unknown';
@@ -95,7 +96,7 @@ export interface UserDossier {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
   createdAt: string;
 
   rights: UserRights;
@@ -131,7 +132,7 @@ export async function loadUserDossier(
   const user = await client.query<{
     email: string;
     display_name: string | null;
-    role: 'curator' | 'volunteer';
+    role: AppRole;
     created_at: string;
   }>('select email, display_name, role, created_at from users where user_id = $1', [userId]);
 

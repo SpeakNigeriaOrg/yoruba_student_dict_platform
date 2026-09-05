@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { getRoles } from './handlers/getRoles.js';
+import { APP_ROLES, describeAppRoles, isAppRole } from './auth.js';
 import type { Queryable } from './db.js';
 
 function userWithRole(role: string): Queryable {
@@ -79,5 +80,35 @@ describe('the invariant requireCurator relies on', () => {
       }
     }
     expect(offenders, 'a GET endpoint that writes would let observers change data').toEqual([]);
+  });
+});
+
+describe('role validation accepts every role the schema allows', () => {
+  // The bug this prevents: the TYPE was widened to include 'observer' while two runtime
+  // checks in functions/users.ts still compared against the old pair. TypeScript cannot
+  // catch that - they test an `unknown` off a JSON body, where every string is equally
+  // valid to the compiler - so the API advertised a role it then refused, and the button
+  // in the admin UI returned "role must be 'curator' or 'volunteer'".
+  it('admits each role in APP_ROLES and nothing else', () => {
+    for (const role of APP_ROLES) expect(isAppRole(role)).toBe(true);
+    for (const notARole of ['admin', 'Observer', '', 'curator ', null, undefined, 7]) {
+      expect(isAppRole(notARole)).toBe(false);
+    }
+  });
+
+  it('covers exactly what the users_role_check constraint allows', () => {
+    // Migration 0027 is the other half of this pair; if one changes the other must.
+    const migration = readFileSync(
+      new URL('../../db/migrations/0027_observer_role.sql', import.meta.url),
+      'utf8',
+    );
+    const allowed = [...migration.matchAll(/'(\w+)'/g)].map((m) => m[1]);
+    for (const role of APP_ROLES) {
+      expect(allowed, `${role} must be permitted by the check constraint`).toContain(role);
+    }
+  });
+
+  it('names every role in the error text, so the message cannot drift from the list', () => {
+    for (const role of APP_ROLES) expect(describeAppRoles()).toContain(role);
   });
 });

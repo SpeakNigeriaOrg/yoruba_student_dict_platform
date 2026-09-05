@@ -8,13 +8,14 @@
 // before this.
 
 import type { DecisionAxis } from '../reviewShared.js';
+import type { AppRole } from '../auth.js';
 import type { Queryable } from '../db.js';
 
 export interface UserSummary {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer';
+  role: AppRole;
   assignedWordCount: number;
   inReviewCount: number;
   passedCount: number;
@@ -24,7 +25,7 @@ const AXES = ['entry', 'etymology'] as const;
 
 export async function listUsers(client: Queryable): Promise<UserSummary[]> {
   const [users, assignments, decisions, pending] = await Promise.all([
-    client.query<{ user_id: string; email: string; display_name: string | null; role: 'curator' | 'volunteer' }>(
+    client.query<{ user_id: string; email: string; display_name: string | null; role: AppRole }>(
       'select user_id, email, display_name, role from users order by email',
     ),
     client.query<{ user_id: string; word_id: string }>('select user_id, word_id from assignments'),

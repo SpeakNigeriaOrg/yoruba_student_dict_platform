@@ -31,13 +31,14 @@
 // cannot act as a curator server-side even while a stale token claims it.
 
 import { isUniqueViolation, type Queryable } from '../db.js';
+import type { AppRole } from '../auth.js';
 import { EmailAlreadyExistsError, UserNotFoundError } from './errors.js';
 
 /** Every field optional and at least one required - a PATCH, so an omitted field means
  * "leave it alone" rather than "set it to null". displayName is the one field that can be
  * deliberately CLEARED, so it distinguishes undefined from null. */
 export interface UpdateUserInput {
-  role?: 'curator' | 'volunteer' | 'observer';
+  role?: AppRole;
   email?: string;
   displayName?: string | null;
 }
@@ -46,7 +47,7 @@ export interface UpdatedUser {
   userId: string;
   email: string;
   displayName: string | null;
-  role: 'curator' | 'volunteer' | 'observer';
+  role: AppRole;
 }
 
 export class CannotDemoteLastCuratorError extends Error {
@@ -129,7 +130,7 @@ export async function updateUser(
       user_id: string;
       email: string;
       display_name: string | null;
-      role: 'curator' | 'volunteer';
+      role: AppRole;
     }>(
       `update users set ${sets.join(', ')} where user_id = $1
        returning user_id, email, display_name, role`,
@@ -152,7 +153,7 @@ export async function updateUser(
 export async function updateUserRole(
   db: Queryable,
   userId: string,
-  input: { role: 'curator' | 'volunteer' },
+  input: { role: AppRole },
 ): Promise<UpdatedUser> {
   return updateUser(db, userId, { role: input.role });
 }
