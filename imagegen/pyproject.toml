@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yoruba-imagegen"
+version = "0.1.0"
+description = "Bulk clip-art text-to-image generation and review for the Yoruba dictionary's word_images"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.10",
+  "diffusers",
+  "transformers>=4.57",
+  "accelerate>=1.12",
+  "safetensors>=0.7",
+  "sentencepiece>=0.2",
+  "pillow>=11",
+  "psycopg[binary]>=3.2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# diffusers on PyPI hasn't cut a release with Z-Image support yet (as of
+# writing) - the pipeline classes only exist on the main branch. Track git
+# main rather than pin a commit so a future PyPI release is picked up
+# automatically once one ships; re-run `uv sync -U` if Z-Image inference
+# starts breaking after a diffusers update.
+[tool.uv.sources]
+diffusers = { git = "https://github.com/huggingface/diffusers" }
+torch = [{ index = "pytorch-cu130" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
