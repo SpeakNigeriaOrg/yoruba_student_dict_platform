@@ -17,52 +17,76 @@
 #
 # What "a hit" means is itself style-relative (a photorealistic-shaded
 # candidate is a miss for "cartoon" and irrelevant for "collage", which
-# wants visible paper texture instead) - build_variant_prompts and
+# wants visible paper texture instead) - build_variant_drafts and
 # LocalLLMRewriter both take an ArtStyle (styles.py) rather than assuming
 # one hardcoded look, so adding a style is adding one styles.py entry, not
 # touching this module.
 #
-# Two layers (research behind this: templated prompting alone tends to
-# under-diversify a batch, while an LLM rewrite pass measurably increases
-# both visual and demographic diversity of output - see README.md sources):
+# A full-DB run (476 words, all 3 styles) turned up a second, bigger
+# problem than the style layer: concrete nouns ("star", "father", "plate")
+# generated well, but bare verbs ("give", "look"), locative phrases ("on
+# the ground"), and idiomatic phrases ("it is enough") either collapsed
+# into a generic standing figure with no depicted action, or produced a
+# meaningless abstract shape. A raw dictionary gloss like "give" or "to
+# look" simply isn't a description of anything visual - no amount of style
+# wrapping fixes that. So there are now three layers, not two:
 #
-#   1. A mechanical template (this module, no model calls) builds N
+#   1. LocalLLMRewriter.illustration_brief (generate.py calls this first,
+#      per word) turns the raw gloss into either a concrete, literally-
+#      depictable visual SCENE (inventing a subject/action for bare verbs
+#      and phrases - "give" -> "a person handing a wrapped gift to another
+#      person with both hands"), or decides the concept has no visual
+#      referent at all (a pronoun, aspect marker, conjunction, or
+#      idiomatic phrase/sentence) and should be skipped entirely rather
+#      than generating something meaningless. This also replaces the old
+#      keyword-heuristic guess at whether a person is depicted with an
+#      actual per-word LLM judgment, grounded in the scene it just wrote.
+#   2. A mechanical template (this module, no model calls) builds N
 #      structurally-different prompts per word by sampling slots WITHOUT
-#      replacement. This alone is enough to produce usable output and is
-#      the fallback if step 2 is skipped or fails.
-#   2. An optional local-LLM rewrite pass (LocalLLMRewriter.rewrite_batch)
-#      asks Qwen3-8B - already cached locally for other tooling, no new
-#      download - to rephrase the N mechanical prompts for a word as one
-#      natural-reading set, explicitly told to diverge them further rather
-#      than converge them. Any failure (parse mismatch, model error) falls
-#      back to the mechanical prompts unchanged - an unattended overnight
-#      batch must never crash or stall on the LLM step.
+#      replacement, using the brief's scene as the concept. This is what
+#      --no-llm falls back to when it skips the LLM entirely - it still
+#      produces usable output for concrete nouns, and inherits the same
+#      generic-figure weakness for verbs/phrases that motivated layer 1 in
+#      the first place. That mode also never adds the human-diversity
+#      clause below (always involves_person=False) rather than guessing
+#      with a keyword heuristic - an earlier version tried exactly that
+#      and it false-positived on "you", whose own gloss is "...second-
+#      person singular... pronoun" ("person" there is grammar jargon, not
+#      a depicted human). A hand-written word list will always have
+#      another case like that; the actual fix was asking the LLM per word
+#      instead (illustration_brief, below) - --no-llm just accepts the
+#      smaller cost of no diversity clause for that mode's words, rather
+#      than resurrecting a rule that can't cover every case.
+#   3. LocalLLMRewriter.rewrite_batch rephrases all N of one word's visual
+#      prompts together into natural sentences, explicitly told to diverge
+#      them further apart rather than converge them. Any failure (parse
+#      mismatch, model error) falls back to the mechanical prompts
+#      unchanged - an unattended overnight batch must never crash or stall
+#      on an LLM step.
 #
-# The human-diversity clause is kept structurally separate from both of
-# those (build_variant_drafts returns (visual, clause) pairs, and the LLM
-# rewrite in generate.py only ever sees `visual`) after a real-DB smoke
-# test caught it going badly wrong: "abo" (plate/bowl) came back with a
-# person's portrait painted where the plate should have been, in multiple
-# styles. Two compounding causes, both fixed here:
-#   - the clause was a conditional sentence ("if the illustration depicts
-#     a human being, depict X") glued onto every prompt regardless of
-#     concept. Text-to-image models don't reliably honor "if" conditions -
-#     mentioning "a person" at all tends to make one appear - and the LLM
-#     rewrite pass made it worse by flattening the conditional into a flat
-#     "featuring a Latino person" assertion.
+# The human-diversity clause is kept structurally separate from layer 3
+# (build_variant_drafts returns (visual, clause) pairs, and the rewrite in
+# generate.py only ever sees `visual`) after the abo_plate ("plate/bowl")
+# smoke test caught it going badly wrong: a person's portrait came back
+# painted where the plate should have been, in multiple styles. Two
+# compounding causes, both fixed:
+#   - the clause used to be a conditional sentence ("if the illustration
+#     depicts a human being, depict X") glued onto every prompt regardless
+#     of concept. Text-to-image models don't reliably honor "if"
+#     conditions - mentioning "a person" at all tends to make one appear -
+#     and the old rewrite pass made it worse by flattening the conditional
+#     into a flat "featuring a Latino person" assertion.
 #   - COMPOSITIONS included "a dynamic action pose", which itself implies
 #     a body, applied to a definition that was just an inanimate object.
-# The fix: decide ONCE per word (_mentions_person, a keyword heuristic
-# over the definition/gloss) whether the concept plausibly involves a
-# depicted human being at all. If not, no human-descriptor text is ever
+# The fix: decide ONCE per word whether the concept involves a depicted
+# human being at all (from the LLM brief when there is one; otherwise
+# always no - see above). If not, no human-descriptor text is ever
 # generated for that word, in any variant - not even conditionally. If so,
 # the descriptor is a direct instruction ("depict a Black West African
-# person"), not a hedge, since we've already decided a person belongs in
-# frame. The heuristic is deliberately biased toward *missing* real human
-# concepts (losing a diversity opportunity) over *falsely* tagging an
-# object as human (which is what actually broke output).
-import random
+# person"), not a hedge, since a person is
+# already known to belong in frame.
 import re
+from dataclasses import dataclass
 
 from . import config
 from .styles import ArtStyle
@@ -76,27 +100,6 @@ HUMAN_DESCRIPTORS = [
     "a Latino or Hispanic person",
     "a Middle Eastern person",
 ]
-
-_PERSON_WORDS = [
-    "person", "people", "human", "somebody", "someone", "anybody",
-    "man", "woman", "boy", "girl", "child", "children", "kid", "baby", "infant",
-    "father", "mother", "parent", "brother", "sister", "sibling",
-    "son", "daughter", "husband", "wife", "bride", "groom",
-    "uncle", "aunt", "cousin", "grandmother", "grandfather", "grandparent",
-    "friend", "neighbor", "neighbour", "stranger", "guest", "visitor",
-    "teacher", "student", "pupil", "farmer", "trader", "hunter", "doctor",
-    "nurse", "worker", "servant", "priest", "prophet", "king", "queen",
-    "chief", "elder", "leader", "ruler", "soldier", "warrior", "thief",
-    "beggar", "widow", "orphan", "twin", "youth", "adult",
-    "he", "she", "him", "her", "his", "who",
-]
-_PERSON_PATTERN = re.compile(r"\b(" + "|".join(_PERSON_WORDS) + r")\b", re.IGNORECASE)
-
-
-def _mentions_person(definition: str | None, display_text: str | None) -> bool:
-    text = f"{definition or ''} {display_text or ''}"
-    return bool(_PERSON_PATTERN.search(text))
-
 
 COMPOSITIONS = [
     "a three-quarter view",
@@ -121,6 +124,8 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
     """count may exceed len(options) (e.g. 4 variants, 3 framings) - cycle
     extra picks from a fresh shuffled pass rather than repeating the same
     option back-to-back."""
+    import random
+
     picks: list[str] = []
     while len(picks) < count:
         picks.extend(random.sample(options, len(options)))
@@ -128,19 +133,23 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
 
 
 def build_variant_drafts(
-    style: ArtStyle, definition: str, display_text: str, count: int
+    style: ArtStyle, concept: str, count: int, involves_person: bool
 ) -> list[tuple[str, str]]:
     """Returns (visual_prompt, human_clause) pairs - kept apart so callers
     (generate.py's LLM rewrite pass) can rewrite visual_prompt freely while
-    passing human_clause through untouched. human_clause is "" for a word
-    _mentions_person doesn't flag as involving a depicted person at all."""
-    concept = definition or display_text
+    passing human_clause through untouched. `concept` should already be a
+    concrete, depictable description (an illustration_brief's scene, or -
+    in --no-llm mode - the raw definition/display_text) and
+    `involves_person` an already-made decision (from the brief, or
+    _mentions_person as a fallback) - this function no longer makes either
+    call itself, so it stays a plain, easily-tested function of its
+    inputs."""
     compositions = _sample_without_replacement(COMPOSITIONS, count)
     backgrounds = _sample_without_replacement(BACKGROUNDS, count)
     framings = _sample_without_replacement(FRAMINGS, count)
     rendering_variants = _sample_without_replacement(style.rendering_variants, count)
 
-    if _mentions_person(definition, display_text):
+    if involves_person:
         descriptors = _sample_without_replacement(HUMAN_DESCRIPTORS, count)
     else:
         descriptors = [None] * count
@@ -165,11 +174,19 @@ def compose(visual: str, clause: str) -> str:
     return f"{visual} {clause}".strip()
 
 
-def build_variant_prompts(style: ArtStyle, definition: str, display_text: str, count: int) -> list[str]:
-    return [compose(v, c) for v, c in build_variant_drafts(style, definition, display_text, count)]
+def build_variant_prompts(style: ArtStyle, concept: str, count: int, involves_person: bool) -> list[str]:
+    return [compose(v, c) for v, c in build_variant_drafts(style, concept, count, involves_person)]
+
+
+@dataclass
+class IllustrationBrief:
+    scene: str
+    involves_person: bool
 
 
 _NUMBERED_LINE = re.compile(r"^\s*(\d+)[.):]\s*(.+)$")
+_SCENE_LINE = re.compile(r"SCENE:\s*(.+)", re.IGNORECASE)
+_PERSON_LINE = re.compile(r"PERSON:\s*(yes|no)", re.IGNORECASE)
 
 
 class LocalLLMRewriter:
@@ -188,6 +205,84 @@ class LocalLLMRewriter:
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
         self.model.eval()
+
+    def _generate(self, messages, max_new_tokens: int) -> str:
+        text = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False,
+        )
+        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        with self._torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs, max_new_tokens=max_new_tokens, do_sample=True, temperature=0.7,
+            )
+        new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+        reply = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
+        # Qwen3 can emit a <think>...</think> block even with
+        # enable_thinking=False on some snapshots - only the part after it
+        # (if any) is the actual reply.
+        return reply.rsplit("</think>", 1)[-1]
+
+    def illustration_brief(self, definition: str | None, display_text: str) -> IllustrationBrief | None:
+        """Turns a raw dictionary gloss into a concrete, drawable scene, or
+        decides the concept has no visual referent at all and returns None
+        (generate.py skips the word entirely rather than generating
+        something meaningless - see module docstring). Falls back to the
+        raw gloss, with no human-descriptor diversity (involves_person is
+        always False in this fallback - see module docstring on why that's
+        preferred over a keyword guess), if the model errors or its reply
+        doesn't parse, rather than losing the word."""
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You help prepare dictionary entries for illustration. Given a word's "
+                    "English gloss, decide: can this be drawn as ONE clear static picture a "
+                    "child could recognize? Concrete nouns (animals, objects, people, places) "
+                    "almost always can. ANY verb - even a bare infinitive with no object, like "
+                    "\"give\" or \"look\" - must ALWAYS get a concrete scene invented for it, "
+                    "never be skipped: invent a plausible subject and action, e.g. \"give\" "
+                    "becomes \"a person handing a wrapped gift to another person with both "
+                    "hands\", and \"look\" becomes \"a person shading their eyes with one hand "
+                    "while gazing off into the distance\". Prepositional/locative phrases work "
+                    "the same way - \"on the ground\" becomes \"a ball resting on the ground\". "
+                    "Only skip words with NO visual referent at all: pronouns, aspect/tense "
+                    "markers, conjunctions, degree words, discourse particles, or an idiomatic "
+                    "phrase/full sentence with no single depictable subject (e.g. \"it is "
+                    "enough\").\n\n"
+                    "NEVER mention a color, even an obvious real-world one - color is decided "
+                    "entirely by the illustration style afterward, and naming one here can "
+                    "clash with it. Write \"a star\", never \"a white star\" or \"a yellow "
+                    "star\"; \"a leaf\", never \"a green leaf\". For a concept that's already a "
+                    "single concrete object/animal/person with nothing else to add, the scene "
+                    "is just that subject, plainly named - do not invent extra realistic detail "
+                    "it doesn't need.\n\n"
+                    "Reply in EXACTLY one of these two forms, nothing else:\n"
+                    "SKIP\n"
+                    "or two lines:\n"
+                    "SCENE: <one concrete sentence describing exactly what is drawn, with a "
+                    "subject and, if applicable, an action - no style, color, or artistic "
+                    "instructions>\n"
+                    "PERSON: yes|no  (whether that scene depicts a human being)"
+                ),
+            },
+            {"role": "user", "content": f'Word: "{display_text}"\nGloss: {definition or "(no definition)"}'},
+        ]
+        try:
+            reply = self._generate(messages, max_new_tokens=120)
+        except Exception as exc:  # noqa: BLE001 - any failure just falls back
+            print(f"  (illustration brief skipped: {exc})")
+            return IllustrationBrief(scene=definition or display_text, involves_person=False)
+
+        if reply.strip().upper().startswith("SKIP"):
+            return None
+
+        scene_match = _SCENE_LINE.search(reply)
+        if not scene_match:
+            # Malformed reply - fall back rather than silently lose the word.
+            return IllustrationBrief(scene=definition or display_text, involves_person=False)
+        person_match = _PERSON_LINE.search(reply)
+        involves_person = bool(person_match) and person_match.group(1).lower() == "yes"
+        return IllustrationBrief(scene=scene_match.group(1).strip(), involves_person=involves_person)
 
     def rewrite_batch(self, style: ArtStyle, visual_prompts: list[str]) -> list[str]:
         """Rewrites all of one word's VISUAL prompts together (one call,
@@ -225,24 +320,7 @@ class LocalLLMRewriter:
             {"role": "user", "content": numbered_drafts},
         ]
         try:
-            text = self.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True, enable_thinking=False,
-            )
-            inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
-            with self._torch.no_grad():
-                output_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=config.LLM_MAX_NEW_TOKENS_PER_VARIANT * n,
-                    do_sample=True,
-                    temperature=0.9,
-                )
-            new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-            reply = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
-            # Qwen3 can emit a <think>...</think> block even with
-            # enable_thinking=False on some snapshots - only the part after
-            # it (if any) is the actual reply.
-            reply = reply.rsplit("</think>", 1)[-1]
-
+            reply = self._generate(messages, max_new_tokens=config.LLM_MAX_NEW_TOKENS_PER_VARIANT * n)
             rewritten = {}
             for line in reply.splitlines():
                 m = _NUMBERED_LINE.match(line)

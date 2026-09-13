@@ -50,7 +50,10 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
 
     def current_state():
         word_dir = current_word_dir()
-        manifest = json.loads((word_dir / "manifest.json").read_text()) if word_dir else None
+        # encoding="utf-8" matters: manifest.json is written utf-8/non-ascii
+        # (Yoruba diacritics) by generate.py, and Windows' default locale
+        # encoding can't represent that - see generate.py's _load_skipped.
+        manifest = json.loads((word_dir / "manifest.json").read_text(encoding="utf-8")) if word_dir else None
         variants = sorted(p.name for p in word_dir.glob("v*.png")) if word_dir else []
         return {
             "index": state["index"],
