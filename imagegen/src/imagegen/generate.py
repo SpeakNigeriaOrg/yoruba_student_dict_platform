@@ -138,17 +138,32 @@ def main():
     # Phase 1: prompts (mechanical, then optionally LLM-diverged) - see
     # module docstring for why this must fully finish, and the LLM be fully
     # unloaded, before phase 2 touches the GPU at all.
-    word_prompts = {
-        w["word_id"]: prompts.build_variant_prompts(style, w["definition"], w["display_text"], args.count)
+    #
+    # The LLM only ever sees the visual half of each draft, never the human
+    # -diversity clause (prompts.py's module docstring explains why: an
+    # earlier version let the LLM rewrite the whole sentence and it turned
+    # a conditional "if this depicts a person" hedge into a flat assertion,
+    # putting a person's portrait onto a plate/bowl image). The clause -
+    # verbatim, untouched - gets recombined with the rewritten visual below.
+    word_drafts = {
+        w["word_id"]: prompts.build_variant_drafts(style, w["definition"], w["display_text"], args.count)
         for w in words
     }
     if not args.no_llm:
         rewriter = prompts.LocalLLMRewriter(args.llm_model)
         try:
-            for word_id, variant_prompts in word_prompts.items():
-                word_prompts[word_id] = rewriter.rewrite_batch(style, variant_prompts)
+            for word_id, draft_pairs in word_drafts.items():
+                visuals = [visual for visual, _clause in draft_pairs]
+                clauses = [clause for _visual, clause in draft_pairs]
+                rewritten_visuals = rewriter.rewrite_batch(style, visuals)
+                word_drafts[word_id] = list(zip(rewritten_visuals, clauses))
         finally:
             rewriter.unload()
+
+    word_prompts = {
+        word_id: [prompts.compose(visual, clause) for visual, clause in draft_pairs]
+        for word_id, draft_pairs in word_drafts.items()
+    }
 
     # Phase 2: image generation.
     pipe = load_image_pipeline(args.model)

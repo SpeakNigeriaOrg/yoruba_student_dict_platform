@@ -37,19 +37,36 @@
 #      than converge them. Any failure (parse mismatch, model error) falls
 #      back to the mechanical prompts unchanged - an unattended overnight
 #      batch must never crash or stall on the LLM step.
+#
+# The human-diversity clause is kept structurally separate from both of
+# those (build_variant_drafts returns (visual, clause) pairs, and the LLM
+# rewrite in generate.py only ever sees `visual`) after a real-DB smoke
+# test caught it going badly wrong: "abo" (plate/bowl) came back with a
+# person's portrait painted where the plate should have been, in multiple
+# styles. Two compounding causes, both fixed here:
+#   - the clause was a conditional sentence ("if the illustration depicts
+#     a human being, depict X") glued onto every prompt regardless of
+#     concept. Text-to-image models don't reliably honor "if" conditions -
+#     mentioning "a person" at all tends to make one appear - and the LLM
+#     rewrite pass made it worse by flattening the conditional into a flat
+#     "featuring a Latino person" assertion.
+#   - COMPOSITIONS included "a dynamic action pose", which itself implies
+#     a body, applied to a definition that was just an inanimate object.
+# The fix: decide ONCE per word (_mentions_person, a keyword heuristic
+# over the definition/gloss) whether the concept plausibly involves a
+# depicted human being at all. If not, no human-descriptor text is ever
+# generated for that word, in any variant - not even conditionally. If so,
+# the descriptor is a direct instruction ("depict a Black West African
+# person"), not a hedge, since we've already decided a person belongs in
+# frame. The heuristic is deliberately biased toward *missing* real human
+# concepts (losing a diversity opportunity) over *falsely* tagging an
+# object as human (which is what actually broke output).
 import random
 import re
 
 from . import config
 from .styles import ArtStyle
 
-# Deliberately concrete descriptors, not a vague "diverse" adjective - a
-# model asked for "a diverse person" tends to either ignore the word or
-# render a token multi-ethnic collage in one figure. Naming one concrete
-# descriptor per variant and rotating the set across a word's batch is what
-# actually produces a mixed set of people over N variants instead of a
-# default-white subject every time. Shared across every style - who gets
-# depicted is orthogonal to the rendering aesthetic.
 WHITE_EUROPEAN_DESCRIPTOR = "a white European person"
 HUMAN_DESCRIPTORS = [
     "a Black West African person",
@@ -60,11 +77,32 @@ HUMAN_DESCRIPTORS = [
     "a Middle Eastern person",
 ]
 
+_PERSON_WORDS = [
+    "person", "people", "human", "somebody", "someone", "anybody",
+    "man", "woman", "boy", "girl", "child", "children", "kid", "baby", "infant",
+    "father", "mother", "parent", "brother", "sister", "sibling",
+    "son", "daughter", "husband", "wife", "bride", "groom",
+    "uncle", "aunt", "cousin", "grandmother", "grandfather", "grandparent",
+    "friend", "neighbor", "neighbour", "stranger", "guest", "visitor",
+    "teacher", "student", "pupil", "farmer", "trader", "hunter", "doctor",
+    "nurse", "worker", "servant", "priest", "prophet", "king", "queen",
+    "chief", "elder", "leader", "ruler", "soldier", "warrior", "thief",
+    "beggar", "widow", "orphan", "twin", "youth", "adult",
+    "he", "she", "him", "her", "his", "who",
+]
+_PERSON_PATTERN = re.compile(r"\b(" + "|".join(_PERSON_WORDS) + r")\b", re.IGNORECASE)
+
+
+def _mentions_person(definition: str | None, display_text: str | None) -> bool:
+    text = f"{definition or ''} {display_text or ''}"
+    return bool(_PERSON_PATTERN.search(text))
+
+
 COMPOSITIONS = [
     "a three-quarter view",
     "a front-facing view",
-    "a dynamic action pose",
-    "a simple centered pose",
+    "a dynamic, energetic composition",
+    "a simple centered composition",
 ]
 BACKGROUNDS = [
     "a plain white background",
@@ -89,32 +127,46 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
     return picks[:count]
 
 
-def build_variant_prompts(style: ArtStyle, definition: str, display_text: str, count: int) -> list[str]:
+def build_variant_drafts(
+    style: ArtStyle, definition: str, display_text: str, count: int
+) -> list[tuple[str, str]]:
+    """Returns (visual_prompt, human_clause) pairs - kept apart so callers
+    (generate.py's LLM rewrite pass) can rewrite visual_prompt freely while
+    passing human_clause through untouched. human_clause is "" for a word
+    _mentions_person doesn't flag as involving a depicted person at all."""
     concept = definition or display_text
     compositions = _sample_without_replacement(COMPOSITIONS, count)
     backgrounds = _sample_without_replacement(BACKGROUNDS, count)
     framings = _sample_without_replacement(FRAMINGS, count)
     rendering_variants = _sample_without_replacement(style.rendering_variants, count)
-    descriptors = _sample_without_replacement(HUMAN_DESCRIPTORS, count)
 
-    prompts = []
+    if _mentions_person(definition, display_text):
+        descriptors = _sample_without_replacement(HUMAN_DESCRIPTORS, count)
+    else:
+        descriptors = [None] * count
+
+    drafts = []
     for i in range(count):
-        # The "rather than defaulting to..." framing only makes sense for a
-        # descriptor other than the one it's contrasting against - attaching
-        # it unconditionally would produce a self-contradictory sentence on
-        # the ~1-in-6 draws that land on "a white European person".
-        if descriptors[i] == WHITE_EUROPEAN_DESCRIPTOR:
-            diversity_clause = f"If the illustration depicts a human being, depict {descriptors[i]}."
-        else:
-            diversity_clause = (
-                f"If the illustration depicts a human being, depict {descriptors[i]} "
-                f"rather than defaulting to a white Western appearance."
-            )
-        prompts.append(
+        visual = (
             f"{concept}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
-            f"{style.base_prompt}, {rendering_variants[i]}. {diversity_clause}"
+            f"{style.base_prompt}, {rendering_variants[i]}."
         )
-    return prompts
+        if descriptors[i] is None:
+            clause = ""
+        elif descriptors[i] == WHITE_EUROPEAN_DESCRIPTOR:
+            clause = f"Depict {descriptors[i]}."
+        else:
+            clause = f"Depict {descriptors[i]}, not a white Western appearance."
+        drafts.append((visual, clause))
+    return drafts
+
+
+def compose(visual: str, clause: str) -> str:
+    return f"{visual} {clause}".strip()
+
+
+def build_variant_prompts(style: ArtStyle, definition: str, display_text: str, count: int) -> list[str]:
+    return [compose(v, c) for v, c in build_variant_drafts(style, definition, display_text, count)]
 
 
 _NUMBERED_LINE = re.compile(r"^\s*(\d+)[.):]\s*(.+)$")
@@ -137,17 +189,20 @@ class LocalLLMRewriter:
         self.model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
         self.model.eval()
 
-    def rewrite_batch(self, style: ArtStyle, variant_prompts: list[str]) -> list[str]:
-        """Rewrites all of one word's variants together (one call, not N)
-        so the model can see the full set and is explicitly told to push
-        them apart - see module docstring on why divergence, not average
-        quality, is the target. The style's own review_rubric is passed in
-        so the model diverges prompts along axes that actually matter for
-        THIS style, not generic ones. Falls back to the mechanical prompts
+    def rewrite_batch(self, style: ArtStyle, visual_prompts: list[str]) -> list[str]:
+        """Rewrites all of one word's VISUAL prompts together (one call,
+        not N) so the model can see the full set and is explicitly told to
+        push them apart - see module docstring on why divergence, not
+        average quality, is the target. Deliberately never sees the human-
+        diversity clause (build_variant_drafts keeps it separate) - an
+        earlier version passed the whole sentence through and the model
+        turned a conditional "if this depicts a person" hedge into a flat
+        assertion, putting a person into an inanimate object's image (see
+        module docstring). Falls back to the mechanical visual prompts
         unchanged if the model errors or its reply doesn't parse back into
-        exactly len(variant_prompts) lines."""
-        n = len(variant_prompts)
-        numbered_drafts = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(variant_prompts))
+        exactly len(visual_prompts) lines."""
+        n = len(visual_prompts)
+        numbered_drafts = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(visual_prompts))
         messages = [
             {
                 "role": "system",
@@ -155,12 +210,13 @@ class LocalLLMRewriter:
                     f'You write prompts for a text-to-image model, in a style called '
                     f'"{style.label}". You are given {n} draft prompts, each a variation '
                     "of the same illustration concept in that style. Rewrite each into one "
-                    "natural, well-formed sentence, keeping its meaning, style description, "
-                    "and any diversity instruction it contains intact. Only the single "
-                    f"best-looking image of the {n} will be kept and the rest thrown away, "
-                    f"so make the {n} rewritten prompts as different from each other as you "
-                    "can in pose, composition, and visual interpretation of the concept - "
-                    "favor bold variation between them over keeping them similar. "
+                    "natural, well-formed sentence, keeping its meaning and style description "
+                    "intact - do not add any people, characters, or human figures that are not "
+                    "already explicitly named in the draft. Only the single best-looking image "
+                    f"of the {n} will be kept and the rest thrown away, so make the {n} "
+                    "rewritten prompts as different from each other as you can in composition "
+                    "and visual interpretation of the concept - favor bold variation between "
+                    "them over keeping them similar. "
                     f"What counts as a good result in this style: {style.review_rubric} "
                     f"Reply with exactly {n} lines, each starting with its number and a "
                     "period, nothing else - no preamble, no blank lines, no commentary."
@@ -195,11 +251,11 @@ class LocalLLMRewriter:
 
             if set(rewritten) != set(range(1, n + 1)):
                 print(f"  (LLM rewrite skipped: expected {n} numbered lines, parsed {len(rewritten)})")
-                return variant_prompts
+                return visual_prompts
             return [rewritten[i] for i in range(1, n + 1)]
         except Exception as exc:  # noqa: BLE001 - any failure just falls back
             print(f"  (LLM rewrite skipped: {exc})")
-            return variant_prompts
+            return visual_prompts
 
     def unload(self):
         del self.model
