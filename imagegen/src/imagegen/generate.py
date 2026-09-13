@@ -88,6 +88,28 @@ def load_image_pipeline(model_id: str):
     return pipe
 
 
+def effective_gloss(word: dict) -> str:
+    """The gloss actually fed to the illustration pipeline. 18 of 185
+    golden_record rows (as of this writing) have definition = NULL, but
+    word_id itself encodes an English gloss as a readable suffix
+    ("redio_radio" -> "radio", "fi_sile_leave_it" -> "leave it") -
+    display_text's own word count tells us where the Yoruba part of
+    word_id ends and the gloss begins. Without this, a NULL definition
+    sends the LLM nothing but the bare Yoruba spelling to work from, and
+    it can hallucinate freely - a real run did exactly that, turning
+    "radio" (rédíò, no gloss) into a fruit, and "fi sílẹ̀" ("leave it",
+    no gloss) into an unrelated bird/butterfly/spider nature scene. Falls
+    back to display_text itself only if word_id doesn't parse into
+    anything past the Yoruba part (shouldn't happen given the naming
+    convention, but never worth crashing over)."""
+    if word["definition"]:
+        return word["definition"]
+    segments = word["word_id"].split("_")
+    yoruba_word_count = len(word["display_text"].split())
+    gloss_segments = segments[yoruba_word_count:]
+    return " ".join(gloss_segments) if gloss_segments else word["display_text"]
+
+
 def generate_word_images(pipe, word, variant_prompts: list[str], args, candidates_root: Path):
     word_id = word["word_id"]
     out_dir = candidates_root / word_id
@@ -113,6 +135,7 @@ def generate_word_images(pipe, word, variant_prompts: list[str], args, candidate
                 "art_style": args.art_style,
                 "display_text": word["display_text"],
                 "definition": word["definition"],
+                "gloss_used": effective_gloss(word),
                 "prompts": variant_prompts,
                 "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             },
@@ -168,7 +191,7 @@ def main():
         # model dependency at all.
         word_drafts = {
             w["word_id"]: prompts.build_variant_drafts(
-                style, [w["definition"] or w["display_text"]] * args.count, args.count, involves_person=False,
+                style, [effective_gloss(w)] * args.count, args.count, involves_person=False,
             )
             for w in words
         }
@@ -177,7 +200,7 @@ def main():
         try:
             word_drafts = {}
             for w in words:
-                scenes = rewriter.illustration_scenes(w["definition"], w["display_text"], args.count)
+                scenes = rewriter.illustration_scenes(effective_gloss(w), w["display_text"], args.count)
                 word_drafts[w["word_id"]] = prompts.build_variant_drafts(
                     style, scenes.scenes, args.count, scenes.involves_person,
                 )
