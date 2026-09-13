@@ -14,21 +14,24 @@
 #
 #   1. Prompt phase: for every golden_record word with no word_images row
 #      yet for --art-style, ask a local LLM (Qwen3-8B, already cached
-#      locally) for an "illustration brief" - a concrete, drawable scene
-#      for the concept, or a decision that it has no visual referent at
-#      all (see prompts.py's module docstring: a bare verb like "give" or
-#      a phrase like "it is enough" isn't a description of anything
-#      visual, and generating one anyway just produces a generic figure or
-#      a meaningless abstract shape). Skipped words are recorded in
-#      candidates/{art_style}/_skipped.json and excluded from future runs'
-#      queries too, so the LLM isn't re-asked about them every time.
-#      Everything else gets --count mechanical prompt variants (prompts.py)
-#      built from that scene, then all of one word's variants are
-#      rewritten together to push them further apart from each other - see
-#      prompts.py's module docstring on why divergence between variants,
-#      not average quality, is the goal here (review.py keeps the single
-#      best and discards the rest). The LLM is fully unloaded before
-#      phase 2 starts.
+#      locally) for --count DIFFERENT candidate scenes for the concept (not
+#      one scene reused --count times - see prompts.py's module docstring
+#      on why a shared scene hid real diversity failures: every "ball"
+#      came out a soccer ball, every "father" came out the same "holding
+#      hands" pose, across all 4 variants, because nothing ever asked for
+#      a different referent or a different relational moment). Or the LLM
+#      decides the concept has no visual referent at all (see prompts.py:
+#      true grammatical glue only, after searching for pointing-gesture and
+#      pragmatic-use-case depictions first) and the word is skipped -
+#      recorded in candidates/{art_style}/_skipped.json and excluded from
+#      future runs' queries too, so the LLM isn't re-asked every time.
+#      Everything else gets one mechanical prompt variant per scene
+#      (prompts.py), then all of one word's variants are rewritten
+#      together to push them further apart in phrasing/composition too -
+#      see prompts.py's module docstring on why divergence between
+#      variants, not average quality, is the goal here (review.py keeps
+#      the single best and discards the rest). The LLM is fully unloaded
+#      before phase 2 starts.
 #   2. Image phase: load Z-Image-Turbo once, generate every surviving
 #      word's variants, and write them to
 #      candidates/{art_style}/{word_id}/v{n}.png plus a manifest.json
@@ -185,16 +188,18 @@ def main():
     # this must fully finish, and the LLM be fully unloaded, before phase 2
     # touches the GPU at all.
     if args.no_llm:
-        # No illustration_brief to consult - fall back to the raw gloss,
-        # with no human-descriptor diversity clause at all (see prompts.py's
-        # module docstring on why that's preferred over a keyword-heuristic
-        # guess: one already went wrong on a pronoun whose own grammatical
-        # gloss contained the word "person"). Weaker on verbs/phrases too
+        # No illustration_scenes to consult - fall back to the raw gloss
+        # repeated for every variant (no per-variant referent/scene
+        # diversity at all), with no human-descriptor diversity clause
+        # either (see prompts.py's module docstring on why that's preferred
+        # over a keyword-heuristic guess: one already went wrong on a
+        # pronoun whose own grammatical gloss contained the word "person").
+        # Weaker on verbs/phrases/relational nouns/generic categories too
         # (see module docstring) - the trade this mode makes for having no
         # model dependency at all.
         word_drafts = {
             w["word_id"]: prompts.build_variant_drafts(
-                style, w["definition"] or w["display_text"], args.count, involves_person=False,
+                style, [w["definition"] or w["display_text"]] * args.count, args.count, involves_person=False,
             )
             for w in words
         }
@@ -203,17 +208,17 @@ def main():
         try:
             word_drafts = {}
             for w in words:
-                brief = rewriter.illustration_brief(w["definition"], w["display_text"])
-                if brief is None:
-                    print(f'  {w["word_id"]}: not illustrable per LLM brief - skipping')
+                scenes = rewriter.illustration_scenes(w["definition"], w["display_text"], args.count)
+                if scenes is None:
+                    print(f'  {w["word_id"]}: not illustrable per LLM - skipping')
                     skipped[w["word_id"]] = {
                         "display_text": w["display_text"],
                         "definition": w["definition"],
-                        "reason": "not illustrable (LLM brief)",
+                        "reason": "not illustrable (LLM)",
                     }
                     continue
                 word_drafts[w["word_id"]] = prompts.build_variant_drafts(
-                    style, brief.scene, args.count, brief.involves_person,
+                    style, scenes.scenes, args.count, scenes.involves_person,
                 )
             words = [w for w in words if w["word_id"] in word_drafts]
             _save_skipped(candidates_root, skipped)

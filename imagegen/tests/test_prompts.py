@@ -16,19 +16,34 @@ CARTOON = STYLES["cartoon"]
 # on "you" (gloss: "...second-person singular... pronoun" - "person" there
 # is grammar jargon, not a depicted human), and a hand-written word list
 # will always have another case like that. The real fix was asking the LLM
-# per word instead (illustration_brief in prompts.py) - see
+# per word instead (illustration_scenes in prompts.py) - see
 # BuildVariantDraftsTest below, which now takes involves_person as a plain
 # bool input rather than computing it from a heuristic.
 
 
 class BuildVariantDraftsTest(unittest.TestCase):
     def test_count_matches_request(self):
-        drafts = build_variant_drafts(CARTOON, "a dog", 4, involves_person=False)
+        drafts = build_variant_drafts(CARTOON, ["a dog"] * 4, 4, involves_person=False)
         self.assertEqual(len(drafts), 4)
+
+    def test_rejects_a_concepts_list_of_the_wrong_length(self):
+        with self.assertRaises(ValueError):
+            build_variant_drafts(CARTOON, ["a dog"] * 3, 4, involves_person=False)
+
+    def test_each_variant_uses_its_own_concept(self):
+        # illustration_scenes gives each variant a DIFFERENT concrete scene
+        # when the concept calls for it (e.g. "a soccer ball" / "a
+        # basketball" / ... for the category "ball") - this is exactly what
+        # a shared single concept string couldn't do, and what motivated
+        # switching build_variant_drafts to take one concept per variant.
+        concepts = ["a soccer ball", "a basketball", "a beach ball", "a tennis ball"]
+        drafts = build_variant_drafts(CARTOON, concepts, 4, involves_person=False)
+        for concept, (visual, _clause) in zip(concepts, drafts):
+            self.assertIn(concept, visual)
 
     def test_object_concept_never_gets_a_human_clause(self):
         for _ in range(20):
-            for visual, clause in build_variant_drafts(CARTOON, "a bowl or plate", 4, involves_person=False):
+            for visual, clause in build_variant_drafts(CARTOON, ["a bowl or plate"] * 4, 4, involves_person=False):
                 self.assertEqual(clause, "")
                 self.assertNotIn("person", visual)
 
@@ -39,8 +54,9 @@ class BuildVariantDraftsTest(unittest.TestCase):
         # assertion. Once a word IS known to be about a person, the clause
         # should already be a direct instruction, not a hedge.
         found_any = False
+        concepts = ["a person teaching children"] * 4
         for _ in range(20):
-            for _visual, clause in build_variant_drafts(CARTOON, "a person teaching children", 4, involves_person=True):
+            for _visual, clause in build_variant_drafts(CARTOON, concepts, 4, involves_person=True):
                 self.assertNotEqual(clause, "")
                 self.assertNotIn("if the illustration", clause.lower())
                 found_any = True
@@ -48,36 +64,37 @@ class BuildVariantDraftsTest(unittest.TestCase):
 
     def test_white_european_descriptor_clause_has_no_self_contradiction(self):
         found_white_european = False
+        concepts = ["a person teaching children"] * 6
         for _ in range(50):
-            for _visual, clause in build_variant_drafts(CARTOON, "a person teaching children", 6, involves_person=True):
+            for _visual, clause in build_variant_drafts(CARTOON, concepts, 6, involves_person=True):
                 if WHITE_EUROPEAN_DESCRIPTOR in clause:
                     found_white_european = True
                     self.assertNotIn("not a white Western appearance", clause)
         self.assertTrue(found_white_european, "test never sampled the white European descriptor")
 
     def test_more_variants_than_slot_options_still_returns_requested_count(self):
-        drafts = build_variant_drafts(CARTOON, "a person teaching children", 8, involves_person=True)
+        drafts = build_variant_drafts(CARTOON, ["a person teaching children"] * 8, 8, involves_person=True)
         self.assertEqual(len(drafts), 8)
 
 
 class BuildVariantPromptsTest(unittest.TestCase):
     def test_count_matches_request(self):
-        prompts = build_variant_prompts(CARTOON, "a dog", 4, involves_person=False)
+        prompts = build_variant_prompts(CARTOON, ["a dog"] * 4, 4, involves_person=False)
         self.assertEqual(len(prompts), 4)
 
     def test_variants_are_not_all_identical(self):
-        prompts = build_variant_prompts(CARTOON, "a dog", 4, involves_person=False)
+        prompts = build_variant_prompts(CARTOON, ["a dog"] * 4, 4, involves_person=False)
         self.assertGreater(len(set(prompts)), 1)
 
     def test_every_registered_style_produces_prompts_containing_its_base_prompt(self):
         for style in STYLES.values():
-            prompts = build_variant_prompts(style, "a dog", 4, involves_person=False)
+            prompts = build_variant_prompts(style, ["a dog"] * 4, 4, involves_person=False)
             for prompt in prompts:
                 self.assertIn(style.base_prompt, prompt)
 
     def test_different_styles_produce_different_prompts_for_the_same_concept(self):
-        cartoon_prompts = build_variant_prompts(STYLES["cartoon"], "a dog", 1, involves_person=False)
-        collage_prompts = build_variant_prompts(STYLES["collage"], "a dog", 1, involves_person=False)
+        cartoon_prompts = build_variant_prompts(STYLES["cartoon"], ["a dog"], 1, involves_person=False)
+        collage_prompts = build_variant_prompts(STYLES["collage"], ["a dog"], 1, involves_person=False)
         self.assertNotEqual(cartoon_prompts, collage_prompts)
 
     def test_compose_matches_manual_join(self):

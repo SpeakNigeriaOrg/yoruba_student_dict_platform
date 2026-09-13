@@ -7,56 +7,60 @@
 # word's batch is the thing worth optimizing for, even at the cost of a
 # variant or two coming out mediocre or off-style - a batch of 4 near-
 # identical good prompts is worse for this pipeline than a batch of 4
-# genuinely different attempts, one of which lands. This shows up in two
-# places below: the slot lists sample four independent axes (composition,
-# framing, background, AND the style's own rendering sub-variants - see
-# styles.py) so no two variants in a batch share the same combination, and
-# the optional LLM pass rewrites all N prompts for a word together in one
-# call instructed to push them apart from each other, not to smooth them
-# into consistency.
+# genuinely different attempts, one of which lands.
 #
-# What "a hit" means is itself style-relative (a photorealistic-shaded
-# candidate is a miss for "cartoon" and irrelevant for "collage", which
-# wants visible paper texture instead) - build_variant_drafts and
-# LocalLLMRewriter both take an ArtStyle (styles.py) rather than assuming
-# one hardcoded look, so adding a style is adding one styles.py entry, not
-# touching this module.
+# A full-DB run (476 words, all 3 styles) turned up bigger problems than
+# the style layer, in two rounds:
 #
-# A full-DB run (476 words, all 3 styles) turned up a second, bigger
-# problem than the style layer: concrete nouns ("star", "father", "plate")
-# generated well, but bare verbs ("give", "look"), locative phrases ("on
-# the ground"), and idiomatic phrases ("it is enough") either collapsed
-# into a generic standing figure with no depicted action, or produced a
-# meaningless abstract shape. A raw dictionary gloss like "give" or "to
-# look" simply isn't a description of anything visual - no amount of style
-# wrapping fixes that. So there are now three layers, not two:
+#   Round 1: concrete nouns ("star", "father", "plate") generated well,
+#   but bare verbs ("give", "look"), locative phrases ("on the ground"),
+#   and idiomatic phrases ("it is enough") either collapsed into a generic
+#   standing figure with no depicted action, or produced a meaningless
+#   abstract shape. A raw dictionary gloss like "give" or "to look" simply
+#   isn't a description of anything visual.
 #
-#   1. LocalLLMRewriter.illustration_brief (generate.py calls this first,
-#      per word) turns the raw gloss into either a concrete, literally-
-#      depictable visual SCENE (inventing a subject/action for bare verbs
-#      and phrases - "give" -> "a person handing a wrapped gift to another
-#      person with both hands"), or decides the concept has no visual
-#      referent at all (a pronoun, aspect marker, conjunction, or
-#      idiomatic phrase/sentence) and should be skipped entirely rather
-#      than generating something meaningless. This also replaces the old
-#      keyword-heuristic guess at whether a person is depicted with an
-#      actual per-word LLM judgment, grounded in the scene it just wrote.
-#   2. A mechanical template (this module, no model calls) builds N
-#      structurally-different prompts per word by sampling slots WITHOUT
-#      replacement, using the brief's scene as the concept. This is what
-#      --no-llm falls back to when it skips the LLM entirely - it still
-#      produces usable output for concrete nouns, and inherits the same
-#      generic-figure weakness for verbs/phrases that motivated layer 1 in
-#      the first place. That mode also never adds the human-diversity
-#      clause below (always involves_person=False) rather than guessing
-#      with a keyword heuristic - an earlier version tried exactly that
-#      and it false-positived on "you", whose own gloss is "...second-
-#      person singular... pronoun" ("person" there is grammar jargon, not
-#      a depicted human). A hand-written word list will always have
-#      another case like that; the actual fix was asking the LLM per word
-#      instead (illustration_brief, below) - --no-llm just accepts the
-#      smaller cost of no diversity clause for that mode's words, rather
-#      than resurrecting a rule that can't cover every case.
+#   Round 2, after fixing round 1: a single shared scene per word, reused
+#   across all N variants with only composition/framing/style varied,
+#   turned out to hide two more failures the "diversify N variants" idea
+#   was supposed to prevent:
+#     - "ball" rendered as a soccer ball in all 4 variants, every style -
+#       "ball" is a CATEGORY with many common real-world referents
+#       (soccer/basket/beach/tennis ball), and nothing ever asked for a
+#       different one per variant, so the model's single strongest prior
+#       won every time.
+#     - "father" risked reading as just "a man" with no depicted child -
+#       a relationship/role noun (father, teacher, doctor...) only means
+#       what it means in reference to another party; a solo adult doesn't
+#       communicate "father" any more than it communicates "person".
+#     - the illustrability gate itself was a single up-or-down judgment
+#       call with no room to search harder - it gave up on "you" (a
+#       pronoun) and "it is enough" (an idiom) when both have real,
+#       concrete depictions once you look for them: pointing at the
+#       viewer is a genuine flashcard/emoji convention for "you", and "it
+#       is enough" has an obvious pragmatic scene (someone declining more
+#       food). A single-shot decision is exactly the failure mode the
+#       rest of this module is built to avoid elsewhere.
+#
+# So illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
+# per word) produces --count DIFFERENT candidate scenes in one call, not
+# one shared scene, and is instructed to: vary the concrete referent for
+# category-like concepts, always include the other party for
+# relationship/role concepts, and search for a pointing-gesture or
+# pragmatic-use-case depiction before concluding a word has no visual
+# referent at all. Only true grammatical glue (conjunctions, copulas, bare
+# tense/aspect markers with no independent meaning) should still return
+# None, and generate.py skips those words entirely rather than generating
+# something meaningless.
+#
+# From there:
+#   2. A mechanical template (this module, no model calls) builds one
+#      structurally-different prompt per scene by sampling composition/
+#      framing/background/rendering-style slots WITHOUT replacement. This
+#      is what --no-llm falls back to when it skips the LLM entirely (one
+#      scene - the raw gloss - reused for all N variants, and no human-
+#      diversity clause - see below) - it still produces usable output for
+#      concrete nouns, and inherits every weakness the LLM step above
+#      exists to fix.
 #   3. LocalLLMRewriter.rewrite_batch rephrases all N of one word's visual
 #      prompts together into natural sentences, explicitly told to diverge
 #      them further apart rather than converge them. Any failure (parse
@@ -64,7 +68,7 @@
 #      unchanged - an unattended overnight batch must never crash or stall
 #      on an LLM step.
 #
-# The human-diversity clause is kept structurally separate from layer 3
+# The human-diversity clause is kept structurally separate from step 3
 # (build_variant_drafts returns (visual, clause) pairs, and the rewrite in
 # generate.py only ever sees `visual`) after the abo_plate ("plate/bowl")
 # smoke test caught it going badly wrong: a person's portrait came back
@@ -79,11 +83,14 @@
 #   - COMPOSITIONS included "a dynamic action pose", which itself implies
 #     a body, applied to a definition that was just an inanimate object.
 # The fix: decide ONCE per word whether the concept involves a depicted
-# human being at all (from the LLM brief when there is one; otherwise
-# always no - see above). If not, no human-descriptor text is ever
-# generated for that word, in any variant - not even conditionally. If so,
-# the descriptor is a direct instruction ("depict a Black West African
-# person"), not a hedge, since a person is
+# human being at all (from the LLM's scenes when there are any; otherwise
+# always no - a keyword heuristic tried this once and false-positived on
+# "you", whose own gloss is "...second-person singular... pronoun" -
+# "person" there is grammar jargon, not a depicted human; a hand-written
+# word list will always have another case like that). If not involved, no
+# human-descriptor text is ever generated for that word, in any variant -
+# not even conditionally. If so, the descriptor is a direct instruction
+# ("depict a Black West African person"), not a hedge, since a person is
 # already known to belong in frame.
 import re
 from dataclasses import dataclass
@@ -133,17 +140,23 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
 
 
 def build_variant_drafts(
-    style: ArtStyle, concept: str, count: int, involves_person: bool
+    style: ArtStyle, concepts: list[str], count: int, involves_person: bool
 ) -> list[tuple[str, str]]:
     """Returns (visual_prompt, human_clause) pairs - kept apart so callers
     (generate.py's LLM rewrite pass) can rewrite visual_prompt freely while
-    passing human_clause through untouched. `concept` should already be a
-    concrete, depictable description (an illustration_brief's scene, or -
-    in --no-llm mode - the raw definition/display_text) and
-    `involves_person` an already-made decision (from the brief, or
-    _mentions_person as a fallback) - this function no longer makes either
-    call itself, so it stays a plain, easily-tested function of its
-    inputs."""
+    passing human_clause through untouched.
+
+    `concepts` must have exactly `count` entries, one per variant -
+    illustration_scenes produces a DIFFERENT concrete scene per entry when
+    the concept calls for it (e.g. "a soccer ball" / "a basketball" / "a
+    beach ball" / "a tennis ball" for the category "ball"), and the same
+    scene repeated `count` times when it doesn't (e.g. "a star"). This
+    function no longer decides that itself, or calls anything to decide
+    `involves_person` - both are already-made decisions passed in, so it
+    stays a plain, easily-tested function of its inputs."""
+    if len(concepts) != count:
+        raise ValueError(f"expected {count} concepts, got {len(concepts)}")
+
     compositions = _sample_without_replacement(COMPOSITIONS, count)
     backgrounds = _sample_without_replacement(BACKGROUNDS, count)
     framings = _sample_without_replacement(FRAMINGS, count)
@@ -157,7 +170,7 @@ def build_variant_drafts(
     drafts = []
     for i in range(count):
         visual = (
-            f"{concept}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
+            f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
             f"{style.base_prompt}, {rendering_variants[i]}."
         )
         if descriptors[i] is None:
@@ -174,19 +187,18 @@ def compose(visual: str, clause: str) -> str:
     return f"{visual} {clause}".strip()
 
 
-def build_variant_prompts(style: ArtStyle, concept: str, count: int, involves_person: bool) -> list[str]:
-    return [compose(v, c) for v, c in build_variant_drafts(style, concept, count, involves_person)]
+def build_variant_prompts(style: ArtStyle, concepts: list[str], count: int, involves_person: bool) -> list[str]:
+    return [compose(v, c) for v, c in build_variant_drafts(style, concepts, count, involves_person)]
 
 
 @dataclass
-class IllustrationBrief:
-    scene: str
+class IllustrationScenes:
+    scenes: list[str]
     involves_person: bool
 
 
-_NUMBERED_LINE = re.compile(r"^\s*(\d+)[.):]\s*(.+)$")
-_SCENE_LINE = re.compile(r"SCENE:\s*(.+)", re.IGNORECASE)
 _PERSON_LINE = re.compile(r"PERSON:\s*(yes|no)", re.IGNORECASE)
+_SCENE_N_LINE = re.compile(r"SCENE\s*(\d+)\s*:\s*(.+)", re.IGNORECASE)
 
 
 class LocalLLMRewriter:
@@ -222,67 +234,99 @@ class LocalLLMRewriter:
         # (if any) is the actual reply.
         return reply.rsplit("</think>", 1)[-1]
 
-    def illustration_brief(self, definition: str | None, display_text: str) -> IllustrationBrief | None:
-        """Turns a raw dictionary gloss into a concrete, drawable scene, or
-        decides the concept has no visual referent at all and returns None
-        (generate.py skips the word entirely rather than generating
-        something meaningless - see module docstring). Falls back to the
-        raw gloss, with no human-descriptor diversity (involves_person is
-        always False in this fallback - see module docstring on why that's
-        preferred over a keyword guess), if the model errors or its reply
-        doesn't parse, rather than losing the word."""
+    def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> IllustrationScenes | None:
+        """Produces `count` candidate concrete scenes for one word in a
+        single call (not one shared scene reused `count` times - see module
+        docstring on why that hid real diversity failures), or decides the
+        concept has no visual referent at all and returns None (generate.py
+        skips the word entirely rather than generating something
+        meaningless). Falls back to the raw gloss repeated `count` times,
+        with no human-descriptor diversity (involves_person is always False
+        in this fallback - see module docstring on why that's preferred
+        over a keyword guess), if the model errors or its reply doesn't
+        parse."""
         messages = [
             {
                 "role": "system",
                 "content": (
                     "You help prepare dictionary entries for illustration. Given a word's "
-                    "English gloss, decide: can this be drawn as ONE clear static picture a "
-                    "child could recognize? Concrete nouns (animals, objects, people, places) "
-                    "almost always can. ANY verb - even a bare infinitive with no object, like "
-                    "\"give\" or \"look\" - must ALWAYS get a concrete scene invented for it, "
-                    "never be skipped: invent a plausible subject and action, e.g. \"give\" "
-                    "becomes \"a person handing a wrapped gift to another person with both "
-                    "hands\", and \"look\" becomes \"a person shading their eyes with one hand "
-                    "while gazing off into the distance\". Prepositional/locative phrases work "
-                    "the same way - \"on the ground\" becomes \"a ball resting on the ground\". "
-                    "Only skip words with NO visual referent at all: pronouns, aspect/tense "
-                    "markers, conjunctions, degree words, discourse particles, or an idiomatic "
-                    "phrase/full sentence with no single depictable subject (e.g. \"it is "
-                    "enough\").\n\n"
+                    "English gloss, you will propose several candidate scenes for it - static "
+                    "pictures a child could recognize.\n\n"
+                    "Concrete nouns (animals, objects, people, places) almost always work. ANY "
+                    "verb - even a bare infinitive with no object, like \"give\" or \"look\" - "
+                    "must ALWAYS get a concrete scene invented for it, never be skipped: invent "
+                    "a plausible subject and action, e.g. \"give\" becomes \"a person handing a "
+                    "wrapped gift to another person with both hands\". Prepositional/locative "
+                    "phrases work the same way - \"on the ground\" becomes \"a ball resting on "
+                    "the ground\".\n\n"
+                    "If the concept is a RELATIONSHIP or ROLE that only means what it means in "
+                    "reference to another party (a family role like father/mother/sibling, a "
+                    "professional role like teacher/doctor/farmer, or similar), every scene MUST "
+                    "include that other party doing something that makes the relationship "
+                    "legible - \"father\" becomes \"a man holding the hand of a small child\", "
+                    "\"teacher\" becomes \"an adult pointing at a chalkboard while children sit "
+                    "and watch\". A solo adult with no context only communicates \"a person\", "
+                    "not the specific role.\n\n"
+                    "If the concept is a broad CATEGORY with several common, visually distinct "
+                    "real-world variants (\"ball\" - soccer ball, basketball, beach ball, tennis "
+                    "ball; \"fruit\" - apple, mango, banana; \"vehicle\" - car, bicycle, bus), "
+                    "make your scenes depict DIFFERENT specific variants, one per scene - not "
+                    "the same default example every time. If the concept is already one "
+                    "specific, singular thing (a star, a specific role once its context is "
+                    "established), your scenes can describe the same subject - variety there "
+                    "comes from composition/rendering, handled separately afterward.\n\n"
+                    "Before concluding a word has NO visual referent, search harder: (1) a "
+                    "pronoun or deictic word often has a real pointing-gesture convention, the "
+                    "same one flashcards and emoji use - \"you\" becomes \"a hand pointing "
+                    "directly at the viewer\", \"I/me\" becomes \"a person pointing at their own "
+                    "chest\", \"here\" becomes \"a hand pointing down at the ground\"; (2) an "
+                    "idiomatic phrase or expression usually has a concrete real-life SITUATION "
+                    "where someone would say it - depict THAT situation, not the literal words - "
+                    "\"it is enough\"/\"it is okay\", said when declining more food, becomes \"a "
+                    "person politely holding up a hand to decline a plate of food being offered "
+                    "to them\". Only decide a word truly has no visual referent for grammatical "
+                    "glue with no independent meaning at all: conjunctions (\"and\", \"but\"), a "
+                    "copula, or a bare tense/aspect marker.\n\n"
                     "NEVER mention a color, even an obvious real-world one - color is decided "
-                    "entirely by the illustration style afterward, and naming one here can "
-                    "clash with it. Write \"a star\", never \"a white star\" or \"a yellow "
-                    "star\"; \"a leaf\", never \"a green leaf\". For a concept that's already a "
-                    "single concrete object/animal/person with nothing else to add, the scene "
-                    "is just that subject, plainly named - do not invent extra realistic detail "
-                    "it doesn't need.\n\n"
+                    "entirely by the illustration style afterward, and naming one here can clash "
+                    "with it. Write \"a star\", never \"a white star\" or \"a yellow star\".\n\n"
                     "Reply in EXACTLY one of these two forms, nothing else:\n"
                     "SKIP\n"
-                    "or two lines:\n"
-                    "SCENE: <one concrete sentence describing exactly what is drawn, with a "
-                    "subject and, if applicable, an action - no style, color, or artistic "
-                    "instructions>\n"
-                    "PERSON: yes|no  (whether that scene depicts a human being)"
+                    "or, on separate lines:\n"
+                    "PERSON: yes|no  (whether your scenes depict a human being)\n"
+                    f"SCENE 1: <one concrete sentence - a subject and, if applicable, an action "
+                    "- no style, color, or artistic instructions>\n"
+                    "SCENE 2: <...>\n"
+                    f"... through SCENE {count}, each one a genuinely different take, not a "
+                    "reworded repeat of the last."
                 ),
             },
             {"role": "user", "content": f'Word: "{display_text}"\nGloss: {definition or "(no definition)"}'},
         ]
+        fallback = IllustrationScenes(scenes=[definition or display_text] * count, involves_person=False)
         try:
-            reply = self._generate(messages, max_new_tokens=120)
+            reply = self._generate(messages, max_new_tokens=80 + 80 * count)
         except Exception as exc:  # noqa: BLE001 - any failure just falls back
-            print(f"  (illustration brief skipped: {exc})")
-            return IllustrationBrief(scene=definition or display_text, involves_person=False)
+            print(f"  (illustration scenes skipped: {exc})")
+            return fallback
 
         if reply.strip().upper().startswith("SKIP"):
             return None
 
-        scene_match = _SCENE_LINE.search(reply)
-        if not scene_match:
+        scenes = {}
+        for line in reply.splitlines():
+            m = _SCENE_N_LINE.search(line)
+            if m:
+                scenes[int(m.group(1))] = m.group(2).strip().strip('"')
+
+        if set(scenes) != set(range(1, count + 1)):
             # Malformed reply - fall back rather than silently lose the word.
-            return IllustrationBrief(scene=definition or display_text, involves_person=False)
+            print(f"  (illustration scenes skipped: expected {count} SCENE lines, parsed {len(scenes)})")
+            return fallback
+
         person_match = _PERSON_LINE.search(reply)
         involves_person = bool(person_match) and person_match.group(1).lower() == "yes"
-        return IllustrationBrief(scene=scene_match.group(1).strip(), involves_person=involves_person)
+        return IllustrationScenes(scenes=[scenes[i] for i in range(1, count + 1)], involves_person=involves_person)
 
     def rewrite_batch(self, style: ArtStyle, visual_prompts: list[str]) -> list[str]:
         """Rewrites all of one word's VISUAL prompts together (one call,
@@ -323,7 +367,7 @@ class LocalLLMRewriter:
             reply = self._generate(messages, max_new_tokens=config.LLM_MAX_NEW_TOKENS_PER_VARIANT * n)
             rewritten = {}
             for line in reply.splitlines():
-                m = _NUMBERED_LINE.match(line)
+                m = re.match(r"^\s*(\d+)[.):]\s*(.+)$", line)
                 if m:
                     rewritten[int(m.group(1))] = m.group(2).strip().strip('"')
 
