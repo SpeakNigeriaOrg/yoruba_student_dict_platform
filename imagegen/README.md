@@ -13,17 +13,24 @@ on the other):
 ```sh
 cd imagegen
 uv sync
-DATABASE_URL=postgres://... uv run python -m imagegen.generate --art-style cartoon --count 4
+DATABASE_URL=postgres://... uv run python -m imagegen.generate --art-style cartoon
 # ... later, once candidates/ has output ...
 DATABASE_URL=postgres://... uv run python -m imagegen.review --art-style cartoon
 ```
 
 `generate.py` queries `golden_record` for words with no `word_images` row
-for `--art-style`, builds 4 (`--count`) prompt variants per word in that
-style, and writes them to `candidates/{art_style}/{word_id}/v0.png`...
-`v3.png` plus a `manifest.json` recording the exact prompt used for each -
-nothing touches Postgres yet. Already-queued words are skipped on a re-run
-(`--force` to redo), so it's safe to stop and restart an overnight run.
+for `--art-style`, builds 8 (`--count`, the default - see config.py on why
+that's not a smaller number) prompt variants per word in that style, and
+writes them to `candidates/{art_style}/{word_id}/v0.png`...`v7.png` plus a
+`manifest.json` recording the exact prompt used for each - nothing touches
+Postgres yet. Already-queued words are skipped on a re-run (`--force` to
+redo), so it's safe to stop and restart an overnight run. Every word gets
+prompts generated - there is deliberately no "not illustrable, skip it"
+path (see prompts.py's module docstring: a real run skipped "to cry"
+despite being told point-blank that verbs always get a scene, which is
+proof a single blind judgment call before anything is generated isn't a
+reliable place for that decision to live). If a batch genuinely comes out
+unusable, that's what review.py's "reject all" is for.
 
 `review.py` starts a local web server (`http://localhost:4322`, loopback
 only) showing one word's candidates at a time, along with that style's own
@@ -105,41 +112,54 @@ images; whatever gets generated is served byte-identical. The current
 
 ## Prompt strategy: diversity *between* variants, not average quality
 
-The point of this harness is **not** "make all 4 variants good" - `review.py`
-keeps exactly one and throws the rest away, so nothing ever averages them.
-What matters is maximizing the odds that *at least one* of the N lands,
-even if that means the other three are mediocre or off-style. Every choice
-below follows from that, and it's not only about who's depicted - it's
-about composition, framing, and rendering approach too.
+The point of this harness is **not** "make all 8 variants good" -
+`review.py` keeps exactly one and throws the rest away, so nothing ever
+averages them. What matters is maximizing the odds that *at least one* of
+the N lands. Full reasoning, and the real failures that shaped this design
+(every "ball" rendering as a soccer ball, "father" never showing a child,
+"to cry" getting silently skipped), is in `prompts.py`'s module docstring -
+short version below.
 
-`prompts.py` builds each variant from a style template: clip-art base +
-four independent slots sampled *without replacement* per word (composition,
-framing, background, and a rendering **sub-style** - sticker-flat vs.
-thin-line geometric vs. rounded storybook vs. bold poster, all still
-clip-art but visually distinct approaches, so a concept that comes out weak
-in one rendering can still land in another) plus a rotating, concrete
-diversity clause for human subjects - deliberately a specific descriptor
-("a Black West African person", "an East Asian person", ...) rather than a
-vague "diverse" adjective, since the latter tends to get ignored or
-rendered as a single collaged figure rather than actually varying who's
-depicted across the batch.
+Three layers, by default:
 
-By default, all N mechanical prompts for a word are then rewritten
-*together in one call* by a local LLM - **Qwen3-8B**, already fully cached
-locally (`~/.cache/huggingface/hub/models--Qwen--Qwen3-8B`, used by other
-tooling on this machine already) and loaded directly via `transformers`,
-no server, no new download. It's explicitly instructed to push the N
-prompts further apart from each other, not smooth them into consistency -
-seeing all N at once is what lets it do that; rewriting each in isolation
-(the first version of this) couldn't. Research this session turned up real
-evidence that an LLM rewrite pass measurably increases both visual and
-demographic diversity of diffusion output versus a template alone (arXiv
-2504.11104), while a pure template risks the "diversity collapse" templated
-prompting is documented to cause (arXiv 2505.18949).
+1. **`LocalLLMRewriter.illustration_scenes`** (Qwen3-8B, already cached
+   locally, loaded directly via `transformers` - no server, no new
+   download) turns a word's raw dictionary gloss into `--count` genuinely
+   DIFFERENT candidate scenes in one call - not one scene reused `--count`
+   times, which is what hid the soccer-ball and father problems. It's
+   instructed to invent a concrete scene for bare verbs and phrases,
+   always include the other party for a relationship/role word, vary the
+   specific referent for a category word, use pointing-gesture and
+   pragmatic-use-case conventions for pronouns/idioms, and choose each
+   scene like a pictogram designer would - the single most recognizable
+   angle or moment, one or two exaggerated defining features, exactly one
+   clear subject. **There is no "skip, not illustrable" option** - every
+   word gets scenes, and a genuinely bad result is a `review.py` "reject
+   all" decision, not a blind pre-generation guess.
+2. A mechanical template (no model calls) turns each scene into one
+   structurally-different prompt by sampling composition/framing/
+   background/rendering-**sub-style** slots *without replacement* (sticker-
+   flat vs. thin-line geometric vs. rounded storybook vs. bold poster, all
+   still clip-art but visually distinct), plus a rotating, concrete
+   diversity clause for human subjects when a scene involves one -
+   deliberately a specific descriptor ("a Black West African person", "an
+   East Asian person", ...) rather than a vague "diverse" adjective, which
+   tends to get ignored or rendered as a single collaged figure.
+3. All `--count` mechanical prompts for a word are then rewritten
+   *together in one call* by the same LLM, explicitly told to push them
+   further apart in phrasing/composition, not smooth them into
+   consistency - seeing all of them at once is what lets it do that.
+   Research turned up real evidence an LLM rewrite pass measurably
+   increases both visual and demographic diversity of diffusion output
+   versus a template alone (arXiv 2504.11104), while a pure template risks
+   the "diversity collapse" templated prompting is documented to cause
+   (arXiv 2505.18949).
 
-Any failure (parse mismatch, model error) falls back to the mechanical
-prompts unchanged - an overnight batch must never crash or stall on the LLM
-step. Pass `--no-llm` to skip this pass entirely.
+Any LLM failure (parse mismatch, model error) falls back to the raw gloss
+- an overnight batch must never crash or stall on an LLM step. Pass
+`--no-llm` to skip the LLM entirely: one scene (the raw gloss) reused for
+every variant, no human-diversity clause, still usable for concrete nouns
+but without any of the fixes above.
 
 **Never runs concurrently with image generation.** `generate.py` is a
 strict two-phase pipeline: load Qwen3-8B, rewrite every queued word's

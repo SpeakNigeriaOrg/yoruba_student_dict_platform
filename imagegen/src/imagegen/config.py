@@ -5,7 +5,12 @@
 # whatever we generate is served byte-for-byte. 512 gives ~2.56x headroom,
 # comfortably covering 2x/3x retina displays without upscaling artifacts.
 DEFAULT_RESOLUTION = 512
-DEFAULT_VARIANT_COUNT = 4
+# Bigger than it sounds like it needs to be, on purpose: this pipeline's
+# whole design is "maximize the odds one of N is a hit, not the average of
+# N" (see prompts.py's module docstring) - more candidates per word raises
+# that odds directly, and generation is cheap (~3s/image) relative to a
+# human reviewing once and being done with a word for good.
+DEFAULT_VARIANT_COUNT = 8
 DEFAULT_ART_STYLE = "cartoon"
 
 # Turbo trades a small quality gap for 8-step inference (vs. ~28+ for the

@@ -41,16 +41,26 @@
 #       food). A single-shot decision is exactly the failure mode the
 #       rest of this module is built to avoid elsewhere.
 #
-# So illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
+#   Round 3: even with that guidance in place, a real run skipped "to
+#   cry" - a bare verb, explicitly the category the prompt said must
+#   ALWAYS get a scene. That's not a wording problem to iterate on again;
+#   it's proof a single blind "can this be drawn" judgment, made before
+#   anything is generated, will always occasionally be wrong in ways no
+#   amount of prompt tuning fully closes off. So there is no SKIP option
+#   at all anymore - every word gets --count scenes, full stop. If a
+#   genuinely bad batch results, that's what review.py's "reject all" is
+#   for: a human decision made by looking at actual generated images,
+#   which is a far more reliable place for that judgment to live than a
+#   single guess made blind beforehand.
+#
+# illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
 # per word) produces --count DIFFERENT candidate scenes in one call, not
 # one shared scene, and is instructed to: vary the concrete referent for
 # category-like concepts, always include the other party for
-# relationship/role concepts, and search for a pointing-gesture or
-# pragmatic-use-case depiction before concluding a word has no visual
-# referent at all. Only true grammatical glue (conjunctions, copulas, bare
-# tense/aspect markers with no independent meaning) should still return
-# None, and generate.py skips those words entirely rather than generating
-# something meaningless.
+# relationship/role concepts, use the pointing-gesture convention for
+# pronouns/deictic words, depict the real-life usage situation for
+# idiomatic phrases, and even attempt a best-effort symbolic scene for
+# pure grammatical glue rather than giving up.
 #
 # From there:
 #   2. A mechanical template (this module, no model calls) builds one
@@ -234,31 +244,44 @@ class LocalLLMRewriter:
         # (if any) is the actual reply.
         return reply.rsplit("</think>", 1)[-1]
 
-    def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> IllustrationScenes | None:
+    def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> IllustrationScenes:
         """Produces `count` candidate concrete scenes for one word in a
         single call (not one shared scene reused `count` times - see module
-        docstring on why that hid real diversity failures), or decides the
-        concept has no visual referent at all and returns None (generate.py
-        skips the word entirely rather than generating something
-        meaningless). Falls back to the raw gloss repeated `count` times,
-        with no human-descriptor diversity (involves_person is always False
-        in this fallback - see module docstring on why that's preferred
-        over a keyword guess), if the model errors or its reply doesn't
+        docstring on why that hid real diversity failures).
+
+        There is deliberately no "give up, this can't be drawn" option. An
+        earlier version let the model reply SKIP for words it judged to
+        have no visual referent, explicitly reserved for pure grammatical
+        glue - and a real run skipped "to cry" anyway, despite being told
+        point-blank that any verb must always get a scene. A single blind
+        judgment call before anything is even generated is exactly the
+        failure mode the rest of this module exists to avoid elsewhere:
+        the answer isn't a better-worded escape hatch, it's removing the
+        escape hatch and instead paying for the (cheap) generation attempt
+        - review.py's "reject all" is where a genuinely bad batch gets
+        caught, by a human looking at actual images, not by a single LLM
+        guess made blind beforehand.
+
+        Falls back to the raw gloss repeated `count` times, with no
+        human-descriptor diversity (involves_person is always False in
+        this fallback - see module docstring on why that's preferred over
+        a keyword guess), if the model errors or its reply doesn't
         parse."""
         messages = [
             {
                 "role": "system",
                 "content": (
                     "You help prepare dictionary entries for illustration. Given a word's "
-                    "English gloss, you will propose several candidate scenes for it - static "
-                    "pictures a child could recognize.\n\n"
+                    "English gloss, you propose several candidate scenes for it - static "
+                    "pictures a child could recognize. Every word gets scenes; there is no "
+                    "option to skip one.\n\n"
                     "Concrete nouns (animals, objects, people, places) almost always work. ANY "
-                    "verb - even a bare infinitive with no object, like \"give\" or \"look\" - "
-                    "must ALWAYS get a concrete scene invented for it, never be skipped: invent "
-                    "a plausible subject and action, e.g. \"give\" becomes \"a person handing a "
-                    "wrapped gift to another person with both hands\". Prepositional/locative "
-                    "phrases work the same way - \"on the ground\" becomes \"a ball resting on "
-                    "the ground\".\n\n"
+                    "verb - even a bare infinitive with no object, like \"give\", \"look\", or "
+                    "\"cry\" - gets a concrete scene invented for it: a plausible subject and "
+                    "action, e.g. \"give\" becomes \"a person handing a wrapped gift to another "
+                    "person with both hands\", \"cry\" becomes \"a child with tears streaming "
+                    "down their face\". Prepositional/locative phrases work the same way - \"on "
+                    "the ground\" becomes \"a ball resting on the ground\".\n\n"
                     "If the concept is a RELATIONSHIP or ROLE that only means what it means in "
                     "reference to another party (a family role like father/mother/sibling, a "
                     "professional role like teacher/doctor/farmer, or similar), every scene MUST "
@@ -275,24 +298,39 @@ class LocalLLMRewriter:
                     "specific, singular thing (a star, a specific role once its context is "
                     "established), your scenes can describe the same subject - variety there "
                     "comes from composition/rendering, handled separately afterward.\n\n"
-                    "Before concluding a word has NO visual referent, search harder: (1) a "
-                    "pronoun or deictic word often has a real pointing-gesture convention, the "
-                    "same one flashcards and emoji use - \"you\" becomes \"a hand pointing "
-                    "directly at the viewer\", \"I/me\" becomes \"a person pointing at their own "
-                    "chest\", \"here\" becomes \"a hand pointing down at the ground\"; (2) an "
-                    "idiomatic phrase or expression usually has a concrete real-life SITUATION "
-                    "where someone would say it - depict THAT situation, not the literal words - "
-                    "\"it is enough\"/\"it is okay\", said when declining more food, becomes \"a "
-                    "person politely holding up a hand to decline a plate of food being offered "
-                    "to them\". Only decide a word truly has no visual referent for grammatical "
-                    "glue with no independent meaning at all: conjunctions (\"and\", \"but\"), a "
-                    "copula, or a bare tense/aspect marker.\n\n"
+                    "When choosing what a scene actually shows, think like a pictogram "
+                    "designer, not a photographer: pick the single most identifiable angle or "
+                    "moment for the subject - a side profile for most animals and objects, the "
+                    "peak instant of an action (a ball already released mid-throw, not the "
+                    "wind-up) - rather than an ambiguous or in-between pose. Let one or two "
+                    "exaggerated, defining features carry the recognition (long ears on a "
+                    "rabbit, the specific hand shape of a gesture) instead of trying to include "
+                    "every literal detail. Keep exactly one clear subject per scene - two "
+                    "equally-weighted things to look at reads as cluttered, not as richer.\n\n"
+                    "For a pronoun or deictic word, use the pointing-gesture convention "
+                    "flashcards and emoji use - \"you\" becomes \"a hand pointing directly at "
+                    "the viewer\", \"I/me\" becomes \"a person pointing at their own chest\", "
+                    "\"here\" becomes \"a hand pointing down at the ground\". For an idiomatic "
+                    "phrase or expression, depict the concrete real-life SITUATION where someone "
+                    "would say it, not the literal words - \"it is enough\"/\"it is okay\", said "
+                    "when declining more food, becomes \"a person politely holding up a hand to "
+                    "decline a plate of food being offered to them\". Even pure grammatical glue "
+                    "with no independent meaning (a conjunction, a copula, a bare tense/aspect "
+                    "marker) gets a best-effort symbolic scene - e.g. a plus sign shape for "
+                    "\"and\", two shapes merging into one for \"is/am/are\" - rather than nothing "
+                    "at all.\n\n"
                     "NEVER mention a color, even an obvious real-world one - color is decided "
                     "entirely by the illustration style afterward, and naming one here can clash "
                     "with it. Write \"a star\", never \"a white star\" or \"a yellow star\".\n\n"
-                    "Reply in EXACTLY one of these two forms, nothing else:\n"
-                    "SKIP\n"
-                    "or, on separate lines:\n"
+                    f"You need {count} scenes, which is enough that lazily varying one idea "
+                    "runs out fast - resist settling on the first workable scene and tweaking "
+                    "it {count} times. Actively brainstorm across different axes before you "
+                    "write anything: a different moment in the action (before/at the peak/"
+                    "after), a different specific sub-type or example of the concept, a "
+                    "different vantage point on the same idea, a different secondary detail "
+                    "that changes the read. No two scenes should be recognizable as the same "
+                    "idea reworded.\n\n"
+                    "Reply on separate lines, nothing else:\n"
                     "PERSON: yes|no  (whether your scenes depict a human being)\n"
                     f"SCENE 1: <one concrete sentence - a subject and, if applicable, an action "
                     "- no style, color, or artistic instructions>\n"
@@ -307,11 +345,8 @@ class LocalLLMRewriter:
         try:
             reply = self._generate(messages, max_new_tokens=80 + 80 * count)
         except Exception as exc:  # noqa: BLE001 - any failure just falls back
-            print(f"  (illustration scenes skipped: {exc})")
+            print(f"  (illustration scenes generation failed, using raw gloss: {exc})")
             return fallback
-
-        if reply.strip().upper().startswith("SKIP"):
-            return None
 
         scenes = {}
         for line in reply.splitlines():
@@ -321,7 +356,7 @@ class LocalLLMRewriter:
 
         if set(scenes) != set(range(1, count + 1)):
             # Malformed reply - fall back rather than silently lose the word.
-            print(f"  (illustration scenes skipped: expected {count} SCENE lines, parsed {len(scenes)})")
+            print(f"  (illustration scenes unparsable, using raw gloss: expected {count} SCENE lines, parsed {len(scenes)})")
             return fallback
 
         person_match = _PERSON_LINE.search(reply)

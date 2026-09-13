@@ -123,38 +123,11 @@ def generate_word_images(pipe, word, variant_prompts: list[str], args, candidate
     )
 
 
-def _load_skipped(candidates_root: Path) -> dict:
-    # encoding="utf-8" is not optional here - Path.write_text/read_text
-    # default to the OS locale encoding, which on Windows is a codepage
-    # (cp1252) that can't represent Yoruba diacritics at all and crashes on
-    # write. See _save_skipped below for where this bit us for real - and
-    # left a truncated, empty _skipped.json behind (write_text truncates
-    # before encoding), which is exactly the corrupt-file case this
-    # function now tolerates rather than crashing on: it's a cache of a
-    # decision generate.py can always re-derive by asking the LLM again,
-    # never data worth losing a whole run over.
-    path = candidates_root / "_skipped.json"
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        print(f"  ({path} is empty or corrupt - ignoring, will be rebuilt)")
-        return {}
-
-
-def _save_skipped(candidates_root: Path, skipped: dict):
-    (candidates_root / "_skipped.json").write_text(
-        json.dumps(skipped, indent=2, ensure_ascii=False), encoding="utf-8",
-    )
-
-
 def main():
     args = parse_args()
     style = styles.get(args.art_style)
     candidates_root = CANDIDATES_DIR / args.art_style
     candidates_root.mkdir(parents=True, exist_ok=True)
-    skipped = _load_skipped(candidates_root)
 
     conn = db.connect()
     if args.words:
@@ -163,14 +136,8 @@ def main():
         missing = [wid for wid, w in zip(word_ids, words) if w is None]
         if missing:
             raise SystemExit(f"Unknown word_id(s): {', '.join(missing)}")
-        # Explicit --words always (re)tries a word, even one a past run
-        # decided wasn't illustrable - that decision might have been wrong,
-        # or the entry may have been edited since.
-        for wid in word_ids:
-            skipped.pop(wid, None)
     else:
         words = db.words_needing_image(conn, args.art_style)
-        words = [w for w in words if w["word_id"] not in skipped]
     conn.close()
 
     if not args.force:
@@ -178,7 +145,7 @@ def main():
     if args.limit:
         words = words[: args.limit]
     if not words:
-        print(f'No words need a "{args.art_style}" image (or none matched --words / all already have pending candidates or were previously skipped).')
+        print(f'No words need a "{args.art_style}" image (or none matched --words / all already have pending candidates).')
         return
 
     print(f"{len(words)} word(s) queued for generation, {args.count} variant(s) each.")
@@ -186,7 +153,9 @@ def main():
     # Phase 1: for each word, decide what to draw, then build --count
     # structurally-different prompts for it - see module docstring for why
     # this must fully finish, and the LLM be fully unloaded, before phase 2
-    # touches the GPU at all.
+    # touches the GPU at all. Every word gets prompts - there's no "not
+    # illustrable" exit anymore (see prompts.py's module docstring on why
+    # that was removed rather than tuned again).
     if args.no_llm:
         # No illustration_scenes to consult - fall back to the raw gloss
         # repeated for every variant (no per-variant referent/scene
@@ -209,19 +178,9 @@ def main():
             word_drafts = {}
             for w in words:
                 scenes = rewriter.illustration_scenes(w["definition"], w["display_text"], args.count)
-                if scenes is None:
-                    print(f'  {w["word_id"]}: not illustrable per LLM - skipping')
-                    skipped[w["word_id"]] = {
-                        "display_text": w["display_text"],
-                        "definition": w["definition"],
-                        "reason": "not illustrable (LLM)",
-                    }
-                    continue
                 word_drafts[w["word_id"]] = prompts.build_variant_drafts(
                     style, scenes.scenes, args.count, scenes.involves_person,
                 )
-            words = [w for w in words if w["word_id"] in word_drafts]
-            _save_skipped(candidates_root, skipped)
 
             # The LLM only ever sees the visual half of each draft, never
             # the human-diversity clause (prompts.py's module docstring
@@ -237,10 +196,6 @@ def main():
                 word_drafts[word_id] = list(zip(rewritten_visuals, clauses))
         finally:
             rewriter.unload()
-
-    if not words:
-        print("Every queued word was judged not illustrable - nothing to generate.")
-        return
 
     word_prompts = {
         word_id: [prompts.compose(visual, clause) for visual, clause in draft_pairs]
