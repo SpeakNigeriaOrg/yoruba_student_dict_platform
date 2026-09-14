@@ -19,14 +19,11 @@
 #      on why a shared scene hid real diversity failures: every "ball"
 #      came out a soccer ball, every "father" came out the same "holding
 #      hands" pose, across all 4 variants, because nothing ever asked for
-#      a different referent or a different relational moment). Or the LLM
-#      decides the concept has no visual referent at all (see prompts.py:
-#      true grammatical glue only, after searching for pointing-gesture and
-#      pragmatic-use-case depictions first) and the word is skipped -
-#      recorded in candidates/{art_style}/_skipped.json and excluded from
-#      future runs' queries too, so the LLM isn't re-asked every time.
-#      Everything else gets one mechanical prompt variant per scene
-#      (prompts.py), then all of one word's variants are rewritten
+#      a different referent or a different relational moment). Every word
+#      gets scenes - there is no "not illustrable, skip it" exit (see
+#      prompts.py's module docstring on why that option was removed
+#      rather than tuned again). Each scene becomes one mechanical prompt
+#      variant (prompts.py), then all of one word's variants are rewritten
 #      together to push them further apart in phrasing/composition too -
 #      see prompts.py's module docstring on why divergence between
 #      variants, not average quality, is the goal here (review.py keeps
@@ -193,17 +190,13 @@ def main():
     if args.no_llm:
         # No illustration_scenes to consult - fall back to the raw gloss
         # repeated for every variant (no per-variant referent/scene
-        # diversity at all), with no human-descriptor diversity clause
-        # either (see prompts.py's module docstring on why that's preferred
-        # over a keyword-heuristic guess: one already went wrong on a
-        # pronoun whose own grammatical gloss contained the word "person").
-        # Weaker on verbs/phrases/relational nouns/generic categories too
-        # (see module docstring) - the trade this mode makes for having no
-        # model dependency at all.
+        # diversity at all). build_variant_drafts still checks each
+        # (repeated) concept for a human-descriptor clause on its own, so
+        # this mode isn't weaker on THAT front - just on verbs/phrases/
+        # relational nouns/generic categories (see module docstring) -
+        # the trade this mode makes for having no model dependency at all.
         word_drafts = {
-            w["word_id"]: prompts.build_variant_drafts(
-                style, [effective_gloss(w)] * args.count, args.count, involves_person=False,
-            )
+            w["word_id"]: prompts.build_variant_drafts(style, [effective_gloss(w)] * args.count, args.count)
             for w in words
         }
     else:
@@ -212,9 +205,7 @@ def main():
             word_drafts = {}
             for w in words:
                 scenes = rewriter.illustration_scenes(effective_gloss(w), w["display_text"], args.count)
-                word_drafts[w["word_id"]] = prompts.build_variant_drafts(
-                    style, scenes.scenes, args.count, scenes.involves_person,
-                )
+                word_drafts[w["word_id"]] = prompts.build_variant_drafts(style, scenes, args.count)
 
             # The LLM only ever sees the visual half of each draft, never
             # the human-diversity clause (prompts.py's module docstring

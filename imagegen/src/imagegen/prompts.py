@@ -53,6 +53,32 @@
 #   which is a far more reliable place for that judgment to live than a
 #   single guess made blind beforehand.
 #
+#   Round 4: a live review session turned up something worse than round
+#   3's false SKIPs - "PERSON: yes/no", a self-report the model gave
+#   alongside its own scenes, turned out to be wrong more than HALF the
+#   time. A scan of 107 pending words found 58 where the scene text was
+#   unambiguously human ("a man and a child walking hand in hand", "a
+#   person counting ten fingers") but PERSON said no, so build_variant_
+#   drafts never attached a diversity descriptor at all - the model was
+#   simply left to its own default bias for the entire batch. Whatever
+#   the model draws when given no ethnicity instruction at all is not
+#   this project's call to leave to chance, and a self-reported boolean
+#   that contradicts the scene text it was reported alongside isn't a
+#   signal worth asking for again. So there's no PERSON field anymore
+#   either: whether a given variant depicts a person is now decided by
+#   scanning the SCENE TEXT ITSELF for a human-indicating word (see
+#   _mentions_person) - grounded in text the model just wrote for a
+#   concrete visual purpose, not a raw dictionary gloss (which is where
+#   the OLD keyword heuristic actually failed, on linguistic jargon like
+#   "second-person singular pronoun" - a scene sentence like "a man
+#   holding a baby" doesn't have that problem) and not a separate
+#   self-assessment the model apparently doesn't reliably get right. This
+#   also fixes round 2's "father" problem more thoroughly than before:
+#   the check now runs PER VARIANT, not once for the whole word, so a
+#   word whose scenes mix human and non-human subjects (count -> "a
+#   person counting fingers" alongside "a stack of ten books") gets the
+#   descriptor only on the variants that actually need it.
+#
 # illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
 # per word) produces --count DIFFERENT candidate scenes in one call, not
 # one shared scene, and is instructed to: vary the concrete referent for
@@ -92,21 +118,44 @@
 #     into a flat "featuring a Latino person" assertion.
 #   - COMPOSITIONS included "a dynamic action pose", which itself implies
 #     a body, applied to a definition that was just an inanimate object.
-# The fix: decide ONCE per word whether the concept involves a depicted
-# human being at all (from the LLM's scenes when there are any; otherwise
-# always no - a keyword heuristic tried this once and false-positived on
-# "you", whose own gloss is "...second-person singular... pronoun" -
-# "person" there is grammar jargon, not a depicted human; a hand-written
-# word list will always have another case like that). If not involved, no
-# human-descriptor text is ever generated for that word, in any variant -
-# not even conditionally. If so, the descriptor is a direct instruction
-# ("depict a Black West African person"), not a hedge, since a person is
-# already known to belong in frame.
+# The fix: decide, per VARIANT, whether its own concept text depicts a
+# human being at all (_mentions_person, scanning the concept string - see
+# round 4 above on why this replaced a separate LLM self-report). If not,
+# no human-descriptor text is ever generated for that variant - not even
+# conditionally. If so, the descriptor is a direct instruction ("depict a
+# Black West African person"), not a hedge, since a person is already
+# known to belong in frame.
 import re
-from dataclasses import dataclass
 
 from . import config
 from .styles import ArtStyle
+
+_PERSON_WORDS = [
+    "person", "people", "human", "somebody", "someone", "anybody",
+    "man", "men", "woman", "women", "boy", "girl", "child", "children", "kid", "kids", "baby", "babies", "infant",
+    "father", "mother", "parent", "brother", "sister", "sibling",
+    "son", "daughter", "husband", "wife", "bride", "groom",
+    "uncle", "aunt", "cousin", "grandmother", "grandfather", "grandparent",
+    "friend", "neighbor", "neighbour", "stranger", "guest", "visitor",
+    "teacher", "student", "pupil", "farmer", "trader", "hunter", "doctor",
+    "nurse", "worker", "servant", "priest", "prophet", "king", "queen",
+    "chief", "elder", "leader", "ruler", "soldier", "warrior", "thief",
+    "beggar", "widow", "orphan", "twin", "youth", "adult",
+    "he", "she", "him", "her", "his", "they", "them", "their",
+]
+_PERSON_PATTERN = re.compile(r"\b(" + "|".join(_PERSON_WORDS) + r")\b", re.IGNORECASE)
+
+
+def _mentions_person(text: str) -> bool:
+    """Whether `text` - a scene illustration_scenes wrote, or (in --no-llm
+    mode) a raw dictionary gloss - describes a human being. Grounded in
+    concrete visual-scene text (or a plain gloss), not the grammar-jargon
+    case that broke an earlier version of this same idea (a pronoun's own
+    gloss reading "...second-person singular... pronoun" - "person" there
+    is linguistics jargon, not a depicted human). A scene sentence like "a
+    man holding a baby" doesn't have that failure mode."""
+    return bool(_PERSON_PATTERN.search(text))
+
 
 WHITE_EUROPEAN_DESCRIPTOR = "a white European person"
 HUMAN_DESCRIPTORS = [
@@ -149,9 +198,7 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
     return picks[:count]
 
 
-def build_variant_drafts(
-    style: ArtStyle, concepts: list[str], count: int, involves_person: bool
-) -> list[tuple[str, str]]:
+def build_variant_drafts(style: ArtStyle, concepts: list[str], count: int) -> list[tuple[str, str]]:
     """Returns (visual_prompt, human_clause) pairs - kept apart so callers
     (generate.py's LLM rewrite pass) can rewrite visual_prompt freely while
     passing human_clause through untouched.
@@ -160,10 +207,12 @@ def build_variant_drafts(
     illustration_scenes produces a DIFFERENT concrete scene per entry when
     the concept calls for it (e.g. "a soccer ball" / "a basketball" / "a
     beach ball" / "a tennis ball" for the category "ball"), and the same
-    scene repeated `count` times when it doesn't (e.g. "a star"). This
-    function no longer decides that itself, or calls anything to decide
-    `involves_person` - both are already-made decisions passed in, so it
-    stays a plain, easily-tested function of its inputs."""
+    scene repeated `count` times when it doesn't (e.g. "a star"). Whether
+    each one individually depicts a person is decided right here
+    (_mentions_person, per concept, not once for the whole batch) - a
+    word's scenes can mix human and non-human subjects (e.g. "twenty":
+    "a stack of ten books" alongside "a person counting ten fingers"),
+    and only the ones that actually depict someone get a descriptor."""
     if len(concepts) != count:
         raise ValueError(f"expected {count} concepts, got {len(concepts)}")
 
@@ -172,10 +221,9 @@ def build_variant_drafts(
     framings = _sample_without_replacement(FRAMINGS, count)
     rendering_variants = _sample_without_replacement(style.rendering_variants, count)
 
-    if involves_person:
-        descriptors = _sample_without_replacement(HUMAN_DESCRIPTORS, count)
-    else:
-        descriptors = [None] * count
+    person_flags = [_mentions_person(c) for c in concepts]
+    descriptors_needed = sum(person_flags)
+    descriptor_pool = iter(_sample_without_replacement(HUMAN_DESCRIPTORS, descriptors_needed)) if descriptors_needed else iter([])
 
     drafts = []
     for i in range(count):
@@ -183,12 +231,14 @@ def build_variant_drafts(
             f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
             f"{style.base_prompt}, {rendering_variants[i]}."
         )
-        if descriptors[i] is None:
+        if not person_flags[i]:
             clause = ""
-        elif descriptors[i] == WHITE_EUROPEAN_DESCRIPTOR:
-            clause = f"Depict {descriptors[i]}."
         else:
-            clause = f"Depict {descriptors[i]}, not a white Western appearance."
+            descriptor = next(descriptor_pool)
+            if descriptor == WHITE_EUROPEAN_DESCRIPTOR:
+                clause = f"Depict {descriptor}."
+            else:
+                clause = f"Depict {descriptor}, not a white Western appearance."
         drafts.append((visual, clause))
     return drafts
 
@@ -197,17 +247,10 @@ def compose(visual: str, clause: str) -> str:
     return f"{visual} {clause}".strip()
 
 
-def build_variant_prompts(style: ArtStyle, concepts: list[str], count: int, involves_person: bool) -> list[str]:
-    return [compose(v, c) for v, c in build_variant_drafts(style, concepts, count, involves_person)]
+def build_variant_prompts(style: ArtStyle, concepts: list[str], count: int) -> list[str]:
+    return [compose(v, c) for v, c in build_variant_drafts(style, concepts, count)]
 
 
-@dataclass
-class IllustrationScenes:
-    scenes: list[str]
-    involves_person: bool
-
-
-_PERSON_LINE = re.compile(r"PERSON:\s*(yes|no)", re.IGNORECASE)
 _SCENE_N_LINE = re.compile(r"SCENE\s*(\d+)\s*:\s*(.+)", re.IGNORECASE)
 
 
@@ -244,10 +287,15 @@ class LocalLLMRewriter:
         # (if any) is the actual reply.
         return reply.rsplit("</think>", 1)[-1]
 
-    def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> IllustrationScenes:
+    def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> list[str]:
         """Produces `count` candidate concrete scenes for one word in a
         single call (not one shared scene reused `count` times - see module
-        docstring on why that hid real diversity failures).
+        docstring on why that hid real diversity failures). Whether each
+        scene depicts a person is decided later, by scanning the scene
+        text itself (_mentions_person) - not asked for here anymore (see
+        module docstring, "Round 4": a separate PERSON: self-report this
+        method used to request was wrong more than half the time, even
+        against its own scene text).
 
         There is deliberately no "give up, this can't be drawn" option. An
         earlier version let the model reply SKIP for words it judged to
@@ -262,11 +310,8 @@ class LocalLLMRewriter:
         caught, by a human looking at actual images, not by a single LLM
         guess made blind beforehand.
 
-        Falls back to the raw gloss repeated `count` times, with no
-        human-descriptor diversity (involves_person is always False in
-        this fallback - see module docstring on why that's preferred over
-        a keyword guess), if the model errors or its reply doesn't
-        parse."""
+        Falls back to the raw gloss repeated `count` times if the model
+        errors or its reply doesn't parse."""
         messages = [
             {
                 "role": "system",
@@ -324,14 +369,13 @@ class LocalLLMRewriter:
                     "with it. Write \"a star\", never \"a white star\" or \"a yellow star\".\n\n"
                     f"You need {count} scenes, which is enough that lazily varying one idea "
                     "runs out fast - resist settling on the first workable scene and tweaking "
-                    "it {count} times. Actively brainstorm across different axes before you "
+                    f"it {count} times. Actively brainstorm across different axes before you "
                     "write anything: a different moment in the action (before/at the peak/"
                     "after), a different specific sub-type or example of the concept, a "
                     "different vantage point on the same idea, a different secondary detail "
                     "that changes the read. No two scenes should be recognizable as the same "
                     "idea reworded.\n\n"
                     "Reply on separate lines, nothing else:\n"
-                    "PERSON: yes|no  (whether your scenes depict a human being)\n"
                     f"SCENE 1: <one concrete sentence - a subject and, if applicable, an action "
                     "- no style, color, or artistic instructions>\n"
                     "SCENE 2: <...>\n"
@@ -341,9 +385,9 @@ class LocalLLMRewriter:
             },
             {"role": "user", "content": f'Word: "{display_text}"\nGloss: {definition or "(no definition)"}'},
         ]
-        fallback = IllustrationScenes(scenes=[definition or display_text] * count, involves_person=False)
+        fallback = [definition or display_text] * count
         try:
-            reply = self._generate(messages, max_new_tokens=80 + 80 * count)
+            reply = self._generate(messages, max_new_tokens=60 + 70 * count)
         except Exception as exc:  # noqa: BLE001 - any failure just falls back
             print(f"  (illustration scenes generation failed, using raw gloss: {exc})")
             return fallback
@@ -359,9 +403,7 @@ class LocalLLMRewriter:
             print(f"  (illustration scenes unparsable, using raw gloss: expected {count} SCENE lines, parsed {len(scenes)})")
             return fallback
 
-        person_match = _PERSON_LINE.search(reply)
-        involves_person = bool(person_match) and person_match.group(1).lower() == "yes"
-        return IllustrationScenes(scenes=[scenes[i] for i in range(1, count + 1)], involves_person=involves_person)
+        return [scenes[i] for i in range(1, count + 1)]
 
     def rewrite_batch(self, style: ArtStyle, visual_prompts: list[str]) -> list[str]:
         """Rewrites all of one word's VISUAL prompts together (one call,
