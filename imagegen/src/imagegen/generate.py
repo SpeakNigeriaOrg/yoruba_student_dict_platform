@@ -159,6 +159,17 @@ def main():
         missing = [wid for wid, w in zip(word_ids, words) if w is None]
         if missing:
             raise SystemExit(f"Unknown word_id(s): {', '.join(missing)}")
+        # --words deliberately bypasses "needs image" - that's its whole
+        # point (test/redo any word, image or not) - but it has no idea
+        # whether a target already has one, and review.py's overwrite
+        # warning only fires once someone's reviewing, possibly long after
+        # GPU time was already spent. A heads-up here costs nothing.
+        already_have_one = [w["word_id"] for w in words if db.existing_image(conn, w["word_id"], args.art_style)]
+        if already_have_one:
+            print(
+                f'Note: {len(already_have_one)} of these already have an accepted "{args.art_style}" '
+                f"image and will produce replacement candidates, not new ones: {', '.join(already_have_one)}"
+            )
     else:
         words = db.words_needing_image(conn, args.art_style)
     conn.close()
