@@ -30,10 +30,26 @@
 #     Never touches an existing accepted image - safe regardless.
 #   - Skip / Prev  -> move the review queue without touching anything on
 #     disk or in the database.
+#
+# Runs as a ThreadingHTTPServer, not the stdlib default HTTPServer, and
+# every connection gets a socket timeout - both exist for the same reason:
+# a plain single-threaded HTTPServer handles exactly one connection at a
+# time, so if any ONE of them gets stuck (a client that opens a connection
+# and goes away without a clean close, a slow/dead network path - browsers
+# and curl can both do this), the entire server freezes for every other
+# request, including the page a reviewer is actively looking at, with no
+# error shown anywhere. That's exactly what happened here in practice, on
+# top of - not instead of - the DB-staleness hang db.py's connect() and
+# call_db() below already guard against; both are the same underlying
+# class of bug (one stuck thing silently blocks everything) at different
+# layers (the DB connection vs. the HTTP connections themselves).
+# call_db's psycopg connection is NOT safe to touch from two threads at
+# once, so every handler serializes on STATE_LOCK.
 import argparse
 import http.server
 import json
 import shutil
+import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -60,6 +76,14 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
     # plain local can't be reassigned from call_db without `nonlocal`
     # sprawled across every call site.
     conn_holder = {"conn": conn}
+    # do_GET/do_POST each hold this for their whole body (see module
+    # docstring) - the psycopg connection and the state/queue dict are
+    # shared across every request thread and aren't safe for concurrent
+    # use. This only serializes the app logic itself, which is fast; it
+    # does NOT block the ThreadingHTTPServer from accepting and starting
+    # other connections concurrently, which is the actual point of being
+    # threaded at all.
+    state_lock = threading.Lock()
 
     def call_db(fn, *args, **kwargs):
         """Runs fn(conn, *args, **kwargs); if the connection has gone
@@ -114,6 +138,14 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
             self.wfile.write(body)
 
         def do_GET(self):
+            # See module docstring on why every request serializes on
+            # state_lock (shared conn/state across request threads) while
+            # still letting the ThreadingHTTPServer accept and start other
+            # connections concurrently.
+            with state_lock:
+                self._handle_get()
+
+        def _handle_get(self):
             path = urlparse(self.path).path
             if path == "/":
                 body = PAGE_HTML.encode("utf-8")
@@ -162,6 +194,10 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
             self.end_headers()
 
         def do_POST(self):
+            with state_lock:
+                self._handle_post()
+
+        def _handle_post(self):
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length) if length else b"{}"
@@ -371,10 +407,18 @@ def main():
 
     conn = db.connect()
     handler = make_handler(args.art_style, art_style_dir, conn)
+    # A connection that goes idle mid-request (a client that vanishes
+    # without a clean close - browsers and curl can both do this) gets cut
+    # loose after 30s instead of tying up its thread indefinitely - see
+    # module docstring.
+    handler.timeout = 30
     # Loopback only - see module docstring on why this must never listen on
     # every interface (Handler.do_POST /api/accept writes to the database
-    # and do_GET serves files with no auth).
-    server = http.server.HTTPServer(("127.0.0.1", args.port), handler)
+    # and do_GET serves files with no auth). ThreadingHTTPServer, not plain
+    # HTTPServer - see module docstring on why a single-threaded server
+    # here is exactly the kind of single-point-of-hang this tool keeps
+    # running into.
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler)
     print(f"Review UI running at http://localhost:{args.port}/")
     try:
         server.serve_forever()
