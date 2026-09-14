@@ -188,37 +188,36 @@ def main():
     # illustrable" exit anymore (see prompts.py's module docstring on why
     # that was removed rather than tuned again).
     if args.no_llm:
-        # No illustration_scenes to consult - fall back to the raw gloss
-        # repeated for every variant (no per-variant referent/scene
-        # diversity at all). build_variant_drafts still checks each
-        # (repeated) concept for a human-descriptor clause on its own, so
-        # this mode isn't weaker on THAT front - just on verbs/phrases/
-        # relational nouns/generic categories (see module docstring) -
-        # the trade this mode makes for having no model dependency at all.
+        # No illustration_scenes and no rewrite step - the mechanical
+        # visual IS the final text, so the human-clause decision can (and
+        # must) happen directly on it. Weaker than the LLM path on
+        # verbs/phrases/relational nouns/generic categories (see module
+        # docstring) - the trade this mode makes for having no model
+        # dependency at all.
         word_drafts = {
-            w["word_id"]: prompts.build_variant_drafts(style, [effective_gloss(w)] * args.count, args.count)
+            w["word_id"]: prompts.attach_human_clauses(
+                prompts.build_variant_visuals(style, [effective_gloss(w)] * args.count, args.count)
+            )
             for w in words
         }
     else:
         rewriter = prompts.LocalLLMRewriter(args.llm_model)
         try:
-            word_drafts = {}
+            word_visuals = {}
             for w in words:
                 scenes = rewriter.illustration_scenes(effective_gloss(w), w["display_text"], args.count)
-                word_drafts[w["word_id"]] = prompts.build_variant_drafts(style, scenes, args.count)
+                word_visuals[w["word_id"]] = prompts.build_variant_visuals(style, scenes, args.count)
 
-            # The LLM only ever sees the visual half of each draft, never
-            # the human-diversity clause (prompts.py's module docstring
-            # explains why: an earlier version let the LLM rewrite the
-            # whole sentence and it turned a conditional "if this depicts
-            # a person" hedge into a flat assertion, putting a person's
-            # portrait onto a plate/bowl image). The clause - verbatim,
-            # untouched - gets recombined with the rewritten visual below.
-            for word_id, draft_pairs in word_drafts.items():
-                visuals = [visual for visual, _clause in draft_pairs]
-                clauses = [clause for _visual, clause in draft_pairs]
+            # Rewrite first, decide the human clause AFTER - see module
+            # docstring ("Round 5") on why this order matters: deciding
+            # before rewriting and just carrying the clause through
+            # unchanged went stale in practice ("a box with earphones" ->
+            # rewritten into "a person listening to a box with earphones",
+            # a person the pre-rewrite decision never saw).
+            word_drafts = {}
+            for word_id, visuals in word_visuals.items():
                 rewritten_visuals = rewriter.rewrite_batch(style, visuals)
-                word_drafts[word_id] = list(zip(rewritten_visuals, clauses))
+                word_drafts[word_id] = prompts.attach_human_clauses(rewritten_visuals)
         finally:
             rewriter.unload()
 

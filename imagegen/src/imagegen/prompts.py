@@ -77,7 +77,37 @@
 #   the check now runs PER VARIANT, not once for the whole word, so a
 #   word whose scenes mix human and non-human subjects (count -> "a
 #   person counting fingers" alongside "a stack of ten books") gets the
-#   descriptor only on the variants that actually need it.
+#   descriptor only on the variants that actually need it. Round 4's own
+#   word list needed a second pass too, once live output exposed the
+#   gaps: no plural forms at all (a scene saying "Friends" or "Soldiers"
+#   matched neither, since the list only had the singular), several
+#   missing categories entirely ("family", "athlete", "choir", "team"),
+#   and one real false-positive risk in the fix itself - generic plural
+#   pronouns ("they"/"them"/"their") refer back to whatever was just
+#   mentioned, human or not, and a bird scene phrased "...one more bird
+#   joining them" matched on exactly that. Kept singular gendered pronouns
+#   (he/she/him/her/his - essentially never used for an object or animal
+#   in this kind of scene text) and dropped the plural ones; added the
+#   missing categories with their plurals; deliberately still excluded
+#   "group"/"band" (both have common non-human meanings - "a group of
+#   ten birds", a rubber/color band - that would reintroduce the abo_
+#   plate-style false positive this whole design exists to avoid).
+#
+#   Round 5: even with that word list fixed, a live regeneration run
+#   still produced real misses - "a person listening to a box with
+#   earphones" (radio) with no descriptor, despite "person" being right
+#   there in the text and squarely in the word list. The actual bug was
+#   structural, not lexical: the human-clause decision ran on the scene
+#   BEFORE LocalLLMRewriter.rewrite_batch rephrased it, and the clause was
+#   then just carried through unchanged, paired with whatever the rewrite
+#   produced. If rewriting introduced a person that wasn't explicit in the
+#   original scene (very plausible - rewriting adds narrative specificity,
+#   and "a box with earphones" is a short step from "a person listening to
+#   a box with earphones"), the decision was already stale by the time the
+#   final prompt existed. Fixed by moving the decision to run on the LAST
+#   text before image generation - attach_human_clauses takes already-
+#   rewritten visuals, not the pre-rewrite concepts build_variant_visuals
+#   started from.
 #
 # illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
 # per word) produces --count DIFFERENT candidate scenes in one call, not
@@ -105,9 +135,9 @@
 #      on an LLM step.
 #
 # The human-diversity clause is kept structurally separate from step 3
-# (build_variant_drafts returns (visual, clause) pairs, and the rewrite in
-# generate.py only ever sees `visual`) after the abo_plate ("plate/bowl")
-# smoke test caught it going badly wrong: a person's portrait came back
+# (attach_human_clauses returns (visual, clause) pairs, and rewrite_batch
+# in generate.py only ever sees plain visual strings) after the abo_plate
+# ("plate/bowl") smoke test caught it going badly wrong: a person's portrait came back
 # painted where the plate should have been, in multiple styles. Two
 # compounding causes, both fixed:
 #   - the clause used to be a conditional sentence ("if the illustration
@@ -130,6 +160,19 @@ import re
 from . import config
 from .styles import ArtStyle
 
+# An enumerated list, not a suffix/pattern heuristic (e.g. "words ending in
+# -er/-or often name a person") - that would catch "teacher"/"singer" but
+# also "mirror"/"computer"/"ladder", reintroducing the exact false-positive
+# failure this project already paid for once (a keyword match landing on
+# an inanimate object's scene and getting a person's portrait painted onto
+# it - see the abo_plate/"plate" incident in this module's docstring).
+# A missed word here just means a batch defaults to the model's own bias
+# (bad, but the same failure the whole point of this function is to
+# reduce, not a new one); a false match injects a person into a scene that
+# has none (worse, and previously a real bug). Every regular-plural noun
+# below also matches its plural via the trailing `s?` in the compiled
+# pattern - "friend" catching "Friends" is what "a_we" ("we") exposed
+# missing the first time this list shipped.
 _PERSON_WORDS = [
     "person", "people", "human", "somebody", "someone", "anybody",
     "man", "men", "woman", "women", "boy", "girl", "child", "children", "kid", "kids", "baby", "babies", "infant",
@@ -137,13 +180,26 @@ _PERSON_WORDS = [
     "son", "daughter", "husband", "wife", "bride", "groom",
     "uncle", "aunt", "cousin", "grandmother", "grandfather", "grandparent",
     "friend", "neighbor", "neighbour", "stranger", "guest", "visitor",
-    "teacher", "student", "pupil", "farmer", "trader", "hunter", "doctor",
-    "nurse", "worker", "servant", "priest", "prophet", "king", "queen",
-    "chief", "elder", "leader", "ruler", "soldier", "warrior", "thief",
-    "beggar", "widow", "orphan", "twin", "youth", "adult",
-    "he", "she", "him", "her", "his", "they", "them", "their",
+    "teacher", "student", "pupil", "classmate", "colleague",
+    "farmer", "trader", "hunter", "doctor", "nurse", "worker", "villager",
+    "servant", "priest", "prophet", "king", "queen",
+    "chief", "elder", "leader", "ruler", "soldier", "warrior", "guard", "officer",
+    "thief", "beggar", "widow", "orphan", "twin", "youth", "adult", "citizen", "tourist",
+    "athlete", "player", "performer", "singer", "dancer", "musician", "artist",
+    "family", "families", "team", "crowd", "audience", "choir",
+    # Deliberately NOT here: "group", "band" - both have common non-human
+    # meanings in exactly this kind of scene text ("a group of ten birds",
+    # a rubber/color band), so including them would trade a missed
+    # descriptor for the worse failure (a person injected into a non-human
+    # scene) on cases already seen in this project's own output. Same
+    # reasoning ruled out "they"/"them"/"their" - a plural pronoun refers
+    # back to whatever was just mentioned, human or not ("...one more bird
+    # joining them" is what caught this in testing), where a singular
+    # gendered pronoun is a much safer bet since scene text essentially
+    # never uses "he"/"she" for an object or animal.
+    "he", "she", "him", "her", "his",
 ]
-_PERSON_PATTERN = re.compile(r"\b(" + "|".join(_PERSON_WORDS) + r")\b", re.IGNORECASE)
+_PERSON_PATTERN = re.compile(r"\b(" + "|".join(_PERSON_WORDS) + r")s?\b", re.IGNORECASE)
 
 
 def _mentions_person(text: str) -> bool:
@@ -198,21 +254,18 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
     return picks[:count]
 
 
-def build_variant_drafts(style: ArtStyle, concepts: list[str], count: int) -> list[tuple[str, str]]:
-    """Returns (visual_prompt, human_clause) pairs - kept apart so callers
-    (generate.py's LLM rewrite pass) can rewrite visual_prompt freely while
-    passing human_clause through untouched.
+def build_variant_visuals(style: ArtStyle, concepts: list[str], count: int) -> list[str]:
+    """Purely mechanical: one structurally-different visual prompt per
+    concept, sampling composition/framing/background/rendering-style slots
+    WITHOUT replacement. No human-clause decision happens here - see
+    attach_human_clauses, and its docstring on why that has to run on the
+    FINAL text, not this mechanical one.
 
     `concepts` must have exactly `count` entries, one per variant -
     illustration_scenes produces a DIFFERENT concrete scene per entry when
     the concept calls for it (e.g. "a soccer ball" / "a basketball" / "a
     beach ball" / "a tennis ball" for the category "ball"), and the same
-    scene repeated `count` times when it doesn't (e.g. "a star"). Whether
-    each one individually depicts a person is decided right here
-    (_mentions_person, per concept, not once for the whole batch) - a
-    word's scenes can mix human and non-human subjects (e.g. "twenty":
-    "a stack of ten books" alongside "a person counting ten fingers"),
-    and only the ones that actually depict someone get a descriptor."""
+    scene repeated `count` times when it doesn't (e.g. "a star")."""
     if len(concepts) != count:
         raise ValueError(f"expected {count} concepts, got {len(concepts)}")
 
@@ -221,17 +274,35 @@ def build_variant_drafts(style: ArtStyle, concepts: list[str], count: int) -> li
     framings = _sample_without_replacement(FRAMINGS, count)
     rendering_variants = _sample_without_replacement(style.rendering_variants, count)
 
-    person_flags = [_mentions_person(c) for c in concepts]
+    return [
+        f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
+        f"{style.base_prompt}, {rendering_variants[i]}."
+        for i in range(count)
+    ]
+
+
+def attach_human_clauses(visuals: list[str]) -> list[tuple[str, str]]:
+    """Returns (visual, human_clause) pairs, one per input visual.
+
+    MUST be called on the LAST text that will ever change before an image
+    is generated from it - i.e. AFTER LocalLLMRewriter.rewrite_batch, not
+    before. An earlier version decided this from the pre-rewrite concept
+    and just carried the clause through rewriting unchanged; a live run
+    showed that breaking in practice - "a box with earphones playing
+    music" (no person) got rewritten to "a person listening to a box with
+    earphones" (very much a person), and the clause decision, made before
+    that rewrite, never noticed. Deciding per FINAL visual instead of once
+    per word also still handles a batch mixing human and non-human
+    subjects (e.g. "twenty": "a stack of ten books" alongside "a person
+    counting ten fingers") - only the ones that actually depict someone,
+    in their actual final wording, get a descriptor."""
+    person_flags = [_mentions_person(v) for v in visuals]
     descriptors_needed = sum(person_flags)
     descriptor_pool = iter(_sample_without_replacement(HUMAN_DESCRIPTORS, descriptors_needed)) if descriptors_needed else iter([])
 
-    drafts = []
-    for i in range(count):
-        visual = (
-            f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
-            f"{style.base_prompt}, {rendering_variants[i]}."
-        )
-        if not person_flags[i]:
+    pairs = []
+    for visual, involves_person in zip(visuals, person_flags):
+        if not involves_person:
             clause = ""
         else:
             descriptor = next(descriptor_pool)
@@ -239,8 +310,8 @@ def build_variant_drafts(style: ArtStyle, concepts: list[str], count: int) -> li
                 clause = f"Depict {descriptor}."
             else:
                 clause = f"Depict {descriptor}, not a white Western appearance."
-        drafts.append((visual, clause))
-    return drafts
+        pairs.append((visual, clause))
+    return pairs
 
 
 def compose(visual: str, clause: str) -> str:
@@ -248,7 +319,11 @@ def compose(visual: str, clause: str) -> str:
 
 
 def build_variant_prompts(style: ArtStyle, concepts: list[str], count: int) -> list[str]:
-    return [compose(v, c) for v, c in build_variant_drafts(style, concepts, count)]
+    """Convenience for callers with no rewrite step (e.g. --no-llm mode):
+    build mechanical visuals and attach clauses to them directly, since
+    there's no later rewrite to invalidate that decision."""
+    visuals = build_variant_visuals(style, concepts, count)
+    return [compose(v, c) for v, c in attach_human_clauses(visuals)]
 
 
 _SCENE_N_LINE = re.compile(r"SCENE\s*(\d+)\s*:\s*(.+)", re.IGNORECASE)
@@ -410,8 +485,9 @@ class LocalLLMRewriter:
         not N) so the model can see the full set and is explicitly told to
         push them apart - see module docstring on why divergence, not
         average quality, is the target. Deliberately never sees the human-
-        diversity clause (build_variant_drafts keeps it separate) - an
-        earlier version passed the whole sentence through and the model
+        diversity clause (attach_human_clauses runs on the output of this
+        method, afterward, not before - see module docstring's "Round 5")
+        - an earlier version passed the whole sentence through and the model
         turned a conditional "if this depicts a person" hedge into a flat
         assertion, putting a person into an inanimate object's image (see
         module docstring). Falls back to the mechanical visual prompts
