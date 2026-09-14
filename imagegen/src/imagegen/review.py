@@ -357,7 +357,7 @@ function render(state) {
       if (state.hasExistingImage) {
         const ok = confirm(
           'This word ("' + state.wordId + '") already has an accepted ' + state.styleLabel +
-          ' image. Replace it with this candidate?\n\nThis cannot be undone - there is no version history.'
+          ' image. Replace it with this candidate?\\n\\nThis cannot be undone - there is no version history.'
         );
         if (!ok) return;
       }
