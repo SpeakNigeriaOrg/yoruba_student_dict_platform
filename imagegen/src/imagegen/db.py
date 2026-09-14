@@ -53,6 +53,21 @@ def word_by_id(conn, word_id: str):
         return dict(zip(columns, row))
 
 
+def existing_image(conn, word_id: str, art_style: str) -> bytes | None:
+    """None if this word has no accepted image yet for this style - if it
+    does, review.py must warn before letting a candidate silently replace
+    it (see accept_image's on-conflict upsert: nothing about that query
+    distinguishes "first image for this word" from "overwriting a
+    previously-accepted, possibly-already-live image")."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select image_data from word_images where word_id = %s and art_style = %s and variant_number = 1",
+            (word_id, art_style),
+        )
+        row = cur.fetchone()
+        return bytes(row[0]) if row else None
+
+
 def accept_image(conn, word_id: str, art_style: str, image_bytes: bytes):
     blob_path = f"images/{art_style}/{word_id}.png"
     with conn.cursor() as cur:

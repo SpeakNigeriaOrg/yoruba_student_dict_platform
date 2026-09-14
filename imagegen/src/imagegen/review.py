@@ -13,10 +13,21 @@
 #   - click a thumbnail  -> accept it: upserts into word_images (variant 1,
 #     the only slot exportGameContent.mjs/publishToR2.mjs read - see
 #     db.py), deletes the whole candidates/{art_style}/{word_id}/ dir, and
-#     advances.
+#     advances. IMPORTANT: candidates/ can and does contain words that
+#     already have an accepted (possibly already-live/published) image -
+#     generate.py's queue is normally "words missing one", but --words can
+#     target anything, and a batch generated for one purpose sits in
+#     candidates/ the same as any other until reviewed. Accepting a
+#     candidate for such a word REPLACES that existing image - there is no
+#     version history. This UI warns and requires explicit confirmation
+#     before that specific action; it was originally a silent upsert with
+#     no warning at all, which is exactly the kind of thing a reviewer
+#     should be stopped and asked about, not have happen to them by
+#     surprise.
 #   - Reject all  -> deletes the candidates dir without writing to the
 #     database. The word has no image again, so the next generate.py run
 #     (which only looks at words still missing one) naturally re-queues it.
+#     Never touches an existing accepted image - safe regardless.
 #   - Skip / Prev  -> move the review queue without touching anything on
 #     disk or in the database.
 import argparse
@@ -50,19 +61,22 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
 
     def current_state():
         word_dir = current_word_dir()
+        word_id = state["queue"][state["index"]] if word_dir else None
         # encoding="utf-8" matters: manifest.json is written utf-8/non-ascii
         # (Yoruba diacritics) by generate.py, and Windows' default locale
-        # encoding can't represent that - see generate.py's _load_skipped.
+        # encoding can't represent that - see generate.py's effective_gloss.
         manifest = json.loads((word_dir / "manifest.json").read_text(encoding="utf-8")) if word_dir else None
         variants = sorted(p.name for p in word_dir.glob("v*.png")) if word_dir else []
+        has_existing_image = word_id is not None and db.existing_image(conn, word_id, art_style) is not None
         return {
             "index": state["index"],
             "queueLength": len(state["queue"]),
-            "wordId": state["queue"][state["index"]] if word_dir else None,
+            "wordId": word_id,
             "manifest": manifest,
             "variants": variants,
             "styleLabel": style.label,
             "reviewRubric": style.review_rubric,
+            "hasExistingImage": has_existing_image,
         }
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -103,6 +117,22 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if path == "/existing-image":
+                # Only ever the CURRENT word's own existing DB row - same
+                # posture as /candidate-image/, no client-supplied word_id.
+                word_dir = current_word_dir()
+                word_id = state["queue"][state["index"]] if word_dir else None
+                data = db.existing_image(conn, word_id, art_style) if word_id else None
+                if data is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             self.send_response(404)
             self.end_headers()
 
@@ -123,6 +153,14 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                     self._send_json({"error": "no such variant"}, 400)
                     return
                 word_id = state["queue"][state["index"]]
+                # Re-check server-side, not just trust the client's last-seen
+                # state - never silently replace an existing accepted image
+                # without an explicit, informed confirmation for THIS request.
+                if db.existing_image(conn, word_id, art_style) is not None and not payload.get("confirmOverwrite"):
+                    self._send_json(
+                        {"error": "existing image present - resend with confirmOverwrite: true to replace it"}, 409,
+                    )
+                    return
                 db.accept_image(conn, word_id, art_style, variant_path.read_bytes())
                 shutil.rmtree(word_dir)
                 print(f"Accepted {variant} for {word_id}")
@@ -181,6 +219,9 @@ PAGE_HTML = """<!doctype html>
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb .prompt { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 0.7rem; padding: 4px; max-height: 40%; overflow: hidden; }
   #done { font-size: 1.3rem; padding: 2rem; text-align: center; }
+  #existing-warning { display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #3a1f1f; border-left: 3px solid #d55; border-radius: 4px; font-size: 0.85rem; color: #fdd; align-items: center; gap: 12px; }
+  #existing-warning img { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; border: 2px solid #d55; flex-shrink: 0; }
+  #existing-warning b { color: #fff; }
 </style>
 </head>
 <body>
@@ -195,6 +236,10 @@ PAGE_HTML = """<!doctype html>
     <div id="progress"></div>
   </div>
   <div id="rubric-bar"><b id="style-label"></b> - judge these against this style's own bar, not a generic "looks nice": <span id="rubric-text"></span></div>
+  <div id="existing-warning">
+    <img id="existing-thumb" alt="existing image">
+    <div><b>This word already has an accepted image.</b> Clicking a candidate below will PERMANENTLY REPLACE it - there is no version history. You'll be asked to confirm.</div>
+  </div>
   <div id="grid"></div>
   <div id="done" style="display:none">Queue empty. Run generate.py for more words, then re-run this review.</div>
 
@@ -212,6 +257,7 @@ function render(state) {
   if (!state.wordId) {
     document.getElementById('word-bar').style.display = 'none';
     document.getElementById('rubric-bar').style.display = 'none';
+    document.getElementById('existing-warning').style.display = 'none';
     document.getElementById('grid').style.display = 'none';
     document.getElementById('done').style.display = 'block';
     return;
@@ -222,6 +268,14 @@ function render(state) {
   document.getElementById('progress').textContent = (state.index + 1) + ' / ' + state.queueLength;
   document.getElementById('style-label').textContent = state.styleLabel;
   document.getElementById('rubric-text').textContent = state.reviewRubric;
+
+  const warning = document.getElementById('existing-warning');
+  if (state.hasExistingImage) {
+    document.getElementById('existing-thumb').src = '/existing-image?_=' + state.wordId;
+    warning.style.display = 'flex';
+  } else {
+    warning.style.display = 'none';
+  }
 
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
@@ -235,11 +289,31 @@ function render(state) {
     promptDiv.className = 'prompt';
     promptDiv.textContent = (m.prompts && m.prompts[i]) || '';
     div.appendChild(promptDiv);
-    div.onclick = async () => render(await fetchJson('/api/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variant: filename }),
-    }));
+    div.onclick = async () => {
+      // A word already carrying an accepted (possibly already-live) image
+      // gets an explicit, informed confirmation before that image is
+      // permanently replaced - never a silent one-click overwrite.
+      if (state.hasExistingImage) {
+        const ok = confirm(
+          'This word ("' + state.wordId + '") already has an accepted ' + state.styleLabel +
+          ' image. Replace it with this candidate?\n\nThis cannot be undone - there is no version history.'
+        );
+        if (!ok) return;
+      }
+      const result = await fetchJson('/api/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant: filename, confirmOverwrite: state.hasExistingImage }),
+      });
+      if (result.error) {
+        // Server-side re-check refused it (e.g. a concurrent change) -
+        // surface that rather than rendering a malformed state.
+        alert('Not saved: ' + result.error);
+        render(await fetchJson('/api/state'));
+        return;
+      }
+      render(result);
+    };
     grid.appendChild(div);
   });
 }
