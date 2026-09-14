@@ -15,7 +15,30 @@ def connect():
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL is not set.")
-    return psycopg.connect(database_url)
+    # review.py holds one connection open for an entire interactive review
+    # session, which can sit idle for arbitrarily long stretches (a human
+    # looking at images, thinking) - long enough, in practice, for a cloud
+    # Postgres connection to die silently over the network. Without
+    # keepalives, the next query on a connection like that doesn't error,
+    # it just hangs forever (and since review.py's server is single-
+    # threaded, that hang blocks every other request too - the whole UI
+    # freezes with no error message and no way to recover short of
+    # restarting the process). TCP keepalives make the OS detect a dead
+    # peer within ~20s worst case (idle 10s, then up to 2 probes 5s apart)
+    # and surface it as a real error instead - see review.py's reconnect
+    # wrapper for what happens with that error once raised.
+    # autocommit=True matters beyond style: psycopg defaults to opening an
+    # implicit transaction on the first statement and leaving it open
+    # until an explicit commit/rollback. review.py's read-only calls
+    # (existing_image, words_needing_image, word_by_id) never committed,
+    # so between clicks the connection sat "idle in transaction" - exactly
+    # the kind of session a cloud Postgres (or a pooler in front of it) is
+    # liable to kill outright, which is a plausible reason the connection
+    # went stale in the first place, not just an innocent side effect.
+    return psycopg.connect(
+        database_url, connect_timeout=10, autocommit=True,
+        keepalives=1, keepalives_idle=10, keepalives_interval=5, keepalives_count=2,
+    )
 
 
 def words_needing_image(conn, art_style: str, word_ids: list[str] | None = None):

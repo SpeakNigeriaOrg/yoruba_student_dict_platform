@@ -37,6 +37,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
+import psycopg
+
 from . import config, db, styles
 
 CANDIDATES_DIR = Path(__file__).resolve().parent.parent.parent / "candidates"
@@ -53,6 +55,29 @@ def list_queue(art_style_dir: Path) -> list[str]:
 def make_handler(art_style: str, art_style_dir: Path, conn):
     style = styles.get(art_style)
     state = {"queue": list_queue(art_style_dir), "index": 0}
+    # Mutable holder, not a bare variable - reconnecting has to replace
+    # the actual connection object a closure captured by reference, and a
+    # plain local can't be reassigned from call_db without `nonlocal`
+    # sprawled across every call site.
+    conn_holder = {"conn": conn}
+
+    def call_db(fn, *args, **kwargs):
+        """Runs fn(conn, *args, **kwargs); if the connection has gone
+        stale (an interactive review session can sit idle for a long
+        time - see db.connect()'s docstring on why that matters),
+        reconnects once and retries, rather than hanging the entire
+        (single-threaded) server or leaving the UI dead with no way to
+        recover short of restarting the process."""
+        try:
+            return fn(conn_holder["conn"], *args, **kwargs)
+        except psycopg.Error as exc:
+            print(f"  (DB error ({exc}) - reconnecting and retrying once)")
+            try:
+                conn_holder["conn"].close()
+            except Exception:  # noqa: BLE001 - already broken, closing is best-effort
+                pass
+            conn_holder["conn"] = db.connect()
+            return fn(conn_holder["conn"], *args, **kwargs)
 
     def current_word_dir():
         if state["index"] >= len(state["queue"]):
@@ -67,7 +92,7 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
         # encoding can't represent that - see generate.py's effective_gloss.
         manifest = json.loads((word_dir / "manifest.json").read_text(encoding="utf-8")) if word_dir else None
         variants = sorted(p.name for p in word_dir.glob("v*.png")) if word_dir else []
-        has_existing_image = word_id is not None and db.existing_image(conn, word_id, art_style) is not None
+        has_existing_image = word_id is not None and call_db(db.existing_image, word_id, art_style) is not None
         return {
             "index": state["index"],
             "queueLength": len(state["queue"]),
@@ -122,7 +147,7 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                 # posture as /candidate-image/, no client-supplied word_id.
                 word_dir = current_word_dir()
                 word_id = state["queue"][state["index"]] if word_dir else None
-                data = db.existing_image(conn, word_id, art_style) if word_id else None
+                data = call_db(db.existing_image, word_id, art_style) if word_id else None
                 if data is None:
                     self.send_response(404)
                     self.end_headers()
@@ -156,12 +181,12 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                 # Re-check server-side, not just trust the client's last-seen
                 # state - never silently replace an existing accepted image
                 # without an explicit, informed confirmation for THIS request.
-                if db.existing_image(conn, word_id, art_style) is not None and not payload.get("confirmOverwrite"):
+                if call_db(db.existing_image, word_id, art_style) is not None and not payload.get("confirmOverwrite"):
                     self._send_json(
                         {"error": "existing image present - resend with confirmOverwrite: true to replace it"}, 409,
                     )
                     return
-                db.accept_image(conn, word_id, art_style, variant_path.read_bytes())
+                call_db(db.accept_image, word_id, art_style, variant_path.read_bytes())
                 shutil.rmtree(word_dir)
                 print(f"Accepted {variant} for {word_id}")
                 state["index"] = min(state["index"] + 1, len(state["queue"]))
@@ -354,7 +379,14 @@ def main():
     try:
         server.serve_forever()
     finally:
-        conn.close()
+        # Best-effort - call_db may have already replaced/closed this
+        # exact connection object during a reconnect (see make_handler),
+        # in which case closing it again here is a harmless no-op, not
+        # something worth crashing shutdown over.
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":
