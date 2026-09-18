@@ -199,6 +199,56 @@ describe('AddWord - Word tab', () => {
       expect(body.citation).toEqual({ exemptReason: 'recent loanword' });
     });
 
+    describe('the extended definition follows the student definition by default', () => {
+      it('mirrors as it is typed, and is submitted as its own field', async () => {
+        const fetchMock = mockFetch();
+        vi.stubGlobal('fetch', fetchMock);
+        const user = userEvent.setup();
+
+        render(<AddWord />);
+        await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+        await user.type(screen.getByLabelText('Spelling'), 'redio');
+        await user.type(screen.getByLabelText(/Word ID hint/), 'radio');
+        await user.type(screen.getByLabelText(/not in Wiktionary/), 'recent loanword');
+
+        await user.type(screen.getByLabelText('Student definition'), 'a device for listening to broadcasts');
+        expect((screen.getByLabelText('Extended definition') as HTMLInputElement).value).toBe(
+          'a device for listening to broadcasts',
+        );
+
+        await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added redio_radio'));
+        const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+        expect(body.definition).toBe('a device for listening to broadcasts');
+        expect(body.englishGloss).toBe('a device for listening to broadcasts');
+      });
+
+      it('stops following once the extended definition is edited directly, and offers the mirrored value back', async () => {
+        const fetchMock = mockFetch();
+        vi.stubGlobal('fetch', fetchMock);
+        const user = userEvent.setup();
+
+        render(<AddWord />);
+        await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+        await user.type(screen.getByLabelText('Student definition'), 'a radio');
+        // Nothing to undo while it is still a copy.
+        expect(screen.queryByRole('button', { name: /Use the student definition/ })).toBeNull();
+
+        await user.type(screen.getByLabelText('Extended definition'), '; a broadcasting apparatus');
+        // Editing the student definition afterwards must not overwrite the diverged wording.
+        await user.type(screen.getByLabelText('Student definition'), ', for listening');
+        expect((screen.getByLabelText('Extended definition') as HTMLInputElement).value).toBe(
+          'a radio; a broadcasting apparatus',
+        );
+
+        await user.click(screen.getByRole('button', { name: /Use the student definition/ }));
+        expect((screen.getByLabelText('Extended definition') as HTMLInputElement).value).toBe(
+          'a radio, for listening',
+        );
+        expect(screen.queryByRole('button', { name: /Use the student definition/ })).toBeNull();
+      });
+    });
+
     it('opens with the word that was just searched for, not an empty box', async () => {
       // Reaching this branch means "I looked for this and it is not there", so the spelling is the
       // query. It used to clear the field and ask for it again, at the one moment the answer was
@@ -773,11 +823,11 @@ describe('AddWord - a phrase is spelled from its components until it is not', ()
 const definitionField = () => screen.getByLabelText('Student definition') as HTMLTextAreaElement;
 
 describe('AddWord - the student definition of a phrase', () => {
-  it('follows the English gloss as it is typed, and is submitted as its own field', async () => {
+  it('follows the extended definition as it is typed, and is submitted as its own field', async () => {
     const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
     const user = await phraseWithComponents(2, fetchMock);
 
-    await user.type(screen.getByLabelText('English gloss'), 'the sky, the firmament');
+    await user.type(screen.getByLabelText('Extended definition'), 'the sky, the firmament');
     expect(definitionField().value).toBe('the sky, the firmament');
 
     await user.type(screen.getByLabelText('Word ID hint'), 'sky');
@@ -794,13 +844,13 @@ describe('AddWord - the student definition of a phrase', () => {
   it('keeps a simplification, and stops following the gloss once there is one', async () => {
     const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
     const user = await phraseWithComponents(2, fetchMock);
-    await user.type(screen.getByLabelText('English gloss'), 'the sky, the firmament');
+    await user.type(screen.getByLabelText('Extended definition'), 'the sky, the firmament');
     await user.clear(definitionField());
     await user.type(definitionField(), 'the sky');
 
     // Editing the gloss afterwards must not overwrite the simpler wording - that is the whole
     // difference between a default and a derivation.
-    await user.type(screen.getByLabelText('English gloss'), '; the heavens');
+    await user.type(screen.getByLabelText('Extended definition'), '; the heavens');
     expect(definitionField().value).toBe('the sky');
 
     await user.type(screen.getByLabelText('Word ID hint'), 'sky');
@@ -814,7 +864,7 @@ describe('AddWord - the student definition of a phrase', () => {
 
   it('offers the dictionary wording back once the two differ', async () => {
     const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
-    await user.type(screen.getByLabelText('English gloss'), 'the firmament');
+    await user.type(screen.getByLabelText('Extended definition'), 'the firmament');
     // Nothing to undo while it is still a copy.
     expect(screen.queryByRole('button', { name: /Use the dictionary wording/ })).toBeNull();
 

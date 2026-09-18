@@ -260,6 +260,13 @@ function WordTab({
    * the person adding it knows the answer, rather than a reconstruction job later. */
   const [pos, setPos] = useState('');
   const [englishGloss, setEnglishGloss] = useState('');
+  /** Whether the extended definition has been typed into directly, rather than just following the
+   * student definition. Same pattern as the Phrase tab's `definitionEdited` (see PhraseDraft),
+   * mirrored in the opposite direction: there, the dictionary wording is the thing adopted from
+   * upstream and the student definition defaults to a copy of it; here there is no upstream wording
+   * at all; the student definition is the only thing this branch asks a person to actually compose,
+   * so it is the one that defaults forward instead. */
+  const [glossEdited, setGlossEdited] = useState(false);
   /** The optional decomposition: which words the dictionary already holds that this one is built
    * from. Empty for most words, because most words are atomic - see createWord.ts on why that is
    * zero rows rather than a placeholder, and why recording it here does not decide the axis. */
@@ -353,6 +360,7 @@ function WordTab({
     setExemptReason('');
     setPos('');
     setEnglishGloss('');
+    setGlossEdited(false);
     setOffPath(false);
     setDuplicates(null);
     setComponents([]);
@@ -588,7 +596,12 @@ function WordTab({
             <textarea
               id="word-definition-field"
               value={definitionText}
-              onChange={(e) => setDefinitionText(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDefinitionText(next);
+                // Follows into the extended definition by default - see glossEdited's own note.
+                if (offPath && !glossEdited) setEnglishGloss(next);
+              }}
             />
             <p className="field-note">
               Plain wording a student will understand. Simplifying Wiktionary's wording is expected - it is a
@@ -598,6 +611,40 @@ function WordTab({
 
           {offPath ? (
             <>
+              <div className="field">
+                <label htmlFor="word-gloss-field">Extended definition</label>
+                <input
+                  id="word-gloss-field"
+                  type="text"
+                  value={englishGloss}
+                  onChange={(e) => {
+                    setEnglishGloss(e.target.value);
+                    setGlossEdited(true);
+                  }}
+                  placeholder="e.g. radio"
+                />
+                <p className="field-note">
+                  Ordinary dictionary wording, for the entry we would send upstream one day. Starts as a copy of
+                  the student definition above - write something separate here only when the two should actually
+                  differ. A word with no Wiktionary entry has this recorded nowhere else.
+                </p>
+                {/* The same undo the Phrase tab's dictionary-wording field has, offered on the same
+                    condition: only once the two have actually come apart. */}
+                {glossEdited && definitionText.trim() && englishGloss !== definitionText ? (
+                  <p className="field-note">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setEnglishGloss(definitionText);
+                        setGlossEdited(false);
+                      }}
+                    >
+                      Use the student definition ({definitionText})
+                    </button>
+                  </p>
+                ) : null}
+              </div>
               <div className="field">
                 <label htmlFor="word-exempt-field">Why is this word not in Wiktionary?</label>
                 <input
@@ -609,20 +656,6 @@ function WordTab({
                 />
               </div>
               <PartOfSpeechField id="word-pos-field" value={pos} onChange={setPos} />
-              <div className="field">
-                <label htmlFor="word-gloss-field">English gloss</label>
-                <input
-                  id="word-gloss-field"
-                  type="text"
-                  value={englishGloss}
-                  onChange={(e) => setEnglishGloss(e.target.value)}
-                  placeholder="e.g. radio"
-                />
-                <p className="field-note">
-                  Ordinary dictionary wording, for the entry we would send upstream one day - not the simplified
-                  student definition above. A word with no Wiktionary entry has this recorded nowhere else.
-                </p>
-              </div>
             </>
           ) : null}
 
@@ -1348,7 +1381,7 @@ function PhraseTab({
             }
           />
           <div className="field">
-            <label htmlFor="phrase-gloss-field">English gloss</label>
+            <label htmlFor="phrase-gloss-field">Extended definition</label>
             <input
               id="phrase-gloss-field"
               type="text"

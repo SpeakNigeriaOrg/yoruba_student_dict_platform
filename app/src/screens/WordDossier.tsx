@@ -107,7 +107,7 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
                 by an offline export script - so nobody could check them. */}
             <dt>Part of speech</dt>
             <dd>{dossier.pos ?? '(from the pin)'}</dd>
-            <dt>English gloss</dt>
+            <dt>Extended definition</dt>
             <dd>{dossier.englishGloss ?? '(from the pin)'}</dd>
             <dt>Etymid label</dt>
             <dd>{dossier.etymidLabel ?? '(derived from the word_id)'}</dd>
