@@ -64,9 +64,14 @@ export interface EtymologyReviewResult {
    * the `[wordId]` test in two places and falling back to printing word_ids when it had no label
    * for one, and this screen's own rule is that a component is shown as the word, not the key.
    *
+   * Carries `definition` for the same reason componentsProposal.resolvedDefinition does: a
+   * spelling is not a word. `sùn` alone is at least three things (sleep, aim, complain), and this
+   * IS what got confirmed as a part - showing only the spelling would tell a reader which word was
+   * picked no better than the proposal did before resolvedDefinition existed.
+   *
    * Kept as a separate field rather than a change to `components`, whose shape componentsAxisFields
    * owns and other callers read. */
-  componentsOnRecord: Array<{ wordId: string; displayText: string }>;
+  componentsOnRecord: Array<{ wordId: string; displayText: string; definition: string | null }>;
   /** Whether each of the platform's review axes already has a
    * word_decisions row for this word - shown as read-only context so a
    * curator reviewing etymology (the only axis this screen has an
@@ -148,6 +153,10 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     componentsOnRecord:
       fields.components.length === 1 && fields.components[0] === wordId
         ? []
-        : fields.components.map((id) => ({ wordId: id, displayText: vocab[id]?.displayText ?? id })),
+        : fields.components.map((id) => ({
+            wordId: id,
+            displayText: vocab[id]?.displayText ?? id,
+            definition: vocab[id]?.definition ?? null,
+          })),
   };
 }

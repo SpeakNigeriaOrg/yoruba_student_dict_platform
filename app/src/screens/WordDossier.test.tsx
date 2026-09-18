@@ -195,6 +195,29 @@ function mountWithConsensus(groups: ConsensusGroup[], over: Partial<Dossier> = {
   return fetchMock;
 }
 
+describe('the Composition section shows which word a part is, not just its spelling', () => {
+  it("shows a component's own definition next to it", async () => {
+    // sùn alone is at least three things (sleep, aim, complain) - the spelling does not say
+    // which one was actually confirmed as this word's part.
+    mount({
+      components: [
+        { wordId: 'sun_sleep', displayText: 'sùn', position: 0, definition: 'to sleep' },
+        { wordId: 'ekun_tears', displayText: 'ẹkún', position: 1, definition: 'tears' },
+      ],
+    });
+    const composition = await waitFor(() => screen.getByLabelText('Composition'));
+    expect(composition).toHaveTextContent('sùn sun_sleep — to sleep');
+    expect(composition).toHaveTextContent('ẹkún ekun_tears — tears');
+  });
+
+  it('shows nothing extra for a component with no definition of its own yet', async () => {
+    mount({ components: [{ wordId: 'sun_sleep', displayText: 'sùn', position: 0, definition: null }] });
+    const composition = await waitFor(() => screen.getByLabelText('Composition'));
+    expect(composition).toHaveTextContent('sùn');
+    expect(composition).not.toHaveTextContent('—');
+  });
+});
+
 const ENTRY = (over: Partial<Extract<ContributionOutcome, { kind: 'entry' }>> = {}): ContributionOutcome => ({
   kind: 'entry',
   displayText: 'ọwọ́',

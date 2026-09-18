@@ -387,6 +387,10 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const [claimsHasParts, setClaimsHasParts] = useState(false);
   const [answerRecorded, setAnswerRecorded] = useState(false);
   const [selectedCandidateWordIds, setSelectedCandidateWordIds] = useState<Record<string, string>>({});
+  /** Closed by default on an already-settled word - see decidedAndSettled below. Opened
+   * deliberately, the same pattern as showCustomComponents, so reconsidering is always one
+   * click away rather than gone. */
+  const [showReconsider, setShowReconsider] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,6 +402,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setClaimsHasParts(false);
     setAnswerRecorded(false);
     setSelectedCandidateWordIds({});
+    setShowReconsider(false);
     getEtymologyReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -587,6 +592,17 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const proposalFullyResolves = hasProposal && unresolvedProposalForms.length === 0;
   /** Drafted words that a curator still has to approve. Reported, never blocking. */
   const pendingPhraseWordCount = draftComponents.filter((id) => draftLabels[id]?.pending).length;
+  /** Nothing left to re-litigate on a first look: a curator already decided this axis, what they
+   * decided matches what's on record (checked above, in "What we have on record"), and Wiktionary
+   * does not currently contradict it. This is the exact case that read as "did this even save?" -
+   * the record was shown once, correctly, and then immediately followed by a full "Is this
+   * breakdown right?" review UI at the same visual weight as a word nobody has ever looked at.
+   * Collapsing it behind `showReconsider` does not hide anything permanently; reconsidering upstream
+   * is still one click away, just not the first thing on screen for a word already settled.
+   * Excludes sourcesDisagree on purpose - a decided word that upstream now contradicts is worth
+   * surfacing, not hiding. Phrases are unaffected: they have no separate proposal-comparison UI to
+   * collapse in the first place. */
+  const decidedAndSettled = !isPhrase && hasRealExistingComponents && review?.axisDecided.etymology === true && !sourcesDisagree;
 
   if (error) return <p role="alert" className="error-banner">Couldn't load etymology data: {error}</p>;
   if (!review) return <p>Loading etymology data...</p>;
@@ -648,6 +664,10 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               // tells the two apart.
               <li key={`${i}-${c.wordId}`}>
                 <strong>{c.displayText}</strong>
+                {/* The spelling alone does not say which word this is - sùn is at least three
+                    things (sleep, aim, complain), and one of those three is what was actually
+                    confirmed here. Same reasoning as componentsProposal.resolvedDefinition. */}
+                {c.definition ? ` — ${c.definition}` : ''}
               </li>
             ))}
           </ul>
@@ -659,7 +679,18 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         </div>
       ) : null}
 
-      {isPhrase ? null : (
+      {/* The reconsider toggle. Shown only in place of the section it opens - both never appear
+          at once, so there is never a moment where the record above and a fully-open "is this
+          right?" review sit on screen together implying the record might not have stuck. */}
+      {decidedAndSettled && !showReconsider ? (
+        <p className="field-note">
+          <button type="button" className="btn btn-secondary" onClick={() => setShowReconsider(true)}>
+            Compare against Wiktionary&apos;s proposal
+          </button>
+        </p>
+      ) : null}
+
+      {isPhrase || (decidedAndSettled && !showReconsider) ? null : (
         <>
           <h3>{hasRealExistingComponents ? 'What Wiktionary suggests instead' : 'What Wiktionary suggests this is built from'}</h3>
           {review.componentsProposal.length === 0 ? (
@@ -699,7 +730,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         </>
       )}
 
-      {review.etymologyText && !isPhrase ? (
+      {review.etymologyText && !isPhrase && !(decidedAndSettled && !showReconsider) ? (
         <div aria-label="Kaikki etymology note">
           <p>Wiktionary also describes where this word comes from, in prose:</p>
           <p><em>{review.etymologyText}</em></p>
@@ -761,6 +792,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         * Confirming atomic is the one answer that always applies, because it is a
         * positive claim about the word ("it has no parts") rather than a response
         * to a proposal. */}
+      {decidedAndSettled && !showReconsider ? null : (
+        <>
       <h3>
         {isPhrase
           ? 'Which words is this phrase made of?'
@@ -784,10 +817,16 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       ) : null}
       {hasProposal && !proposalFullyResolves ? (
         <p className="field-note" aria-label="Parts not in the dictionary">
+          {/* Not "is not in the dictionary yet" - that is only ONE of the three reasons a part can
+              fail to resolve (see ProposalItemRow above: missing, ambiguous, or tone-mismatched),
+              and stating it unconditionally was flatly wrong for the other two - an ambiguous part
+              (more than one existing word spelled that way) IS in the dictionary; which one is
+              meant is what's unresolved. Points back at the per-item reason instead of re-asserting
+              a specific one that may not apply. */}
           {unresolvedProposalForms.length === 1 ? 'One part of this breakdown' : 'Some parts of this breakdown'} (
-          <strong>{unresolvedProposalForms.join(', ')}</strong>) {unresolvedProposalForms.length === 1 ? 'is' : 'are'} not
-          in the dictionary yet, so the breakdown can't be accepted as it stands. Build the list below - you can add a
-          missing part straight from Wiktionary.
+          <strong>{unresolvedProposalForms.join(', ')}</strong>) {unresolvedProposalForms.length === 1 ? "isn't" : "aren't"}{' '}
+          resolved to one specific word (see above), so the breakdown can't be accepted as it stands. Build the list
+          below - you can add a missing part straight from Wiktionary.
         </p>
       ) : null}
       <div className="btn-row">
@@ -837,6 +876,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           </button>
         ) : null}
       </div>
+        </>
+      )}
       {/* No longer opened as a side effect of the notes panel.
         *
         * `isCurator && showTools` used to be a third way in here, so expanding a panel

@@ -172,6 +172,10 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
                     {c.displayText}
                   </button>{' '}
                   <span className="word-id">{c.wordId}</span>
+                  {/* The spelling alone does not say which word this is - sùn is at least three
+                      things (sleep, aim, complain). See getEtymologyReview.ts's
+                      resolvedDefinition for the same fix on the review screen this mirrors. */}
+                  {c.definition ? <span className="field-note"> — {c.definition}</span> : null}
                 </li>
               ))}
             </ul>

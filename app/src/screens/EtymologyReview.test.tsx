@@ -1089,3 +1089,114 @@ describe('EtymologyReview', () => {
     expect(etymologyCallCount).toBe(2);
   });
 });
+
+describe('a confirmed part is shown as a specific word, not just a spelling', () => {
+  it("shows the recorded component's own definition next to it", async () => {
+    // sùn alone is at least three things (sleep, aim, complain) - the spelling on its own
+    // does not say which one was actually confirmed as this word's part.
+    const fixture = {
+      ...etymologyConfirmedFixture,
+      componentsOnRecord: [{ wordId: 'fixturegenconfirmed_part_word', displayText: 'sùn', definition: 'to sleep' }],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+
+    expect(screen.getByLabelText('Recorded components')).toHaveTextContent('sùn — to sleep');
+  });
+
+  it('shows nothing extra when the confirmed component has no definition of its own yet', async () => {
+    const fixture = {
+      ...etymologyConfirmedFixture,
+      componentsOnRecord: [{ wordId: 'fixturegenconfirmed_part_word', displayText: 'sùn', definition: null }],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+
+    expect(screen.getByLabelText('Recorded components')).toHaveTextContent('sùn');
+    expect(screen.getByLabelText('Recorded components')).not.toHaveTextContent('—');
+  });
+});
+
+describe('an already-settled word does not re-open the whole review on every visit', () => {
+  // A word whose etymology axis is already decided, whose confirmed components match what's
+  // on record, and where Wiktionary's own proposal does not contradict it - the reported bug:
+  // returning to "Review this word" showed the confirmed record and then, immediately below
+  // it, a full "Is this breakdown right?" panel at the same weight as a word nobody had ever
+  // looked at, which read as "did this even save?"
+  const settledFixture = {
+    ...etymologyConfirmedFixture,
+    axisDecided: { entry: false, etymology: true, audio: false },
+    // Two parts, like the reported word (sunkún = sun + ẹkún) - hasProposal requires more than
+    // one candidate, and one of them (sùn) is ambiguous while the other resolves cleanly.
+    componentsOnRecord: [
+      { wordId: 'fixturegenconfirmed_part_word', displayText: 'sùn', definition: 'to sleep' },
+      { wordId: 'ekun_word', displayText: 'ẹkún', definition: 'tears' },
+    ],
+    componentsProposal: [
+      {
+        kaikkiForm: 'sùn',
+        wordId: null,
+        targetSpellingConfirmed: false,
+        ambiguous: true,
+        possibleMatches: [],
+        provenance: 'etymology_template',
+        previewGlosses: [],
+        previewGlossesAreExactMatches: false,
+        resolvedDefinition: null,
+      },
+      {
+        kaikkiForm: 'ẹkún',
+        wordId: 'ekun_word',
+        targetSpellingConfirmed: true,
+        ambiguous: false,
+        possibleMatches: [],
+        provenance: 'etymology_template',
+        previewGlosses: [],
+        previewGlossesAreExactMatches: false,
+        resolvedDefinition: 'tears',
+      },
+    ],
+  };
+
+  it('starts collapsed, offering a way to reconsider rather than the full review panel', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => settledFixture }));
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+
+    // What was decided is still the first thing on screen.
+    expect(screen.getByLabelText('Recorded components')).toHaveTextContent('sùn — to sleep');
+
+    // But the re-litigation UI is not open by default.
+    expect(screen.queryByRole('heading', { name: 'Is this breakdown right?' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/What Wiktionary suggests instead/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm components' })).not.toBeInTheDocument();
+
+    // And reconsidering is one click away, not gone.
+    await userEvent.setup().click(screen.getByRole('button', { name: "Compare against Wiktionary's proposal" }));
+    expect(screen.getByRole('heading', { name: 'Is this breakdown right?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm components' })).toBeInTheDocument();
+  });
+
+  it('stays open when Wiktionary contradicts what was confirmed, even though the axis is decided', async () => {
+    const disagreeing = {
+      ...settledFixture,
+      componentsProposal: [
+        { kaikkiForm: 'a', wordId: 'a_word', targetSpellingConfirmed: true, ambiguous: false, possibleMatches: [], provenance: 'etymology_template', previewGlosses: [], previewGlossesAreExactMatches: false, resolvedDefinition: null },
+        { kaikkiForm: 'b', wordId: 'b_word', targetSpellingConfirmed: true, ambiguous: false, possibleMatches: [], provenance: 'etymology_template', previewGlosses: [], previewGlossesAreExactMatches: false, resolvedDefinition: null },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => disagreeing }));
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+
+    expect(screen.getByLabelText('Sources disagree')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Is this breakdown right?' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Compare against Wiktionary's proposal" })).not.toBeInTheDocument();
+  });
+});
