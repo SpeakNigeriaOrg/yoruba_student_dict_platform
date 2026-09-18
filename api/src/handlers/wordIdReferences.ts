@@ -41,6 +41,7 @@ export interface WordIdColumn {
 export const WORD_ID_COLUMNS: WordIdColumn[] = [
   { table: 'utterances', column: 'word_id', label: 'audio recordings' },
   { table: 'word_images', column: 'word_id', label: 'images' },
+  { table: 'word_videos', column: 'word_id', label: 'videos' },
   { table: 'word_examples', column: 'word_id', label: 'example sentences' },
   { table: 'contributions', column: 'word_id', label: 'contributions (proposals, votes, evidence)' },
   { table: 'word_decisions', column: 'word_id', label: 'review decisions' },

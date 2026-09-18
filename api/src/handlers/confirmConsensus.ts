@@ -119,29 +119,35 @@ async function confirmOne(client: Queryable, item: ConfirmConsensusItem, confirm
   // bucket the group as golden/dissent and hide the winner.
   const summary = summarizeConsensus(records, null);
 
-  if (!summary.winner) {
-    return {
-      ok: false,
-      reason: 'no_clear_winner',
-      detail: summary.isTied ? 'the top claims are tied' : 'no claims',
-    };
-  }
+  // The claim being confirmed. A fingerprint means a curator picked ONE SPECIFIC claim off
+  // the tally - not necessarily the plurality winner. The Conflicts and Disputed sections
+  // offer "Settle it with this" on every claim, including the minority one, precisely so a
+  // curator can override the vote count with their own judgment ("or decide it yourself" -
+  // see ReviewQueue's own blurb); a two-way tie has no winner at all, and is exactly the case
+  // that needs one of these buttons to work. Comparing against summary.winner here, as this
+  // used to, rejected every one of those choices as "changed since you looked" even though
+  // nothing had changed - the curator's pick simply wasn't the top of the tally.
+  //
+  // No fingerprint at all is the bulk path (ReviewQueue's "Confirm N selected"), which never
+  // names a claim - there, and only there, "confirm whatever is currently winning" is the
+  // right question, so it falls back to summary.winner.
+  const target = item.expectedFingerprint
+    ? summary.tally.find((t) => t.fingerprint === item.expectedFingerprint)
+    : summary.winner;
 
-  if (item.expectedFingerprint && item.expectedFingerprint !== summary.winner.fingerprint) {
-    return {
-      ok: false,
-      reason: 'changed_since_you_looked',
-      detail: `now winning: ${summary.winner.count} vote(s) for a different outcome`,
-    };
+  if (!target) {
+    return item.expectedFingerprint
+      ? { ok: false, reason: 'changed_since_you_looked', detail: 'that claim no longer has an active supporter' }
+      : { ok: false, reason: 'no_clear_winner', detail: summary.isTied ? 'the top claims are tied' : 'no claims' };
   }
 
   const already = existing.rows[0];
-  if (already && already.value_fingerprint === summary.winner.fingerprint) {
+  if (already && already.value_fingerprint === target.fingerprint) {
     return { ok: false, reason: 'already_golden_and_unchanged' };
   }
 
-  const outcome = summary.winner.outcome;
-  const note = item.note ?? `Confirmed from ${summary.winner.count} agreeing contribution(s).`;
+  const outcome = target.outcome;
+  const note = item.note ?? `Confirmed from ${target.count} agreeing contribution(s).`;
 
   if (outcome.kind === 'entry') {
     await applyEntryOutcomeInTransaction(client, item.wordId, outcome, note, confirmedBy);
@@ -149,5 +155,5 @@ async function confirmOne(client: Queryable, item: ConfirmConsensusItem, confirm
     await applyEtymologyOutcomeInTransaction(client, item.wordId, outcome, note, confirmedBy);
   }
 
-  return { ok: true, fingerprint: summary.winner.fingerprint, agreementCount: summary.winner.count };
+  return { ok: true, fingerprint: target.fingerprint, agreementCount: target.count };
 }

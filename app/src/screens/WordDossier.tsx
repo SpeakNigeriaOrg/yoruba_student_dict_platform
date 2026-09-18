@@ -164,6 +164,10 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
             <ul className="plain-list">
               {dossier.components.map((c) => (
                 <li key={`${c.position}-${c.wordId}`}>
+                  {/* Order here is component_position, part of the record - not just display order. */}
+                  <span className="component-position" aria-hidden="true">
+                    {c.position + 1}.
+                  </span>{' '}
                   <button type="button" className="btn btn-link" onClick={() => onOpenDossier(c.wordId)}>
                     {c.displayText}
                   </button>{' '}

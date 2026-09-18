@@ -47,6 +47,16 @@ function pickComponentsFields(entry: FullDiagnosticsReportEntry): Partial<Compon
   for (const key of COMPONENTS_FIELDS) {
     if (key in entry) (picked as Record<string, unknown>)[key] = entry[key];
   }
+  // resolvedDefinition is newer still than usedInProposal (the Python engine never computed it
+  // either) - always null here per the same real-fixture fact noted below: none of these
+  // componentsProposal items resolve to a confident, spelling-confirmed wordId match, which is
+  // the only case resolvedDefinition is ever non-null.
+  if (picked.componentsProposal) {
+    picked.componentsProposal = (picked.componentsProposal as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      resolvedDefinition: null,
+    }));
+  }
   return picked;
 }
 
@@ -143,9 +153,9 @@ describe('componentsAxisFields direct unit tests', () => {
     expect(result.componentsProposal[0].ambiguous).toBe(false);
   });
 
-  it('suppresses the gloss preview once the matched target word has a confirmed spelling decision', () => {
+  it('replaces the gloss preview with the matched word\'s own definition once its spelling is confirmed', () => {
     const uniqueVocab: Vocab = {
-      owo_hand: { displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'] },
+      owo_hand: { displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'], definition: 'hand' },
       okan_heart: { displayText: 'ọkàn', syllables: ['ọ', 'kàn'] },
     };
     const uniqueIndex = buildVocabSpellingIndex(uniqueVocab);
@@ -165,7 +175,28 @@ describe('componentsAxisFields direct unit tests', () => {
       targetSpellingConfirmed: true,
       previewGlosses: [],
       previewGlossesAreExactMatches: false,
+      resolvedDefinition: 'hand',
     });
+  });
+
+  it('resolvedDefinition is null when the matched, confirmed word has no definition of its own yet', () => {
+    const uniqueVocab: Vocab = {
+      owo_hand: { displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'] },
+      okan_heart: { displayText: 'ọkàn', syllables: ['ọ', 'kàn'] },
+    };
+    const uniqueIndex = buildVocabSpellingIndex(uniqueVocab);
+    const uniqueOwners = buildComponentOwnersIndex(uniqueVocab);
+    const result = componentsAxisFields(
+      'okan_heart',
+      uniqueVocab,
+      [{ form: 'ọwọ́', provenance: 'etymology_template' }],
+      [],
+      {},
+      { owo_hand: { action: 'keep_ours' } },
+      uniqueIndex,
+      uniqueOwners,
+    );
+    expect(result.componentsProposal[0].resolvedDefinition).toBeNull();
   });
 
   it('surfaces a tone-insensitive-only coincidence as possibleMatches, never auto-resolved', () => {

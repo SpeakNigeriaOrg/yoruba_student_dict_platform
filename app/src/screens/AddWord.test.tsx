@@ -658,6 +658,24 @@ describe('AddWord - a phrase is spelled from its components until it is not', ()
     expect(spelledFromComponents()).toBe('ojú');
   });
 
+  it('lets a mis-ordered pick be reordered rather than removed and re-added', async () => {
+    // Search results do not arrive in the order a phrase is said, so getting the order wrong
+    // while picking is the ordinary case, not a mistake to punish with a rebuild.
+    const user = await phraseWithComponents(2, mockFetch({ vocabResults: TWO_WORDS }));
+    expect(spelledFromComponents()).toBe('ojú sánmà');
+
+    await user.click(screen.getByRole('button', { name: 'Move sánmà earlier' }));
+    expect(spelledFromComponents()).toBe('sánmà ojú');
+
+    // At the front, there is nowhere earlier to move it to.
+    expect(screen.getByRole('button', { name: 'Move sánmà earlier' })).toBeDisabled();
+    // And moving the trailing word later is symmetrically unavailable.
+    expect(screen.getByRole('button', { name: 'Move ojú later' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Move sánmà later' }));
+    expect(spelledFromComponents()).toBe('ojú sánmà');
+  });
+
   it('submits the default with no typing at all, as an explicit spelling and syllables', async () => {
     const fetchMock = mockFetch({ vocabResults: TWO_WORDS });
     const user = await phraseWithComponents(2, fetchMock);

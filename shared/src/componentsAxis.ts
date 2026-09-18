@@ -105,6 +105,16 @@ export interface ComponentsProposalItem {
   provenance: string;
   previewGlosses: string[];
   previewGlossesAreExactMatches: boolean;
+  /** The matched word's OWN definition, shown in place of previewGlosses once matched and
+   * spelling-confirmed (see the branch below). A Kaikki gloss preview answers "what does this
+   * spelling mean upstream"; once resolved to a specific golden_record word, that is the wrong
+   * question - Yoruba spellings are routinely homographs (kọ́ is three separate etymologies) and
+   * upstream's structured decomposition names a bare spelling, never a sense, so nothing
+   * mechanical confirms the match is even the same sense Wiktionary meant. This is the one thing
+   * that does: the record's own accepted meaning for the word this screen resolved to. Null when
+   * unresolved/unconfirmed (previewGlosses covers that case instead) or when the target has no
+   * definition of its own yet. */
+  resolvedDefinition: string | null;
 }
 
 /** Resolves one Kaikki-proposed spelling (a forward component candidate,
@@ -120,6 +130,7 @@ function resolveProposalItem(
   lexicon: KaikkiLexicon,
   overrides: DiagnosticsOverrides,
   index: VocabSpellingIndex,
+  vocab: Vocab,
 ): ComponentsProposalItem {
   const kaikkiForm = candidate.form;
 
@@ -139,11 +150,13 @@ function resolveProposalItem(
 
   let previewGlosses: string[];
   let previewGlossesAreExactMatches: boolean;
+  let resolvedDefinition: string | null = null;
   if (wordIdMatch && targetConfirmed) {
     // Once it's a real, spelling-confirmed vocab word its own definition
     // axis is the source of truth, not a Kaikki gloss preview.
     previewGlosses = [];
     previewGlossesAreExactMatches = false;
+    resolvedDefinition = vocab[wordIdMatch]?.definition ?? null;
   } else {
     const preview = previewGlossesForForm(kaikkiForm, lexicon);
     previewGlosses = preview.glosses;
@@ -159,6 +172,7 @@ function resolveProposalItem(
     provenance: candidate.provenance,
     previewGlosses,
     previewGlossesAreExactMatches,
+    resolvedDefinition,
   };
 }
 
@@ -189,9 +203,11 @@ export function componentsAxisFields(
   componentOwners: Map<string, string[]>,
 ): ComponentsAxisFieldsResult {
   const componentsProposal = (matchedComponentCandidates ?? []).map((c) =>
-    resolveProposalItem(c, lexicon, overrides, index),
+    resolveProposalItem(c, lexicon, overrides, index, vocab),
   );
-  const usedInProposal = (matchedUsedInCandidates ?? []).map((c) => resolveProposalItem(c, lexicon, overrides, index));
+  const usedInProposal = (matchedUsedInCandidates ?? []).map((c) =>
+    resolveProposalItem(c, lexicon, overrides, index, vocab),
+  );
 
   const entry = vocab[wordId];
   const ownComponents = entry.components ?? [];

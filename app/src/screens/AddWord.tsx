@@ -651,6 +651,15 @@ function WordTab({
                   components={components}
                   onAdd={(part) => setComponents((prev) => [...prev, part])}
                   onRemoveAt={(i) => setComponents(components.filter((_, j) => j !== i))}
+                  onMove={(i, direction) =>
+                    setComponents((prev) => {
+                      const target = i + direction;
+                      if (target < 0 || target >= prev.length) return prev;
+                      const next = [...prev];
+                      [next[i], next[target]] = [next[target], next[i]];
+                      return next;
+                    })
+                  }
                   onOpenWord={onOpenWord}
                   listLabel="Word components"
                   resultsAriaLabel="Word component search results"
@@ -743,6 +752,7 @@ function ComponentPicker({
   components,
   onAdd,
   onRemoveAt,
+  onMove,
   onOpenWord,
   listLabel,
   resultsAriaLabel,
@@ -753,6 +763,12 @@ function ComponentPicker({
   components: PhrasePart[];
   onAdd: (part: PhrasePart) => void;
   onRemoveAt: (index: number) => void;
+  /** Swaps the component at `index` with its neighbor in `direction`. Order here is not
+   * cosmetic - it is component_position, the primary key alongside word_id, and for a phrase
+   * it is reading order. Picking happens in whatever order a search turns candidates up, which
+   * is not always the right order, so fixing a mistake needs to be a swap rather than a
+   * remove-and-re-add-everything-after-it. */
+  onMove: (index: number, direction: -1 | 1) => void;
   /** Optional so a test can render either tab alone - the same reason AddWordProps has it. */
   onOpenWord?: (wordId: string) => void;
   listLabel: string;
@@ -785,6 +801,11 @@ function ComponentPicker({
           {components.map((c, i) => (
             // Keyed by position, not wordId - a reduplication holds the same word twice.
             <li key={`${i}-${c.wordId}`} className="search-result-row">
+              {/* The order itself, said out loud - component_position is part of the primary key,
+                  not a display nicety, and for a phrase it is reading order. */}
+              <span className="component-position" aria-hidden="true">
+                {i + 1}.
+              </span>
               {/* The word and its meaning, not the word_id. Picking a word_id IS picking one
                   etymology - that is the point - but the id is a key, and leading with it made the
                   list unreadable to anyone who does not already know our naming scheme. The meaning
@@ -794,6 +815,24 @@ function ComponentPicker({
                 <strong>{c.displayText}</strong>
                 {c.definition ? ` — ${c.definition}` : ''}
               </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => onMove(i, -1)}
+                disabled={i === 0}
+                aria-label={`Move ${c.displayText} earlier`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => onMove(i, 1)}
+                disabled={i === components.length - 1}
+                aria-label={`Move ${c.displayText} later`}
+              >
+                ↓
+              </button>
               <button type="button" className="btn btn-danger" onClick={() => onRemoveAt(i)}>
                 Remove
               </button>
@@ -1049,6 +1088,14 @@ function PhraseTab({
     setComponents(components.filter((_, i) => i !== index));
   }
 
+  function moveComponentAt(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= components.length) return;
+    const next = [...components];
+    [next[index], next[target]] = [next[target], next[index]];
+    setComponents(next);
+  }
+
   function resetForm() {
     setDraft(EMPTY_DRAFT);
     setDuplicates(null);
@@ -1166,6 +1213,7 @@ function PhraseTab({
         components={components}
         onAdd={addComponent}
         onRemoveAt={removeComponentAt}
+        onMove={moveComponentAt}
         onOpenWord={onOpenWord}
         listLabel="Phrase components"
         resultsAriaLabel="Vocab search results"

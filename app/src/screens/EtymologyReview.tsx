@@ -340,7 +340,14 @@ function ProposalItemRow({
       ) : (
         <span> — not in the dictionary yet</span>
       )}
-      {item.previewGlosses.length > 0 ? <span> ({item.previewGlosses.join('; ')})</span> : null}
+      {item.previewGlosses.length > 0 ? (
+        <span> ({item.previewGlosses.join('; ')})</span>
+      ) : item.resolvedDefinition ? (
+        // The matched word's own definition, not a Kaikki gloss - see resolvedDefinition's own
+        // note. This is what tells a reader which of a homograph's meanings this actually is,
+        // e.g. which "sùn" (sleep / aim / complain) ibùsùn is built from.
+        <span> ({item.resolvedDefinition})</span>
+      ) : null}
       {/* Adding the missing word posts to POST /api/words, which is curator-only
           both in staticwebapp.config.json and in the handler's own requireCurator.
           Offering it to a volunteer produced a live "403" at the end of a filled-in
@@ -521,6 +528,21 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setSelectedCandidateWordIds((selected) =>
       Object.fromEntries(Object.entries(selected).filter(([, wordId]) => wordId !== componentWordId)),
     );
+  }
+
+  /** Swaps the draft component at `index` with its neighbor in `direction`. Order here is
+   * saved as component_position - the primary key alongside word_id - so getting it wrong is
+   * not cosmetic, and picking happens in whatever order a search turns candidates up rather
+   * than in the order they belong. */
+  function moveDraftComponent(index: number, direction: -1 | 1) {
+    setAnswerRecorded(false);
+    setDraftComponents((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
   const isPhrase = review?.entryType === 'phrase';
@@ -859,10 +881,16 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
             <div className="selection-tray" aria-label="Selected parts tray">
               <strong>{draftComponents.length} {draftComponents.length === 1 ? 'part' : 'parts'} selected</strong>
             <ul aria-label="Draft components" className="plain-list">
-              {draftComponents.map((componentWordId) => {
+              {draftComponents.map((componentWordId, i) => {
                 const drafted = draftLabels[componentWordId];
                 return (
-                  <li key={componentWordId} className="search-result-row">
+                  <li key={`${i}-${componentWordId}`} className="search-result-row">
+                    {/* The order itself, said out loud - saved as component_position, part of the
+                        primary key, not a display nicety. A reduplication holds the same word
+                        twice, which is also why this is keyed by position rather than wordId. */}
+                    <span className="component-position" aria-hidden="true">
+                      {i + 1}.
+                    </span>
                     {/* The word, not its word_id. A requested word's id is derived and
                         deliberately never shown - it is a key, and showing it would invite
                         someone to ask for a different one, which is exactly what would break
@@ -872,6 +900,24 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
                       {drafted?.displayText ?? componentWordId}
                       {drafted?.pending ? <em> — will be added once a curator approves</em> : null}
                     </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => moveDraftComponent(i, -1)}
+                      disabled={i === 0}
+                      aria-label={`Move ${drafted?.displayText ?? componentWordId} earlier`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => moveDraftComponent(i, 1)}
+                      disabled={i === draftComponents.length - 1}
+                      aria-label={`Move ${drafted?.displayText ?? componentWordId} later`}
+                    >
+                      ↓
+                    </button>
                     <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
                       Remove
                     </button>

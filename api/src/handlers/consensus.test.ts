@@ -414,6 +414,74 @@ describe('confirmConsensus', () => {
     expect(result.confirmed).toHaveLength(1);
   });
 
+  it("lets a curator settle a conflict on the MINORITY claim, overriding the vote count", async () => {
+    // The Conflicts section's whole point: "Pick the right answer, or decide it yourself" -
+    // a curator is allowed to judge two votes wrong and one right. This used to compare
+    // whatever fingerprint the curator chose against summary.winner and reject anything
+    // that was not the plurality, which silently defeated every override: the button greyed
+    // out, came back, and nothing was ever written.
+    const wordId = await word();
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ben);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: BELLY }, cy);
+
+    const g = await group(wordId);
+    expect(g!.summary.bucket).toBe('contested');
+    expect(g!.summary.winner?.count).toBe(2); // KEEP, from ada+ben
+    const minority = g!.summary.tally.find((t) => t.count === 1)!; // BELLY, from cy alone
+    expect(minority.outcome).toMatchObject({ definitionText: 'belly' });
+
+    const result = await confirmConsensus(
+      pool,
+      { items: [{ wordId, axis: 'entry', expectedFingerprint: minority.fingerprint }] },
+      curator,
+    );
+
+    expect(result.skipped).toEqual([]);
+    expect(result.confirmed).toEqual([{ wordId, axis: 'entry', fingerprint: minority.fingerprint, agreementCount: 1 }]);
+    const written = await pool.query<{ definition: string }>('select definition from golden_record where word_id = $1', [wordId]);
+    expect(written.rows[0].definition).toBe('belly');
+  });
+
+  it('still refuses a fingerprint that names no active claim at all, even an explicit one', async () => {
+    // The distinction the fix has to preserve: overriding the vote count among REAL claims is
+    // allowed; confirming a claim nobody actually made is still a stale/bogus request.
+    const wordId = await word();
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: BELLY }, ben);
+
+    const result = await confirmConsensus(
+      pool,
+      { items: [{ wordId, axis: 'entry', expectedFingerprint: 'a-fingerprint-nobody-submitted' }] },
+      curator,
+    );
+
+    expect(result.confirmed).toEqual([]);
+    expect(result.skipped[0]).toMatchObject({ wordId, reason: 'changed_since_you_looked' });
+  });
+
+  it('lets a curator settle a TIED conflict, which has no winner at all', async () => {
+    // isTied means summary.winner is null - previously that alone produced 'no_clear_winner'
+    // before the sent fingerprint was ever examined, so neither of a tied conflict's two
+    // "Settle it with this" buttons could ever work.
+    const wordId = await word();
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: BELLY }, ben);
+
+    const g = await group(wordId);
+    expect(g!.summary.isTied).toBe(true);
+    expect(g!.summary.winner).toBeNull();
+    const chosen = g!.summary.tally.find((t) => t.outcome.kind === 'entry' && t.outcome.definitionText === 'belly')!;
+
+    const result = await confirmConsensus(
+      pool,
+      { items: [{ wordId, axis: 'entry', expectedFingerprint: chosen.fingerprint }] },
+      curator,
+    );
+
+    expect(result.confirmed).toEqual([{ wordId, axis: 'entry', fingerprint: chosen.fingerprint, agreementCount: 1 }]);
+  });
+
   it('skips a tie - there is no winner to confirm', async () => {
     const wordId = await word();
     await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
