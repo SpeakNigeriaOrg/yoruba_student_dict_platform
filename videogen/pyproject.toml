@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yoruba-videogen"
+version = "0.1.0"
+description = "Short cartoon-style text-to-video generation and review for the Yoruba dictionary's word_videos"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.10",
+  "diffusers",
+  "transformers>=4.57",
+  "accelerate>=1.12",
+  "safetensors>=0.7",
+  "sentencepiece>=0.2",
+  # MiniMax-H3's own int8 weight-only quantization recipe (transformer +
+  # Qwen3-VL conditioner) - see generate.py's load_video_pipeline.
+  "torchao>=0.18",
+  # Qwen3VLProcessor (MiniMax-H3's conditioner needs it even for text-only
+  # generation, to build mm_token_type_ids) imports this - without it the
+  # pipeline's own loader silently leaves `processor` as None instead of
+  # raising, which cost real debugging time this session before the real
+  # cause (a plain missing dependency) was found.
+  "torchvision",
+  # encode.py's own CRF/tune/audio-bitrate encoder (which replaced
+  # diffusers.utils.export_utils.encode_video - that helper offered no
+  # compression settings at all, see encode.py's docstring) is built on
+  # PyAV, not imageio/imageio-ffmpeg - Wan's export_to_video needed those
+  # instead, back when Wan was this package's backend (see MODEL_ID's
+  # history in config.py).
+  "av>=15",
+  "psycopg[binary]>=3.2",
+  "boto3>=1.35",
+  # LocalLLMRewriter's prompt-diversity logic is reused as-is rather than
+  # duplicated - see prompts.py. Path dependency assumes videogen/ and
+  # imagegen/ stay sibling directories under this repo.
+  "yoruba-imagegen",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Same reasoning as imagegen/pyproject.toml: diffusers on PyPI hasn't cut a
+# release with the MiniMax-H3 modular-pipeline classes this package
+# depends on (ModularPipeline, MiniMaxH3Transformer3DModel, confirmed
+# present on git main as of this session - diffusers 0.41.0.dev0) - track
+# main rather than pin a commit.
+[tool.uv.sources]
+diffusers = { git = "https://github.com/huggingface/diffusers" }
+torch = [{ index = "pytorch-cu130" }]
+yoruba-imagegen = { path = "../imagegen", editable = true }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

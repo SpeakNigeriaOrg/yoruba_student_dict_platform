@@ -161,11 +161,11 @@ def main():
         # whether a target already has one, and review.py's overwrite
         # warning only fires once someone's reviewing, possibly long after
         # GPU time was already spent. A heads-up here costs nothing.
-        already_have_one = [w["word_id"] for w in words if db.existing_image(conn, w["word_id"], args.art_style)]
+        already_have_one = [w["word_id"] for w in words if db.list_images(conn, w["word_id"], args.art_style)]
         if already_have_one:
             print(
-                f'Note: {len(already_have_one)} of these already have an accepted "{args.art_style}" '
-                f"image and will produce replacement candidates, not new ones: {', '.join(already_have_one)}"
+                f'Note: {len(already_have_one)} of these already have at least one accepted "{args.art_style}" '
+                f"image and will produce ADDITIONAL candidates, not replacements: {', '.join(already_have_one)}"
             )
     else:
         words = db.words_needing_image(conn, args.art_style)
@@ -189,42 +189,42 @@ def main():
     # that was removed rather than tuned again).
     if args.no_llm:
         # No illustration_scenes and no rewrite step - the mechanical
-        # visual IS the final text, so the human-clause decision can (and
-        # must) happen directly on it. Weaker than the LLM path on
+        # scene IS the final content, so the human-clause decision can
+        # (and must) happen directly on it. Weaker than the LLM path on
         # verbs/phrases/relational nouns/generic categories (see module
         # docstring) - the trade this mode makes for having no model
         # dependency at all.
-        word_drafts = {
-            w["word_id"]: prompts.attach_human_clauses(
-                prompts.build_variant_visuals(style, [effective_gloss(w)] * args.count, args.count)
-            )
+        word_prompts = {
+            w["word_id"]: prompts.build_variant_prompts(style, [effective_gloss(w)] * args.count, args.count)
             for w in words
         }
     else:
         rewriter = prompts.LocalLLMRewriter(args.llm_model)
         try:
-            word_visuals = {}
+            word_scenes = {}
             for w in words:
                 scenes = rewriter.illustration_scenes(effective_gloss(w), w["display_text"], args.count)
-                word_visuals[w["word_id"]] = prompts.build_variant_visuals(style, scenes, args.count)
+                word_scenes[w["word_id"]] = prompts.build_variant_scenes(scenes, args.count)
 
-            # Rewrite first, decide the human clause AFTER - see module
-            # docstring ("Round 5") on why this order matters: deciding
-            # before rewriting and just carrying the clause through
-            # unchanged went stale in practice ("a box with earphones" ->
-            # rewritten into "a person listening to a box with earphones",
-            # a person the pre-rewrite decision never saw).
-            word_drafts = {}
-            for word_id, visuals in word_visuals.items():
-                rewritten_visuals = rewriter.rewrite_batch(style, visuals)
-                word_drafts[word_id] = prompts.attach_human_clauses(rewritten_visuals)
+            # Rewrite the scene (content only - never style text, see
+            # module docstring "Round 7"), decide the human clause from
+            # THAT, then apply style last - see docstring ("Round 5") on
+            # why the human-clause decision runs on the rewritten content
+            # rather than the pre-rewrite concept: deciding before
+            # rewriting and just carrying the clause through unchanged
+            # went stale in practice ("a box with earphones" -> rewritten
+            # into "a person listening to a box with earphones", a person
+            # the pre-rewrite decision never saw).
+            word_prompts = {}
+            for word_id, scenes in word_scenes.items():
+                rewritten_scenes = rewriter.rewrite_batch(style, scenes)
+                styled = prompts.apply_style(style, rewritten_scenes, args.count)
+                pairs = prompts.attach_human_clauses(rewritten_scenes)
+                word_prompts[word_id] = [
+                    prompts.compose(styled[i], pairs[i][1]) for i in range(args.count)
+                ]
         finally:
             rewriter.unload()
-
-    word_prompts = {
-        word_id: [prompts.compose(visual, clause) for visual, clause in draft_pairs]
-        for word_id, draft_pairs in word_drafts.items()
-    }
 
     # Phase 2: image generation.
     pipe = load_image_pipeline(args.model)

@@ -109,6 +109,58 @@
 #   rewritten visuals, not the pre-rewrite concepts build_variant_visuals
 #   started from.
 #
+#   Round 6 (found via videogen, 2026-09-16, but the bug was already live
+#   here): the first real production smoke test of the video branch
+#   attached "Depict a South Asian person, not a white Western appearance"
+#   to a video of "chicken" - no person anywhere in the scene. The match
+#   wasn't in the scene text at all: _mentions_person scans the FINAL
+#   visual string, which is concept + style.base_prompt + rendering
+#   variant all merged together (see build_variant_visuals) - and every
+#   ArtStyle's base_prompt at the time contained the word "children"
+#   ("children's-book educational illustration", "...for young children",
+#   "children's educational illustration") as a stylistic descriptor of
+#   the illustration GENRE, not a statement about scene content. _PERSON_
+#   WORDS includes "child"/"children" (for when a scene genuinely depicts
+#   one), so every single cartoon/collage/textile prompt ever generated -
+#   regardless of subject - false-positived on its OWN style text. This
+#   is the abo_plate failure mode again, from a source Round 4's fix never
+#   considered: the contaminating word doesn't have to come from the
+#   scene or the rewrite, the style boilerplate appended to EVERY variant
+#   is just as much a place a stray person-word can hide, and it hides
+#   there for every word in the corpus at once rather than one-off.
+#   First fixed by rewording every style's base_prompt to avoid any word
+#   in _PERSON_WORDS ("storybook-style", "young readers", "young-reader" -
+#   see styles.py) - a same-day interim fix, kept as a standing invariant
+#   (see the guardrail comment on ArtStyle in styles.py) rather than
+#   thrown away once Round 7 below made it no longer load-bearing on its
+#   own.
+#
+#   Round 7 (same day, one word later in the same production run):
+#   rewording the style text fixed the false person-match, but a
+#   completely different failure showed up looking at the actual output -
+#   "alangba_lizard"'s 4 rewritten prompts had all silently DROPPED the
+#   literal "flat vector clip-art illustration... storybook-style
+#   educational illustration" phrase in favor of vaguer paraphrases
+#   ("bold flat colors", "a crisp icon-like presentation"), even though
+#   rewrite_batch's own system prompt said to keep "style description
+#   intact". Not a wording problem to iterate on again (same lesson as
+#   Round 3's SKIP option and Round 4's PERSON: field): a live comparison
+#   against an earlier successful run showed the SAME instruction
+#   sometimes preserved the style phrase verbatim and sometimes didn't,
+#   for no visible reason - an LLM asked to rewrite something into "one
+#   natural sentence" while also being told to preserve a specific chunk
+#   of that same text verbatim is not a reliable place to enforce
+#   "verbatim". Fixed structurally instead: build_variant_visuals was
+#   split into build_variant_scenes (concept + composition/framing/
+#   background only - CONTENT, the only thing rewrite_batch ever sees or
+#   changes) and apply_style (mechanically appends base_prompt and a
+#   rendering_variant AFTER rewrite_batch runs, never passed through the
+#   LLM at all). Style text is now literally incapable of being
+#   paraphrased, by construction, rather than by instruction - and as a
+#   side effect, attach_human_clauses now decides personhood from
+#   content-only text, so Round 6's false match couldn't recur even
+#   without its own fix (which stays in place anyway - see styles.py).
+#
 # illustration_scenes (on LocalLLMRewriter, generate.py calls it first,
 # per word) produces --count DIFFERENT candidate scenes in one call, not
 # one shared scene, and is instructed to: vary the concrete referent for
@@ -214,8 +266,18 @@ def _mentions_person(text: str) -> bool:
 
 
 WHITE_EUROPEAN_DESCRIPTOR = "a white European person"
+# "a Black West African person" appears twice (with "a Black person" as a
+# second, differently-worded entry) rather than once like every other
+# category - a deliberate soft rebalancing, not a rule: _sample_without_
+# replacement cycles the whole list once before repeating anything, so
+# this doubles Black/West African representation's odds per draw (2/7
+# slots vs 1/7 for every other category) without ever making it the
+# guaranteed or majority outcome. Two distinct phrasings rather than one
+# literal duplicate so the extra weight doesn't also mean less phrasing
+# variety within that outcome.
 HUMAN_DESCRIPTORS = [
     "a Black West African person",
+    "a Black person",
     "a South Asian person",
     "an East Asian person",
     WHITE_EUROPEAN_DESCRIPTOR,
@@ -254,12 +316,14 @@ def _sample_without_replacement(options: list[str], count: int) -> list[str]:
     return picks[:count]
 
 
-def build_variant_visuals(style: ArtStyle, concepts: list[str], count: int) -> list[str]:
-    """Purely mechanical: one structurally-different visual prompt per
-    concept, sampling composition/framing/background/rendering-style slots
-    WITHOUT replacement. No human-clause decision happens here - see
-    attach_human_clauses, and its docstring on why that has to run on the
-    FINAL text, not this mechanical one.
+def build_variant_scenes(concepts: list[str], count: int) -> list[str]:
+    """Purely mechanical, CONTENT ONLY: one structurally-different scene
+    sentence-fragment per concept, sampling composition/framing/background
+    slots WITHOUT replacement. Deliberately carries no style text at all -
+    see apply_style for that, and the module docstring's "Round 6" on why
+    style text and content text must be kept apart through both the human-
+    clause decision and the LLM rewrite step, not merged before either
+    touches them.
 
     `concepts` must have exactly `count` entries, one per variant -
     illustration_scenes produces a DIFFERENT concrete scene per entry when
@@ -272,30 +336,61 @@ def build_variant_visuals(style: ArtStyle, concepts: list[str], count: int) -> l
     compositions = _sample_without_replacement(COMPOSITIONS, count)
     backgrounds = _sample_without_replacement(BACKGROUNDS, count)
     framings = _sample_without_replacement(FRAMINGS, count)
-    rendering_variants = _sample_without_replacement(style.rendering_variants, count)
 
     return [
-        f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}, "
-        f"{style.base_prompt}, {rendering_variants[i]}."
+        f"{concepts[i]}, {compositions[i]}, {framings[i]}, {backgrounds[i]}."
         for i in range(count)
     ]
+
+
+def apply_style(style: ArtStyle, scenes: list[str], count: int) -> list[str]:
+    """Mechanically PREPENDS this style's base_prompt and one (without-
+    replacement-sampled) rendering_variant to each already-finished scene
+    sentence - NEVER passed through the LLM rewrite step, so the style
+    identity that keeps a whole corpus visually consistent can't be
+    paraphrased away the way an instruction to "keep it intact" alone
+    failed to reliably guarantee (see module docstring's "Round 6": a live
+    production run had rewrite_batch drop the literal "flat vector
+    clip-art illustration..." phrase from prompts on some words but not
+    others, unpredictably, in favor of a vaguer paraphrase - an LLM
+    rewrite is not a place to trust a "never change this part" rule).
+    Call this AFTER rewrite_batch, on its output - style was never part of
+    what got rewritten in the first place.
+
+    Style comes FIRST in the final prompt, scene second - not the
+    mechanical layer's original order (scene, then style, appended). Two
+    reasons: a model's own weighting tends to favor earlier tokens, so
+    style shouldn't be buried after everything else; and rewrite_batch's
+    own output is a discursive, often long natural-language sentence -
+    exactly the kind of text that can bury or dilute a short style
+    descriptor if it comes after."""
+    if len(scenes) != count:
+        raise ValueError(f"expected {count} scenes, got {len(scenes)}")
+    rendering_variants = _sample_without_replacement(style.rendering_variants, count)
+    return [f"{style.base_prompt}, {rendering_variants[i]}. {scenes[i]}" for i in range(count)]
 
 
 def attach_human_clauses(visuals: list[str]) -> list[tuple[str, str]]:
     """Returns (visual, human_clause) pairs, one per input visual.
 
-    MUST be called on the LAST text that will ever change before an image
-    is generated from it - i.e. AFTER LocalLLMRewriter.rewrite_batch, not
-    before. An earlier version decided this from the pre-rewrite concept
-    and just carried the clause through rewriting unchanged; a live run
-    showed that breaking in practice - "a box with earphones playing
-    music" (no person) got rewritten to "a person listening to a box with
-    earphones" (very much a person), and the clause decision, made before
-    that rewrite, never noticed. Deciding per FINAL visual instead of once
-    per word also still handles a batch mixing human and non-human
-    subjects (e.g. "twenty": "a stack of ten books" alongside "a person
-    counting ten fingers") - only the ones that actually depict someone,
-    in their actual final wording, get a descriptor."""
+    MUST be called on the LAST CONTENT text that will ever change before
+    an image is generated from it - i.e. AFTER LocalLLMRewriter.
+    rewrite_batch, not before, but (as of "Round 6") BEFORE apply_style,
+    not after: apply_style only ever adds style text that is itself
+    guaranteed free of any word in _PERSON_WORDS (see the invariant on
+    ArtStyle in styles.py), so calling this right after rewrite_batch's
+    output is still "the last text that can change personhood", even
+    though apply_style runs afterward. An earlier version decided this
+    from the pre-rewrite concept and just carried the clause through
+    rewriting unchanged; a live run showed that breaking in practice - "a
+    box with earphones playing music" (no person) got rewritten to "a
+    person listening to a box with earphones" (very much a person), and
+    the clause decision, made before that rewrite, never noticed.
+    Deciding per FINAL content instead of once per word also still
+    handles a batch mixing human and non-human subjects (e.g. "twenty": "a
+    stack of ten books" alongside "a person counting ten fingers") - only
+    the ones that actually depict someone, in their actual final wording,
+    get a descriptor."""
     person_flags = [_mentions_person(v) for v in visuals]
     descriptors_needed = sum(person_flags)
     descriptor_pool = iter(_sample_without_replacement(HUMAN_DESCRIPTORS, descriptors_needed)) if descriptors_needed else iter([])
@@ -320,10 +415,16 @@ def compose(visual: str, clause: str) -> str:
 
 def build_variant_prompts(style: ArtStyle, concepts: list[str], count: int) -> list[str]:
     """Convenience for callers with no rewrite step (e.g. --no-llm mode):
-    build mechanical visuals and attach clauses to them directly, since
-    there's no later rewrite to invalidate that decision."""
-    visuals = build_variant_visuals(style, concepts, count)
-    return [compose(v, c) for v, c in attach_human_clauses(visuals)]
+    build mechanical scenes, decide human clauses from them, then apply
+    the style - since there's no rewrite step to invalidate the human-
+    clause decision here, scene and style could technically be merged
+    first without the "Round 6" risk, but keeping the same scene-then-
+    style order as the LLM path means there's only one code path to
+    reason about, not two."""
+    scenes = build_variant_scenes(concepts, count)
+    styled = apply_style(style, scenes, count)
+    pairs = attach_human_clauses(scenes)
+    return [compose(styled[i], pairs[i][1]) for i in range(count)]
 
 
 _SCENE_N_LINE = re.compile(r"SCENE\s*(\d+)\s*:\s*(.+)", re.IGNORECASE)
@@ -361,6 +462,14 @@ class LocalLLMRewriter:
         # enable_thinking=False on some snapshots - only the part after it
         # (if any) is the actual reply.
         return reply.rsplit("</think>", 1)[-1]
+
+    def generate_reply(self, messages, max_new_tokens: int) -> str:
+        """Public entry point for a caller with its own prompt content (e.g.
+        videogen.prompts' motion-direction step) that wants this already-
+        loaded model without duplicating the load/unload lifecycle above.
+        Same model, same generation settings as every call in this module -
+        only the messages and their purpose differ."""
+        return self._generate(messages, max_new_tokens)
 
     def illustration_scenes(self, definition: str | None, display_text: str, count: int) -> list[str]:
         """Produces `count` candidate concrete scenes for one word in a
@@ -480,35 +589,47 @@ class LocalLLMRewriter:
 
         return [scenes[i] for i in range(1, count + 1)]
 
-    def rewrite_batch(self, style: ArtStyle, visual_prompts: list[str]) -> list[str]:
-        """Rewrites all of one word's VISUAL prompts together (one call,
+    def rewrite_batch(self, style: ArtStyle, scene_prompts: list[str]) -> list[str]:
+        """Rewrites all of one word's SCENE prompts together (one call,
         not N) so the model can see the full set and is explicitly told to
         push them apart - see module docstring on why divergence, not
-        average quality, is the target. Deliberately never sees the human-
-        diversity clause (attach_human_clauses runs on the output of this
-        method, afterward, not before - see module docstring's "Round 5")
-        - an earlier version passed the whole sentence through and the model
-        turned a conditional "if this depicts a person" hedge into a flat
-        assertion, putting a person into an inanimate object's image (see
-        module docstring). Falls back to the mechanical visual prompts
-        unchanged if the model errors or its reply doesn't parse back into
-        exactly len(visual_prompts) lines."""
-        n = len(visual_prompts)
-        numbered_drafts = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(visual_prompts))
+        average quality, is the target. `scene_prompts` never contains
+        style text (see "Round 6" - style.base_prompt/rendering_variants
+        are applied AFTER this, by apply_style, mechanically, never
+        rewritten - an instruction to preserve them through a rewrite
+        turned out not to be reliable). Deliberately never sees the
+        human-diversity clause either (attach_human_clauses runs on the
+        output of this method, afterward, not before - see module
+        docstring's "Round 5") - an earlier version passed the whole
+        sentence through and the model turned a conditional "if this
+        depicts a person" hedge into a flat assertion, putting a person
+        into an inanimate object's image (see module docstring). Falls
+        back to the mechanical scene prompts unchanged if the model errors
+        or its reply doesn't parse back into exactly len(scene_prompts)
+        lines."""
+        n = len(scene_prompts)
+        numbered_drafts = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(scene_prompts))
         messages = [
             {
                 "role": "system",
                 "content": (
-                    f'You write prompts for a text-to-image model, in a style called '
-                    f'"{style.label}". You are given {n} draft prompts, each a variation '
-                    "of the same illustration concept in that style. Rewrite each into one "
-                    "natural, well-formed sentence, keeping its meaning and style description "
-                    "intact - do not add any people, characters, or human figures that are not "
-                    "already explicitly named in the draft. Only the single best-looking image "
-                    f"of the {n} will be kept and the rest thrown away, so make the {n} "
-                    "rewritten prompts as different from each other as you can in composition "
-                    "and visual interpretation of the concept - favor bold variation between "
-                    "them over keeping them similar. "
+                    f"You write SCENE descriptions for a text-to-image model. These "
+                    f'will later be rendered in a style called "{style.label}" - a '
+                    "separate step, after this one, adds that style's own visual "
+                    "language, so your job is only the scene itself: what is in frame "
+                    "and what it's doing, not how it's rendered. Keep your wording "
+                    "compatible with that later style (don't describe photographic "
+                    "lighting, textures, or realism if the style is flat and graphic), "
+                    f"but never state the style outright - that's added separately. "
+                    f"You are given {n} draft scenes, each a variation of the same "
+                    "illustration concept. Rewrite each into one natural, well-formed "
+                    "sentence, keeping its meaning intact - do not add any people, "
+                    "characters, or human figures that are not already explicitly named "
+                    f"in the draft. Only the single best-looking image of the {n} will be "
+                    f"kept and the rest thrown away, so make the {n} rewritten scenes as "
+                    "different from each other as you can in composition and visual "
+                    "interpretation of the concept - favor bold variation between them "
+                    "over keeping them similar. "
                     f"What counts as a good result in this style: {style.review_rubric} "
                     f"Reply with exactly {n} lines, each starting with its number and a "
                     "period, nothing else - no preamble, no blank lines, no commentary."
@@ -526,11 +647,11 @@ class LocalLLMRewriter:
 
             if set(rewritten) != set(range(1, n + 1)):
                 print(f"  (LLM rewrite skipped: expected {n} numbered lines, parsed {len(rewritten)})")
-                return visual_prompts
+                return scene_prompts
             return [rewritten[i] for i in range(1, n + 1)]
         except Exception as exc:  # noqa: BLE001 - any failure just falls back
             print(f"  (LLM rewrite skipped: {exc})")
-            return visual_prompts
+            return scene_prompts
 
     def unload(self):
         del self.model

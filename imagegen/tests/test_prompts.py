@@ -3,9 +3,10 @@ import unittest
 from imagegen.prompts import (
     WHITE_EUROPEAN_DESCRIPTOR,
     _mentions_person,
+    apply_style,
     attach_human_clauses,
     build_variant_prompts,
-    build_variant_visuals,
+    build_variant_scenes,
     compose,
 )
 from imagegen.styles import STYLES
@@ -23,9 +24,13 @@ CARTOON = STYLES["cartoon"]
 # text - see prompts.py's module docstring, "Round 4". Round 5 then found
 # the clause decision itself was running at the wrong TIME (before
 # LocalLLMRewriter.rewrite_batch, not after) - see AttachHumanClausesTest
-# below, which is why build_variant_visuals (mechanical only) and
-# attach_human_clauses (the decision) are now two separate functions
-# instead of one.
+# below. Round 7 later found that merging scene and style into one string
+# before rewriting (what build_variant_visuals used to do) let an LLM
+# rewrite silently paraphrase the style text away on some words but not
+# others - build_variant_scenes (content only) and apply_style (style,
+# mechanical, applied AFTER rewrite) are the two functions that replaced
+# it, structurally guaranteeing style text can't be rewritten at all
+# rather than trusting an instruction to preserve it.
 
 
 class MentionsPersonTest(unittest.TestCase):
@@ -63,14 +68,14 @@ class MentionsPersonTest(unittest.TestCase):
         self.assertTrue(_mentions_person("A person adjusting his hat before leaving."))
 
 
-class BuildVariantVisualsTest(unittest.TestCase):
+class BuildVariantScenesTest(unittest.TestCase):
     def test_count_matches_request(self):
-        visuals = build_variant_visuals(CARTOON, ["a dog"] * 4, 4)
-        self.assertEqual(len(visuals), 4)
+        scenes = build_variant_scenes(["a dog"] * 4, 4)
+        self.assertEqual(len(scenes), 4)
 
     def test_rejects_a_concepts_list_of_the_wrong_length(self):
         with self.assertRaises(ValueError):
-            build_variant_visuals(CARTOON, ["a dog"] * 3, 4)
+            build_variant_scenes(["a dog"] * 3, 4)
 
     def test_each_variant_uses_its_own_concept(self):
         # illustration_scenes gives each variant a DIFFERENT concrete scene
@@ -78,22 +83,61 @@ class BuildVariantVisualsTest(unittest.TestCase):
         # basketball" / ... for the category "ball") - this is exactly what
         # a shared single concept string couldn't do.
         concepts = ["a soccer ball", "a basketball", "a beach ball", "a tennis ball"]
-        visuals = build_variant_visuals(CARTOON, concepts, 4)
-        for concept, visual in zip(concepts, visuals):
-            self.assertIn(concept, visual)
+        scenes = build_variant_scenes(concepts, 4)
+        for concept, scene in zip(concepts, scenes):
+            self.assertIn(concept, scene)
 
     def test_more_variants_than_slot_options_still_returns_requested_count(self):
-        visuals = build_variant_visuals(CARTOON, ["a person teaching children"] * 8, 8)
-        self.assertEqual(len(visuals), 8)
+        scenes = build_variant_scenes(["a person teaching children"] * 8, 8)
+        self.assertEqual(len(scenes), 8)
 
     def test_never_attaches_a_human_clause_itself(self):
-        # build_variant_visuals is purely mechanical now - even an
+        # build_variant_scenes is purely mechanical now - even an
         # obviously human concept must come back with no "Depict" clause;
         # that's attach_human_clauses's job, called separately (and,
-        # crucially, on the FINAL text - see AttachHumanClausesTest).
-        visuals = build_variant_visuals(CARTOON, ["a person teaching children"] * 4, 4)
-        for visual in visuals:
-            self.assertNotIn("Depict", visual)
+        # crucially, on the FINAL rewritten content - see
+        # AttachHumanClausesTest).
+        scenes = build_variant_scenes(["a person teaching children"] * 4, 4)
+        for scene in scenes:
+            self.assertNotIn("Depict", scene)
+
+    def test_carries_no_style_text_at_all(self):
+        # The whole point of the "Round 7" split: content must never
+        # contain a style's own descriptor text, so there is nothing for
+        # an LLM rewrite step to accidentally paraphrase away.
+        scenes = build_variant_scenes(["a dog"] * 4, 4)
+        for scene in scenes:
+            self.assertNotIn(CARTOON.base_prompt, scene)
+
+
+class ApplyStyleTest(unittest.TestCase):
+    def test_count_matches_request(self):
+        styled = apply_style(CARTOON, ["a dog crouching."] * 4, 4)
+        self.assertEqual(len(styled), 4)
+
+    def test_rejects_a_scenes_list_of_the_wrong_length(self):
+        with self.assertRaises(ValueError):
+            apply_style(CARTOON, ["a dog crouching."] * 3, 4)
+
+    def test_base_prompt_is_always_present_verbatim(self):
+        # Regression test for the actual "Round 7" incident: a live
+        # production run had an LLM rewrite silently drop the style's own
+        # descriptor text on some words. apply_style is never passed
+        # through the LLM at all, so this holds no matter what upstream
+        # rewrite step (real or a stand-in producing oddly-worded text)
+        # ran before it - that's the structural guarantee, not a
+        # probabilistic improvement.
+        oddly_worded_scenes = [
+            "A dog with bold flat colors and a crisp icon-like presentation.",
+            "A dog, thick outlines, a playful sticker finish.",
+        ]
+        for style in STYLES.values():
+            for styled in apply_style(style, oddly_worded_scenes, 2):
+                self.assertIn(style.base_prompt, styled)
+
+    def test_more_variants_than_slot_options_still_returns_requested_count(self):
+        styled = apply_style(CARTOON, ["a dog crouching."] * 8, 8)
+        self.assertEqual(len(styled), 8)
 
 
 class AttachHumanClausesTest(unittest.TestCase):

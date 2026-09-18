@@ -35,12 +35,16 @@ unusable, that's what review.py's "reject all" is for.
 `review.py` starts a local web server (`http://localhost:4322`, loopback
 only) showing one word's candidates at a time, along with that style's own
 review rubric (see "Multiple styles" below) so you're judging each batch
-against what "good" means for *that* style, not one generic bar. Click the
-best one to accept it - this writes `word_images` (variant 1, the only
-slot `exportGameContent.mjs`/`publishToR2.mjs` ever read) and deletes the
-candidate directory. "Reject all" deletes the batch without writing
-anything, so the word is missing an image again and the next `generate.py`
-run picks it back up.
+against what "good" means for *that* style, not one generic bar. Click one
+or more thumbnails to select them, then "Accept selected" - each selected
+candidate becomes a NEW `word_images` variant (never overwrites an
+existing one - a word can hold any number of accepted images per style,
+see `db/migrations/0010_word_images.sql`), and the whole candidate
+directory is deleted. Already-accepted images are shown too, each with its
+own delete button, for retiring a bad one. "Reject all" deletes the batch
+without writing anything, so the word is missing a *new* candidate batch
+again and the next `generate.py` run picks it back up (existing accepted
+images are untouched).
 
 ## Multiple styles
 
@@ -172,9 +176,13 @@ once would risk an OOM on a 24GB card for no benefit.
 
 Asked about separately - noting the answer here since it'll matter next
 time this comes up. "MiniMax H3" (Hailuo 3.0, Jul 2026) is real and
-open-weight, but it's 33B dense params (officially deployed across 4 GPUs)
-and its community license **excludes local deployment in the US/EU/UK/
-South Korea** - not usable here regardless of quantization.
+open-weight - 33B dense params (officially deployed across 4 GPUs). Its
+community license restricts local deployment in the US/EU/UK/South Korea;
+an earlier note here treated that as blocking this project outright
+without checking whether it actually applies to this project's own
+deployment jurisdiction - it doesn't, and that blanket conclusion was
+wrong. Re-check the license text yourself before relying on this if your
+own situation differs.
 
 **Wan 2.2** (`Wan-Video/Wan2.2`, Apache 2.0, 14B MoE) is the right target
 to build against when this becomes the actual task: fits fp8-quantized on
