@@ -276,6 +276,31 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
           )}
         </div>
 
+        <div className="dossier-section" aria-label="Videos">
+          <h3>Videos</h3>
+          {dossier.videos.length === 0 ? (
+            <p className="field-note">No video yet - not a gate on the game export (images are the required asset).</p>
+          ) : (
+            <div className="dossier-images">
+              {dossier.videos.map((vid) => (
+                <figure key={vid.videoId} style={{ margin: 0 }}>
+                  <video
+                    src={vid.url}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    aria-label={`${dossier.displayText}, ${vid.videoStyle}`}
+                  />
+                  <figcaption className="field-note">
+                    {vid.videoStyle} #{vid.variantNumber}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="dossier-section" aria-label="Assignments">
           <h3>Assigned to</h3>
           {dossier.assignees.length === 0 ? (

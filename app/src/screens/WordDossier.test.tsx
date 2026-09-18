@@ -42,6 +42,7 @@ const BASE: Dossier = {
   recordings: [],
   examples: [],
   images: [],
+  videos: [],
   assignees: [],
 };
 

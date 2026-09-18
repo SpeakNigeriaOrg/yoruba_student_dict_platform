@@ -18,9 +18,15 @@
 // way to match them to words. Labeling those is a separate, later task
 // (see this script's own header note in the session's plan file).
 //
-// Each file registers as variant_number 1 for its (word_id, art_style)
-// pair - rerunning after a file changes on disk will just re-upload the
-// same slot (upsert on conflict), not create a duplicate variant.
+// word_images allows any number of variants per (word_id, art_style) -
+// accept_image (imagegen/db.py) always adds a new one rather than
+// overwriting, so this script can't rely on an on-conflict upsert to stay
+// idempotent the way it used to (that would also risk clobbering a
+// variant a human has since accepted via review.py at the same slot).
+// Idempotency here is instead keyed on blob_path: each staged file gets
+// the deterministic path images/{style}/{wordId}.png, and a rerun that
+// finds a row already registered under that exact path skips it rather
+// than inserting a second copy as a new variant.
 //
 // Safety: defaults to a dry run (prints what it would do, then rolls
 // back). Pass --apply to actually commit. Idempotent either way.
@@ -63,6 +69,7 @@ async function main() {
     let registered = 0;
     let skippedUnknownWord = 0;
     let skippedEmpty = 0;
+    let skippedAlreadyRegistered = 0;
 
     for (const style of styleDirs) {
       const styleDir = path.join(imagesDir, style);
@@ -85,15 +92,24 @@ async function main() {
           continue;
         }
 
-        const blobPath = `images/${style}/${wordId}_1.png`;
-        console.log(`${apply ? 'REGISTER' : '[dry-run] would register'} ${style}/${wordId} (variant 1, ${imageData.length} bytes)`);
+        const blobPath = `images/${style}/${wordId}.png`;
+        const { rows: existingRows } = await client.query(
+          'select 1 from word_images where word_id = $1 and art_style = $2 and blob_path = $3',
+          [wordId, style, blobPath],
+        );
+        if (existingRows.length > 0) {
+          console.log(`SKIP ${style}/${wordId}: already registered (blob_path ${blobPath})`);
+          skippedAlreadyRegistered++;
+          continue;
+        }
+
+        console.log(`${apply ? 'REGISTER' : '[dry-run] would register'} ${style}/${wordId} (${imageData.length} bytes)`);
 
         if (apply) {
           await client.query(
             `insert into word_images (word_id, art_style, variant_number, image_data, content_type, blob_path)
-             values ($1, $2, 1, $3, 'image/png', $4)
-             on conflict (word_id, art_style, variant_number)
-             do update set image_data = excluded.image_data, blob_path = excluded.blob_path`,
+             select $1, $2, coalesce(max(variant_number), 0) + 1, $3, 'image/png', $4
+             from word_images where word_id = $1 and art_style = $2`,
             [wordId, style, imageData, blobPath],
           );
         }
@@ -102,7 +118,7 @@ async function main() {
     }
 
     console.log('');
-    console.log(`Summary: ${registered} image(s) ${apply ? 'registered' : 'would be registered'}, ${skippedUnknownWord} skipped (unknown word_id), ${skippedEmpty} skipped (empty file).`);
+    console.log(`Summary: ${registered} image(s) ${apply ? 'registered' : 'would be registered'}, ${skippedUnknownWord} skipped (unknown word_id), ${skippedEmpty} skipped (empty file), ${skippedAlreadyRegistered} skipped (already registered).`);
 
     if (apply) {
       await client.query('commit');

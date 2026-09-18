@@ -95,6 +95,27 @@ export interface DossierImage {
   uploadedAt: string;
 }
 
+// Video bytes are never in Postgres (see 0028_word_videos.sql - too large
+// to store inline the way images/audio are), so unlike DossierImage there
+// is no dedicated byte-serving API route to point at. blobKey already
+// names a real object in the same public R2 bucket the live game reads
+// from (videogen/review.py uploads there directly on accept - see that
+// module's docstring), so the dossier links straight at it.
+const MEDIA_BASE_URL = 'https://gamemedia.speaknigeria.org/';
+
+export interface DossierVideo {
+  videoId: string;
+  videoStyle: string;
+  variantNumber: number;
+  contentType: string;
+  durationMs: number;
+  width: number;
+  height: number;
+  byteLength: number;
+  uploadedAt: string;
+  url: string;
+}
+
 export interface WordDossier {
   wordId: string;
   displayText: string;
@@ -116,13 +137,14 @@ export interface WordDossier {
   pinnedAt: string | null;
   pinnedByEmail: string | null;
 
-  components: Array<{ wordId: string; displayText: string; position: number }>;
+  components: Array<{ wordId: string; displayText: string; position: number; definition: string | null }>;
   usedAsComponentOf: Array<{ wordId: string; displayText: string }>;
   decisions: DossierDecision[];
   contributions: DossierContribution[];
   recordings: DossierRecording[];
   examples: DossierExample[];
   images: DossierImage[];
+  videos: DossierVideo[];
   assignees: Array<{ email: string; displayName: string | null; assignedAt: string }>;
 }
 
@@ -148,7 +170,7 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
   if ((word.rowCount ?? 0) === 0) throw new WordNotFoundError(wordId);
   const w = word.rows[0];
 
-  const [citation, components, usedIn, decisions, premerge, contributions, recordings, examples, images, assignees] =
+  const [citation, components, usedIn, decisions, premerge, contributions, recordings, examples, images, videos, assignees] =
     await Promise.all([
       client.query<{
         entry_id: string | null;
@@ -162,8 +184,8 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
           where c.word_id = $1`,
         [wordId],
       ),
-      client.query<{ component_word_id: string; display_text: string; component_position: number }>(
-        `select c.component_word_id, g.display_text, c.component_position
+      client.query<{ component_word_id: string; display_text: string; component_position: number; definition: string | null }>(
+        `select c.component_word_id, g.display_text, c.component_position, g.definition
            from golden_record_components c join golden_record g on g.word_id = c.component_word_id
           where c.word_id = $1 order by c.component_position`,
         [wordId],
@@ -282,6 +304,25 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
            from word_images where word_id = $1 order by art_style, variant_number`,
         [wordId],
       ),
+      // No bytea column to measure here (see 0028_word_videos.sql) - the
+      // row already has everything the dossier shows, byte_length included.
+      client.query<{
+        video_id: string;
+        video_style: string;
+        variant_number: number;
+        content_type: string;
+        duration_ms: number;
+        width: number;
+        height: number;
+        byte_length: string;
+        blob_key: string;
+        uploaded_at: string;
+      }>(
+        `select video_id, video_style, variant_number, content_type,
+                duration_ms, width, height, byte_length, blob_key, uploaded_at
+           from word_videos where word_id = $1 order by video_style, variant_number`,
+        [wordId],
+      ),
       client.query<{ email: string; display_name: string | null; assigned_at: string }>(
         `select u.email, u.display_name, a.assigned_at
            from assignments a join users u on u.user_id = a.user_id
@@ -308,10 +349,15 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     pin: cite?.pin ?? null,
     pinnedAt: cite?.pinned_at ?? null,
     pinnedByEmail: cite?.pinned_by_email ?? null,
+    // definition included for the same reason getEtymologyReview.ts's resolvedDefinition/
+    // componentsOnRecord carry it: the spelling alone does not say which word this is - sùn is
+    // at least three things (sleep, aim, complain), and the dossier is exactly where a curator
+    // would come back to check which one was actually confirmed as this word's part.
     components: components.rows.map((r) => ({
       wordId: r.component_word_id,
       displayText: r.display_text,
       position: r.component_position,
+      definition: r.definition,
     })),
     usedAsComponentOf: usedIn.rows.map((r) => ({ wordId: r.word_id, displayText: r.display_text })),
     decisions: [
@@ -381,6 +427,18 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
       contentType: r.content_type,
       byteLength: Number(r.byte_length),
       uploadedAt: r.uploaded_at,
+    })),
+    videos: videos.rows.map((r) => ({
+      videoId: r.video_id,
+      videoStyle: r.video_style,
+      variantNumber: r.variant_number,
+      contentType: r.content_type,
+      durationMs: r.duration_ms,
+      width: r.width,
+      height: r.height,
+      byteLength: Number(r.byte_length),
+      uploadedAt: r.uploaded_at,
+      url: `${MEDIA_BASE_URL}${r.blob_key}`,
     })),
     assignees: assignees.rows.map((r) => ({
       email: r.email,

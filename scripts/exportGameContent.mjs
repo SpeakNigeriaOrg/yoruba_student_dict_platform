@@ -96,9 +96,14 @@
 //    generation, exactly like audio: a word with no real art must never be
 //    presented with a placeholder standing in for it, because that is
 //    fabricated content rather than a graceful degrade (see the identical
-//    check in publishToR2.mjs). Each word's vocab.json entry also gets an
-//    honest `imageStyles` array naming which styles actually have art for
-//    THIS word.
+//    check in publishToR2.mjs). Unlike audio's take_number (always read as
+//    take 1 - see decision 6), EVERY accepted image variant is read and
+//    published: word_images.variant_number has no fixed "the" slot
+//    (imagegen/db.py's accept_image always adds a new variant, never
+//    overwrites one), so a word can genuinely have many good images and
+//    the game shows variety across replays rather than one fixed pick.
+//    Each word's vocab.json entry gets an honest `images` map (style ->
+//    array of variant numbers that actually have art for THIS word).
 //
 //    This costs real coverage and that is accepted: only 56/92 words have
 //    any labeled image today (the rest of the ~350 generated images in
@@ -300,16 +305,18 @@ async function main() {
 
   console.log('[3/7] Loading images...');
   const imagesResult = await pool.query(
-    `select word_id, art_style, image_data
+    `select word_id, art_style, variant_number, image_data
      from word_images
-     where variant_number = 1
-     order by word_id, art_style`,
+     order by word_id, art_style, variant_number`,
   );
-  // word_id -> style -> Buffer (variant_number=1 only - see decision 7 above)
+  // word_id -> style -> [{ variantNumber, data }, ...] - every accepted
+  // variant, not just one (see decision 7 above).
   const imagesByWord = new Map();
   for (const row of imagesResult.rows) {
     if (!imagesByWord.has(row.word_id)) imagesByWord.set(row.word_id, new Map());
-    imagesByWord.get(row.word_id).set(row.art_style, row.image_data);
+    const styleMap = imagesByWord.get(row.word_id);
+    if (!styleMap.has(row.art_style)) styleMap.set(row.art_style, []);
+    styleMap.get(row.art_style).push({ variantNumber: row.variant_number, data: row.image_data });
   }
   const wordsWithNoImage = Object.keys(vocab).filter((wordId) => !imagesByWord.has(wordId));
   console.log(
@@ -355,11 +362,13 @@ async function main() {
   }
   let imageFilesWritten = 0;
   for (const [wordId, styleMap] of imagesByWord) {
-    for (const [style, buf] of styleMap) {
-      const dir = path.join(GAME_DIR, 'public', 'images', style);
+    for (const [style, variants] of styleMap) {
+      const dir = path.join(GAME_DIR, 'public', 'images', style, wordId);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(path.join(dir, `${wordId}.png`), buf);
-      imageFilesWritten++;
+      for (const { variantNumber, data } of variants) {
+        writeFileSync(path.join(dir, `${variantNumber}.png`), data);
+        imageFilesWritten++;
+      }
     }
   }
   console.log(`      ${wordFilesWritten} word file(s), ${syllableFilesWritten} syllable file(s), ${imageFilesWritten} image file(s)`);
@@ -402,11 +411,18 @@ async function main() {
 
   const vocabOut = {};
   for (const [wordId, entry] of Object.entries(vocab)) {
+    const styleMap = imagesByWord.get(wordId);
+    const images = {};
+    if (styleMap) {
+      for (const [style, variants] of styleMap) {
+        images[style] = variants.map((v) => v.variantNumber);
+      }
+    }
     vocabOut[wordId] = {
       displayText: entry.displayText,
       syllables: entry.syllables.map((sy) => sy.normalize('NFC')),
       definition: entry.definition,
-      imageStyles: [...(imagesByWord.get(wordId)?.keys() ?? [])],
+      images,
     };
   }
   writeFileSync(path.join(publicDir, 'vocab.json'), JSON.stringify(vocabOut, null, 2));

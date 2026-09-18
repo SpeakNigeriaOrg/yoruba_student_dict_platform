@@ -1,11 +1,11 @@
 # Talks to the same Postgres database as scripts/migrateStagedImages.mjs and
-# scripts/labelImagesGrid.mjs, and follows their conventions on purpose:
-# word_images.variant_number 1 is the only slot exportGameContent.mjs /
-# publishToR2.mjs ever read (both hardcode variant_number = 1 - see
-# db/README.md), so review.py always writes variant 1 and the blob_path
-# convention those scripts publish to (images/{style}/{word_id}.png, no
-# variant suffix - migrateStagedImages.mjs's own blob_path, with a "_1"
-# suffix, is never actually read by anything downstream).
+# scripts/labelImagesGrid.mjs. A word can hold any number of accepted
+# images per art_style - accept_image always adds the next variant_number
+# rather than overwriting an existing one, and exportGameContent.mjs /
+# publishToR2.mjs both read every variant, not just one (see db/README.md
+# and 0010_word_images.sql). blob_path embeds the variant number
+# (images/{style}/{word_id}/{variant}.png) to match publishToR2.mjs's key
+# scheme.
 import os
 
 import psycopg
@@ -30,7 +30,7 @@ def connect():
     # autocommit=True matters beyond style: psycopg defaults to opening an
     # implicit transaction on the first statement and leaving it open
     # until an explicit commit/rollback. review.py's read-only calls
-    # (existing_image, words_needing_image, word_by_id) never committed,
+    # (list_images, get_image, words_needing_image, word_by_id) never committed,
     # so between clicks the connection sat "idle in transaction" - exactly
     # the kind of session a cloud Postgres (or a pooler in front of it) is
     # liable to kill outright, which is a plausible reason the connection
@@ -76,31 +76,64 @@ def word_by_id(conn, word_id: str):
         return dict(zip(columns, row))
 
 
-def existing_image(conn, word_id: str, art_style: str) -> bytes | None:
-    """None if this word has no accepted image yet for this style - if it
-    does, review.py must warn before letting a candidate silently replace
-    it (see accept_image's on-conflict upsert: nothing about that query
-    distinguishes "first image for this word" from "overwriting a
-    previously-accepted, possibly-already-live image")."""
+def list_images(conn, word_id: str, art_style: str) -> list[dict]:
+    """Metadata (no bytes - see get_image for that) for every already-
+    accepted image for this word+style, in variant order. What review.py
+    shows so a reviewer can see what already exists (and delete a bad one)
+    instead of a single yes/no "does one exist" check. accept_image is now
+    purely additive (see below), so this can return more than one row."""
     with conn.cursor() as cur:
         cur.execute(
-            "select image_data from word_images where word_id = %s and art_style = %s and variant_number = 1",
+            "select image_id, variant_number from word_images "
+            "where word_id = %s and art_style = %s order by variant_number",
             (word_id, art_style),
         )
+        columns = [c.name for c in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+
+def get_image(conn, image_id: str) -> bytes | None:
+    """One accepted image's bytes by id - what review.py's per-image
+    thumbnail route serves, rather than list_images' full metadata-only
+    listing."""
+    with conn.cursor() as cur:
+        cur.execute("select image_data from word_images where image_id = %s", (image_id,))
         row = cur.fetchone()
         return bytes(row[0]) if row else None
 
 
-def accept_image(conn, word_id: str, art_style: str, image_bytes: bytes):
-    blob_path = f"images/{art_style}/{word_id}.png"
+def accept_image(conn, word_id: str, art_style: str, image_bytes: bytes) -> int:
+    """Adds a new variant - never overwrites or deletes an existing one
+    (contrast the old single-image behavior, which upserted variant 1 in
+    place and silently destroyed whatever was there before). blob_path
+    embeds the variant number so each accepted image gets its own logical
+    path (see 0010_word_images.sql and publishToR2.mjs's key scheme).
+    Computing next_variant here (rather than once in the caller) is safe
+    to call repeatedly in a loop: each call commits before returning, so
+    the next call's max() sees this one's insert."""
     with conn.cursor() as cur:
+        cur.execute(
+            "select coalesce(max(variant_number), 0) + 1 from word_images "
+            "where word_id = %s and art_style = %s",
+            (word_id, art_style),
+        )
+        variant_number = cur.fetchone()[0]
+        blob_path = f"images/{art_style}/{word_id}/{variant_number}.png"
         cur.execute(
             """
             insert into word_images (word_id, art_style, variant_number, image_data, content_type, blob_path)
-            values (%s, %s, 1, %s, 'image/png', %s)
-            on conflict (word_id, art_style, variant_number)
-            do update set image_data = excluded.image_data, blob_path = excluded.blob_path
+            values (%s, %s, %s, %s, 'image/png', %s)
             """,
-            (word_id, art_style, image_bytes, blob_path),
+            (word_id, art_style, variant_number, image_bytes, blob_path),
         )
+    conn.commit()
+    return variant_number
+
+
+def delete_image(conn, image_id: str):
+    """Retires one accepted image - the escape hatch for a reviewer who
+    accepted a bad variant and wants it gone rather than accumulating
+    forever (see review.py's per-existing-image delete button)."""
+    with conn.cursor() as cur:
+        cur.execute("delete from word_images where image_id = %s", (image_id,))
     conn.commit()

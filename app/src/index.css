@@ -1181,7 +1181,8 @@ main:has(.curating) {
   flex-wrap: wrap;
   gap: 8px;
 }
-.dossier-images img {
+.dossier-images img,
+.dossier-images video {
   width: 110px;
   height: 110px;
   object-fit: cover;

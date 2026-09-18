@@ -12,10 +12,12 @@
 //   1. Load word audio (take 1), syllable audio, and images exactly like
 //      exportGameContent.mjs does.
 //   2. Upload every one of those blobs to R2 via PutObject, using the
-//      SAME key scheme the game's app.js and the old Python pipeline
-//      already expect (words/{speaker}/{wordId}.wav,
+//      key scheme the game's app.js expects: words/{speaker}/{wordId}.wav,
 //      syllables/{speaker}/{legacy-style-safe-name}.wav,
-//      images/{style}/{wordId}.png) - no app.js/key-scheme changes needed.
+//      images/{style}/{wordId}/{variantNumber}.png. Every accepted image
+//      variant is uploaded, not just one - a word can have many good
+//      images, and app.js picks among them per round (see word_images'
+//      "any number of variants" design, 0010_word_images.sql).
 //   3. Verify each upload with a HeadObject read-back rather than trusting
 //      a successful PutObject response alone - this is the same "verify
 //      forward from a real check, don't just assume" discipline
@@ -41,6 +43,17 @@
 //      round-trip before it even knows what to ask the bucket for. Only
 //      the actual audio/image BYTES live in R2 - no local words/,
 //      syllables/, images/ directories are written by this script.
+//   6. Videos (word_videos, 0028_word_videos.sql) are published
+//      differently from every other asset here: there is no bytea column
+//      to read bytes from at all - videogen/review.py already uploaded
+//      the accepted clip to R2's staging/ prefix on accept (video is far
+//      too large to hold in Postgres the way audio/images are). Publishing
+//      one is therefore a server-side R2-to-R2 copy (promoteAndVerify)
+//      from its staging key to its public key, never a PutObject with a
+//      local buffer. Video is optional everywhere it appears - never a
+//      coverage gate the way images are (see exportGameContent.mjs's
+//      decision 7 and WordDossier's "not a gate" note) - so vocab.json's
+//      `videos` map is simply empty for a word that has none yet.
 //
 // Required environment variables:
 //   DATABASE_URL          - this platform's Postgres connection string
@@ -122,7 +135,15 @@ import {
   selectSyllableAudio,
   toneOf,
 } from '../shared/dist/index.js';
-import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
@@ -210,6 +231,7 @@ const wantsImage = (wordId, style) =>
   (onlyWords.size === 0 || onlyWords.has(wordId)) &&
   (onlyStyles.size === 0 || onlyStyles.has(style)) &&
   onlySpeakers.size === 0;
+const wantsVideo = wantsImage;
 
 /** The three manifests have TWO producers that disagree about what `syllables.json`'s `audio` means.
  *
@@ -259,7 +281,7 @@ function assertManifestOwnership(dir) {
  * operator is thinking about one word, which is the wrong frame for a bulk delete. */
 async function reportOrphans(s3, bucket, expectedKeys) {
   const found = [];
-  for (const prefix of ['words/', 'syllables/', 'images/']) {
+  for (const prefix of ['words/', 'syllables/', 'images/', 'videos/']) {
     let token;
     do {
       const page = await s3.send(
@@ -371,6 +393,43 @@ async function main() {
     await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
     uploaded += 1;
     return key;
+  }
+
+  /** Promotes a video already sitting in R2's staging prefix (videogen/review.py uploaded it
+   * there on accept - see 0028_word_videos.sql) to its public key, via a server-side R2-to-R2
+   * copy rather than round-tripping the bytes through this script. Unlike putAndVerify there is
+   * no local buffer to diff against, so this always copies rather than skipping - CopyObject
+   * costs an API call, not bandwidth, so the optimization putAndVerify needs (avoid re-sending
+   * megabytes we already sent before) does not apply here. */
+  async function promoteAndVerify(sourceKey, destKey, contentType) {
+    if (!apply) return destKey;
+
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        CopySource: `${R2_BUCKET_NAME}/${encodeURIComponent(sourceKey)}`,
+        Key: destKey,
+        ContentType: contentType,
+        CacheControl: CACHE_CONTROL,
+        MetadataDirective: 'REPLACE',
+      }),
+    );
+    await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: destKey }));
+    uploaded += 1;
+    // The staging copy has no other reader once the public key exists (the
+    // game only ever fetches the public path; videogen/review.py wrote the
+    // staging one purely to have somewhere to put bytes before a
+    // word_videos row could exist at all - see r2.py) - leaving it behind
+    // would mean paying to store every accepted video twice, forever.
+    // Non-fatal: a stray leftover staging object is a cost, not a
+    // correctness problem, and must never fail an otherwise-successful
+    // publish over it.
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: sourceKey }));
+    } catch (err) {
+      console.warn(`    (could not delete staging object ${sourceKey} after promoting it: ${err.message})`);
+    }
+    return destKey;
   }
 
   const toneMap = JSON.parse(readFileSync(path.join(REPO_DIR, 'config.json'), 'utf8')).tone_map;
@@ -496,21 +555,41 @@ async function main() {
   }
 
   const imagesResult = await pool.query(
-    `select word_id, art_style, image_data from word_images where variant_number = 1 order by word_id, art_style`,
+    `select word_id, art_style, variant_number, image_data from word_images order by word_id, art_style, variant_number`,
   );
+  // word_id -> style -> [{ variantNumber, data }, ...] - every accepted
+  // variant is published, not just one (a word can have many good images).
   const imagesByWord = new Map();
   for (const row of imagesResult.rows) {
     if (!imagesByWord.has(row.word_id)) imagesByWord.set(row.word_id, new Map());
-    imagesByWord.get(row.word_id).set(row.art_style, row.image_data);
+    const styleMap = imagesByWord.get(row.word_id);
+    if (!styleMap.has(row.art_style)) styleMap.set(row.art_style, []);
+    styleMap.get(row.art_style).push({ variantNumber: row.variant_number, data: row.image_data });
   }
+  // No bytea column (0028_word_videos.sql) - blob_key already names a real
+  // R2 object (videogen/review.py's staging upload), so publishing a video
+  // is a server-side copy (promoteAndVerify), never bytes through Postgres.
+  const videosResult = await pool.query(
+    `select word_id, video_style, variant_number, blob_key from word_videos order by word_id, video_style, variant_number`,
+  );
+  const videosByWord = new Map();
+  for (const row of videosResult.rows) {
+    if (!videosByWord.has(row.word_id)) videosByWord.set(row.word_id, new Map());
+    const styleMap = videosByWord.get(row.word_id);
+    if (!styleMap.has(row.video_style)) styleMap.set(row.video_style, []);
+    styleMap.get(row.video_style).push({ variantNumber: row.variant_number, blobKey: row.blob_key });
+  }
+
   console.log(
-    `      ${wordAudioBySpeaker.size} speaker(s) with word audio, ${syllableAudioBySpeaker.size} with syllable audio, ${imagesByWord.size} words with an image`,
+    `      ${wordAudioBySpeaker.size} speaker(s) with word audio, ${syllableAudioBySpeaker.size} with syllable audio, ` +
+      `${imagesByWord.size} words with an image, ${videosByWord.size} words with a video`,
   );
 
   console.log(`[3/6] ${apply ? 'Uploading to' : '[dry-run] would upload to'} R2 bucket "${R2_BUCKET_NAME}"...`);
   const verifiedWordAudioKey = new Map(); // speaker -> word_id -> key (only entries actually verified present)
   const verifiedSyllableAudioKey = new Map(); // speaker -> syllable_text -> key
-  const verifiedImageKey = new Map(); // word_id -> style -> key
+  const verifiedImageKey = new Map(); // word_id -> style -> variantNumber -> key
+  const verifiedVideoKey = new Map(); // word_id -> style -> variantNumber -> key
   let uploadCount = 0;
   let failCount = 0;
 
@@ -554,18 +633,45 @@ async function main() {
   }
   for (const [wordId, styleMap] of imagesByWord) {
     verifiedImageKey.set(wordId, new Map());
-    for (const [style, buf] of styleMap) {
-      const key = `images/${style}/${wordId}.png`;
-      expectedKeys.add(key);
-      if (!wantsImage(wordId, style)) continue;
-      try {
-        await putAndVerify(key, buf, 'image/png');
-        verifiedImageKey.get(wordId).set(style, key);
-        uploadCount++;
-      } catch (err) {
-        console.warn(`  FAILED ${key}: ${err.message}`);
-        failCount++;
+    for (const [style, variants] of styleMap) {
+      const variantKeys = new Map();
+      for (const { variantNumber, data } of variants) {
+        const key = `images/${style}/${wordId}/${variantNumber}.png`;
+        expectedKeys.add(key);
+        if (!wantsImage(wordId, style)) continue;
+        try {
+          await putAndVerify(key, data, 'image/png');
+          variantKeys.set(variantNumber, key);
+          uploadCount++;
+        } catch (err) {
+          console.warn(`  FAILED ${key}: ${err.message}`);
+          failCount++;
+        }
       }
+      // Only record this style as verified if at least one of its variants
+      // actually got uploaded/confirmed - an all-filtered or all-failed
+      // style must not count toward image coverage below.
+      if (variantKeys.size > 0) verifiedImageKey.get(wordId).set(style, variantKeys);
+    }
+  }
+  for (const [wordId, styleMap] of videosByWord) {
+    verifiedVideoKey.set(wordId, new Map());
+    for (const [style, variants] of styleMap) {
+      const variantKeys = new Map();
+      for (const { variantNumber, blobKey } of variants) {
+        const key = `videos/${style}/${wordId}/${variantNumber}.mp4`;
+        expectedKeys.add(key);
+        if (!wantsVideo(wordId, style)) continue;
+        try {
+          await promoteAndVerify(blobKey, key, 'video/mp4');
+          variantKeys.set(variantNumber, key);
+          uploadCount++;
+        } catch (err) {
+          console.warn(`  FAILED ${key}: ${err.message}`);
+          failCount++;
+        }
+      }
+      if (variantKeys.size > 0) verifiedVideoKey.get(wordId).set(style, variantKeys);
     }
   }
   if (apply) {
@@ -638,13 +744,32 @@ async function main() {
 
   const vocabOut = {};
   for (const [wordId, entry] of Object.entries(vocab)) {
+    const styleMap = verifiedImageKey.get(wordId);
+    const images = {};
+    if (styleMap) {
+      for (const [style, variantKeys] of styleMap) {
+        images[style] = [...variantKeys.keys()];
+      }
+    }
+    const videoStyleMap = verifiedVideoKey.get(wordId);
+    const videos = {};
+    if (videoStyleMap) {
+      for (const [style, variantKeys] of videoStyleMap) {
+        videos[style] = [...variantKeys.keys()];
+      }
+    }
     vocabOut[wordId] = {
       displayText: entry.displayText,
       // NFC for the same reason as the syllables.json keys above - these two lists are joined BY STRING
       // by the game, so they have to agree on encoding or the audio is unreachable.
       syllables: entry.syllables.map((s) => s.normalize('NFC')),
       definition: entry.definition,
-      imageStyles: [...(verifiedImageKey.get(wordId)?.keys() ?? [])],
+      images,
+      // Optional - unlike images this is never a gate (see decision 7 in
+      // exportGameContent.mjs and WordDossier's "not a gate" note), so an
+      // empty {} here is a normal, expected state for most words for a
+      // long time, not a data-quality problem to flag.
+      videos,
     };
   }
   writeFileSync(path.join(publicDir, 'vocab.json'), JSON.stringify(vocabOut, null, 2));

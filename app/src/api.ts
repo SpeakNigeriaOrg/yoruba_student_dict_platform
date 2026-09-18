@@ -411,7 +411,7 @@ export interface EtymologyReviewResult {
   /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
    * exists so the screen shows words rather than word_ids, and tests "do we hold a breakdown?"
    * in one place instead of repeating the `[wordId]` self-reference check. */
-  componentsOnRecord: Array<{ wordId: string; displayText: string }>;
+  componentsOnRecord: Array<{ wordId: string; displayText: string; definition: string | null }>;
   axisDecided: AxisDecided;
   // Wiktionary's free-text etymology prose, distinct from componentsProposal
   // (the structured decomposition) - present even for entries with no
@@ -770,6 +770,22 @@ export interface DossierImage {
   uploadedAt: string;
 }
 
+export interface DossierVideo {
+  videoId: string;
+  videoStyle: string;
+  variantNumber: number;
+  contentType: string;
+  durationMs: number;
+  width: number;
+  height: number;
+  byteLength: number;
+  uploadedAt: string;
+  /** Absolute URL - video bytes are never in Postgres (see 0028_word_videos.sql), so unlike
+   * DossierImage there is no dedicated byte-serving API route; this already points straight
+   * at the R2 object. */
+  url: string;
+}
+
 export interface WordDossier {
   wordId: string;
   displayText: string;
@@ -787,13 +803,14 @@ export interface WordDossier {
   pin: unknown;
   pinnedAt: string | null;
   pinnedByEmail: string | null;
-  components: Array<{ wordId: string; displayText: string; position: number }>;
+  components: Array<{ wordId: string; displayText: string; position: number; definition: string | null }>;
   usedAsComponentOf: Array<{ wordId: string; displayText: string }>;
   decisions: DossierDecision[];
   contributions: DossierContribution[];
   recordings: DossierRecording[];
   examples: DossierExample[];
   images: DossierImage[];
+  videos: DossierVideo[];
   assignees: Array<{ email: string; displayName: string | null; assignedAt: string }>;
 }
 

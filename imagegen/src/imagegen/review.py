@@ -9,25 +9,21 @@
 #
 # For each word_id under candidates/{art_style}/ that has a manifest.json
 # (i.e. generation finished): shows the word's gloss and its N candidate
-# images side by side.
-#   - click a thumbnail  -> accept it: upserts into word_images (variant 1,
-#     the only slot exportGameContent.mjs/publishToR2.mjs read - see
-#     db.py), deletes the whole candidates/{art_style}/{word_id}/ dir, and
-#     advances. IMPORTANT: candidates/ can and does contain words that
-#     already have an accepted (possibly already-live/published) image -
-#     generate.py's queue is normally "words missing one", but --words can
-#     target anything, and a batch generated for one purpose sits in
-#     candidates/ the same as any other until reviewed. Accepting a
-#     candidate for such a word REPLACES that existing image - there is no
-#     version history. This UI warns and requires explicit confirmation
-#     before that specific action; it was originally a silent upsert with
-#     no warning at all, which is exactly the kind of thing a reviewer
-#     should be stopped and asked about, not have happen to them by
-#     surprise.
+# images side by side, plus any images already accepted for this word+style
+# (a word can hold any number of accepted variants - see db.py).
+#   - click one or more thumbnails to select them, then "Accept selected"
+#     -> each selected candidate is added as a NEW variant (db.accept_image
+#     never overwrites an existing one), the whole
+#     candidates/{art_style}/{word_id}/ dir is deleted, and the queue
+#     advances. Picking several good candidates from one batch in a single
+#     pass is the point - no need to revisit the word or regenerate just to
+#     accept a second or third good image.
+#   - each already-accepted image has its own small delete button, for
+#     retiring a bad variant - this IS destructive (no version history) and
+#     asks for confirmation; accepting new candidates never touches these.
 #   - Reject all  -> deletes the candidates dir without writing to the
-#     database. The word has no image again, so the next generate.py run
-#     (which only looks at words still missing one) naturally re-queues it.
-#     Never touches an existing accepted image - safe regardless.
+#     database. The word has no *new* candidates queued again until the
+#     next generate.py run; any already-accepted images are untouched.
 #   - Skip / Prev  -> move the review queue without touching anything on
 #     disk or in the database.
 #
@@ -116,7 +112,7 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
         # encoding can't represent that - see generate.py's effective_gloss.
         manifest = json.loads((word_dir / "manifest.json").read_text(encoding="utf-8")) if word_dir else None
         variants = sorted(p.name for p in word_dir.glob("v*.png")) if word_dir else []
-        has_existing_image = word_id is not None and call_db(db.existing_image, word_id, art_style) is not None
+        existing_images = call_db(db.list_images, word_id, art_style) if word_id else []
         return {
             "index": state["index"],
             "queueLength": len(state["queue"]),
@@ -125,7 +121,10 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
             "variants": variants,
             "styleLabel": style.label,
             "reviewRubric": style.review_rubric,
-            "hasExistingImage": has_existing_image,
+            "existingImages": [
+                {"imageId": str(img["image_id"]), "variantNumber": img["variant_number"]}
+                for img in existing_images
+            ],
         }
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -174,12 +173,12 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if path == "/existing-image":
-                # Only ever the CURRENT word's own existing DB row - same
-                # posture as /candidate-image/, no client-supplied word_id.
-                word_dir = current_word_dir()
-                word_id = state["queue"][state["index"]] if word_dir else None
-                data = call_db(db.existing_image, word_id, art_style) if word_id else None
+            if path.startswith("/existing-image/"):
+                # image_id is a DB-generated UUID, not a client-supplied
+                # filesystem path - no traversal risk the way
+                # /candidate-image/ has to guard against.
+                image_id = path[len("/existing-image/"):]
+                data = call_db(db.get_image, image_id)
                 if data is None:
                     self.send_response(404)
                     self.end_headers()
@@ -208,24 +207,33 @@ def make_handler(art_style: str, art_style_dir: Path, conn):
                 if word_dir is None:
                     self._send_json({"error": "queue finished"}, 400)
                     return
-                variant = payload.get("variant")
-                variant_path = word_dir / variant if variant else None
-                if not variant_path or not variant_path.exists():
+                variants = payload.get("variants")
+                if not variants or not isinstance(variants, list):
+                    self._send_json({"error": "no variants selected"}, 400)
+                    return
+                available = {p.name for p in word_dir.glob("v*.png")}
+                if not all(v in available for v in variants):
                     self._send_json({"error": "no such variant"}, 400)
                     return
                 word_id = state["queue"][state["index"]]
-                # Re-check server-side, not just trust the client's last-seen
-                # state - never silently replace an existing accepted image
-                # without an explicit, informed confirmation for THIS request.
-                if call_db(db.existing_image, word_id, art_style) is not None and not payload.get("confirmOverwrite"):
-                    self._send_json(
-                        {"error": "existing image present - resend with confirmOverwrite: true to replace it"}, 409,
-                    )
-                    return
-                call_db(db.accept_image, word_id, art_style, variant_path.read_bytes())
+                # Each accept is purely additive (see db.accept_image) - no
+                # overwrite risk, so no confirmation/re-check needed here
+                # the way the old single-slot upsert required.
+                for variant in variants:
+                    call_db(db.accept_image, word_id, art_style, (word_dir / variant).read_bytes())
                 shutil.rmtree(word_dir)
-                print(f"Accepted {variant} for {word_id}")
+                print(f"Accepted {len(variants)} image(s) for {word_id}: {', '.join(variants)}")
                 state["index"] = min(state["index"] + 1, len(state["queue"]))
+                self._send_json(current_state())
+                return
+
+            if path == "/api/delete-existing":
+                image_id = payload.get("imageId")
+                if not image_id:
+                    self._send_json({"error": "imageId required"}, 400)
+                    return
+                call_db(db.delete_image, image_id)
+                print(f"Deleted accepted image {image_id}")
                 self._send_json(current_state())
                 return
 
@@ -272,17 +280,27 @@ PAGE_HTML = """<!doctype html>
   #rubric-bar b { color: #fff; }
   button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; border: none; border-radius: 6px; background: #444; color: #eee; }
   button:hover { background: #555; }
+  button:disabled { opacity: 0.4; cursor: default; }
   #reject-btn { background: #644; }
+  #accept-btn { background: #274; }
   #progress { margin-left: auto; color: #aaa; }
   #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   .thumb { cursor: pointer; border: 3px solid transparent; border-radius: 6px; overflow: hidden; background: #222; aspect-ratio: 1; position: relative; }
   .thumb:hover { border-color: #4a9; }
+  .thumb.selected { border-color: #4a9; box-shadow: 0 0 0 2px #4a9 inset; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb .prompt { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 0.7rem; padding: 4px; max-height: 40%; overflow: hidden; }
+  .thumb .check { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.5); border: 2px solid #eee; display: none; align-items: center; justify-content: center; color: #fff; font-size: 0.9rem; }
+  .thumb.selected .check { display: flex; background: #4a9; border-color: #4a9; }
   #done { font-size: 1.3rem; padding: 2rem; text-align: center; }
-  #existing-warning { display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #3a1f1f; border-left: 3px solid #d55; border-radius: 4px; font-size: 0.85rem; color: #fdd; align-items: center; gap: 12px; }
-  #existing-warning img { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; border: 2px solid #d55; flex-shrink: 0; }
-  #existing-warning b { color: #fff; }
+  #accept-bar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+  #existing-section { display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #1a2a1f; border-left: 3px solid #4a9; border-radius: 4px; }
+  #existing-section .label { font-size: 0.85rem; color: #9dc; margin-bottom: 0.5rem; }
+  #existing-strip { display: flex; flex-wrap: wrap; gap: 10px; }
+  .existing-thumb { position: relative; width: 72px; height: 72px; border-radius: 6px; overflow: hidden; background: #222; }
+  .existing-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .existing-thumb .variant-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 0.65rem; text-align: center; padding: 1px 0; }
+  .existing-thumb .delete-btn { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border-radius: 50%; background: #a33; font-size: 0.7rem; line-height: 1; }
 </style>
 </head>
 <body>
@@ -297,9 +315,12 @@ PAGE_HTML = """<!doctype html>
     <div id="progress"></div>
   </div>
   <div id="rubric-bar"><b id="style-label"></b> - judge these against this style's own bar, not a generic "looks nice": <span id="rubric-text"></span></div>
-  <div id="existing-warning">
-    <img id="existing-thumb" alt="existing image">
-    <div><b>This word already has an accepted image.</b> Clicking a candidate below will PERMANENTLY REPLACE it - there is no version history. You'll be asked to confirm.</div>
+  <div id="existing-section">
+    <div class="label">Already accepted for this word/style - accepting candidates below adds MORE images, it never replaces these. Delete one here if it's no longer good.</div>
+    <div id="existing-strip"></div>
+  </div>
+  <div id="accept-bar">
+    <button id="accept-btn" disabled>Accept selected (0)</button>
   </div>
   <div id="grid"></div>
   <div id="done" style="display:none">Queue empty. Run generate.py for more words, then re-run this review.</div>
@@ -314,14 +335,31 @@ async function refresh() {
   render(await fetchJson('/api/state'));
 }
 
+// Selection is a client-side set of candidate filenames, reset every time
+// a new word's state renders (state.wordId changes) so stale selections
+// from the previous word can never leak into an accept call.
+let selected = new Set();
+let selectedForWordId = null;
+
+function updateAcceptButton() {
+  const btn = document.getElementById('accept-btn');
+  btn.textContent = 'Accept selected (' + selected.size + ')';
+  btn.disabled = selected.size === 0;
+}
+
 function render(state) {
   if (!state.wordId) {
     document.getElementById('word-bar').style.display = 'none';
     document.getElementById('rubric-bar').style.display = 'none';
-    document.getElementById('existing-warning').style.display = 'none';
+    document.getElementById('existing-section').style.display = 'none';
+    document.getElementById('accept-bar').style.display = 'none';
     document.getElementById('grid').style.display = 'none';
     document.getElementById('done').style.display = 'block';
     return;
+  }
+  if (state.wordId !== selectedForWordId) {
+    selected = new Set();
+    selectedForWordId = state.wordId;
   }
   const m = state.manifest;
   document.getElementById('word-id').textContent = state.wordId + ' - ' + (m.display_text || '');
@@ -330,55 +368,92 @@ function render(state) {
   document.getElementById('style-label').textContent = state.styleLabel;
   document.getElementById('rubric-text').textContent = state.reviewRubric;
 
-  const warning = document.getElementById('existing-warning');
-  if (state.hasExistingImage) {
-    document.getElementById('existing-thumb').src = '/existing-image?_=' + state.wordId;
-    warning.style.display = 'flex';
+  const existingSection = document.getElementById('existing-section');
+  const existingStrip = document.getElementById('existing-strip');
+  existingStrip.innerHTML = '';
+  if (state.existingImages && state.existingImages.length > 0) {
+    existingSection.style.display = 'block';
+    state.existingImages.forEach((img) => {
+      const div = document.createElement('div');
+      div.className = 'existing-thumb';
+      const el = document.createElement('img');
+      el.src = '/existing-image/' + img.imageId;
+      div.appendChild(el);
+      const label = document.createElement('div');
+      label.className = 'variant-label';
+      label.textContent = '#' + img.variantNumber;
+      div.appendChild(label);
+      const del = document.createElement('button');
+      del.className = 'delete-btn';
+      del.textContent = '\\u00d7';
+      del.title = 'Delete this accepted image';
+      del.onclick = async () => {
+        const ok = confirm('Permanently delete accepted image #' + img.variantNumber + ' for "' + state.wordId + '"? This cannot be undone.');
+        if (!ok) return;
+        render(await fetchJson('/api/delete-existing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageId: img.imageId }),
+        }));
+      };
+      div.appendChild(del);
+      existingStrip.appendChild(div);
+    });
   } else {
-    warning.style.display = 'none';
+    existingSection.style.display = 'none';
   }
 
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
+  document.getElementById('accept-bar').style.display = 'flex';
+  document.getElementById('grid').style.display = 'grid';
   state.variants.forEach((filename, i) => {
     const div = document.createElement('div');
-    div.className = 'thumb';
+    div.className = 'thumb' + (selected.has(filename) ? ' selected' : '');
     const img = document.createElement('img');
     img.src = '/candidate-image/' + encodeURIComponent(filename) + '?_=' + state.wordId;
     div.appendChild(img);
+    const check = document.createElement('div');
+    check.className = 'check';
+    check.textContent = '\\u2713';
+    div.appendChild(check);
     const promptDiv = document.createElement('div');
     promptDiv.className = 'prompt';
     promptDiv.textContent = (m.prompts && m.prompts[i]) || '';
     div.appendChild(promptDiv);
-    div.onclick = async () => {
-      // A word already carrying an accepted (possibly already-live) image
-      // gets an explicit, informed confirmation before that image is
-      // permanently replaced - never a silent one-click overwrite.
-      if (state.hasExistingImage) {
-        const ok = confirm(
-          'This word ("' + state.wordId + '") already has an accepted ' + state.styleLabel +
-          ' image. Replace it with this candidate?\\n\\nThis cannot be undone - there is no version history.'
-        );
-        if (!ok) return;
+    div.onclick = () => {
+      // Toggle selection only - accepting is a separate explicit action
+      // (the "Accept selected" button) so a reviewer can pick several
+      // good candidates from one batch before anything is written.
+      if (selected.has(filename)) {
+        selected.delete(filename);
+        div.classList.remove('selected');
+      } else {
+        selected.add(filename);
+        div.classList.add('selected');
       }
-      const result = await fetchJson('/api/accept', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variant: filename, confirmOverwrite: state.hasExistingImage }),
-      });
-      if (result.error) {
-        // Server-side re-check refused it (e.g. a concurrent change) -
-        // surface that rather than rendering a malformed state.
-        alert('Not saved: ' + result.error);
-        render(await fetchJson('/api/state'));
-        return;
-      }
-      render(result);
+      updateAcceptButton();
     };
     grid.appendChild(div);
   });
+  updateAcceptButton();
 }
 
+document.getElementById('accept-btn').onclick = async () => {
+  if (selected.size === 0) return;
+  const variants = [...selected];
+  const result = await fetchJson('/api/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ variants }),
+  });
+  if (result.error) {
+    alert('Not saved: ' + result.error);
+    render(await fetchJson('/api/state'));
+    return;
+  }
+  render(result);
+};
 document.getElementById('skip-btn').onclick = async () => render(await fetchJson('/api/skip', { method: 'POST' }));
 document.getElementById('prev-btn').onclick = async () => render(await fetchJson('/api/prev', { method: 'POST' }));
 document.getElementById('reject-btn').onclick = async () => render(await fetchJson('/api/reject', { method: 'POST' }));
