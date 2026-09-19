@@ -72,6 +72,37 @@ describe('AddWord - Word tab', () => {
     expect(screen.getByText('testform_meaning')).toBeInTheDocument();
   });
 
+  it('defaults the spelling to the result actually picked, not standardForms[0]', async () => {
+    // Reported: ẹran (meat/animal) came back with standardForms listing an unrelated shorter
+    // spelling first, and the radio silently defaulted to that one instead of the entry the
+    // curator searched for and clicked - an accident waiting to happen, not a real choice.
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        {
+          form: 'ẹran',
+          pos: 'noun',
+          glosses: ['meat; animal'],
+          matchedVia: 'yoruba_exact',
+          altOfTargets: [],
+          standardForms: ['ẹan', 'ẹran'],
+          entryId: 'en-eran-yo-noun-ABC',
+          etymologyNumber: null,
+        },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('ẹran'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByRole('radio', { name: 'ẹran' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'ẹan' })).not.toBeChecked();
+  });
+
   it('submits createWord citing the picked etymology, not just its spelling', async () => {
     const fetchMock = mockFetch();
     vi.stubGlobal('fetch', fetchMock);

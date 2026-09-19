@@ -102,7 +102,7 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
 function ClaimBadge({ result }: { result: KaikkiSearchResult }) {
   // Said first, because it changes what the row's button does. A multi-word entry is a phrase whatever
   // else is true of it, and offering "Select" here would add a phrase as a word.
-  if (isMultiWord(result.standardForms[0] ?? result.form)) {
+  if (isMultiWord(result.form)) {
     return (
       <>
         {' '}
@@ -299,7 +299,7 @@ function WordTab({
   useEffect(() => {
     if (!prefill) return;
     setSelected(prefill);
-    chooseSpelling(prefill.standardForms[0] ?? prefill.form);
+    chooseSpelling(prefill.form);
     setDefinitionText(prefill.glosses[0] ?? '');
     setHint(hintFromGloss(prefill.glosses[0]));
   }, [prefill]);
@@ -333,7 +333,12 @@ function WordTab({
   }
 
   function pickResult(result: KaikkiSearchResult) {
-    const form = result.standardForms[0] ?? result.form;
+    // The canonical spelling this result IS, not standardForms[0] - the two are supposed to agree
+    // ("canonical first" - see kaikkiSearch.ts) but a curator hit a real case where they did not,
+    // and defaulting to whichever the corpus happened to list first meant defaulting to the wrong
+    // one of two live options with no visible reason why. .form is what the search row actually
+    // showed and what was actually picked.
+    const form = result.form;
     // A multi-word entry is a phrase. Rather than refusing, carry it over with its etymology and its
     // words already split out - the curator asked for this entry, and the Phrase tab is where it can
     // actually be recorded.
@@ -1206,8 +1211,10 @@ function PhraseTab({
         // entry has said something true about this phrase and should not have to say it twice.
         // If those components disagree with upstream's spelling, the spelling report above says
         // so in its own words rather than this refusing on their behalf.
-        if (isMultiWord(r.standardForms[0] ?? r.form)) {
-          const form = r.standardForms[0] ?? r.form;
+        if (isMultiWord(r.form)) {
+          // .form, not standardForms[0] - see pickResult's identical note. It is the canonical
+          // spelling this result IS and what the search row actually showed.
+          const form = r.form;
           setDraft({
             ...draft,
             displayText: form,
@@ -1279,7 +1286,7 @@ function PhraseTab({
         // of them - which is how the multi-word case came to look unavailable here.
         renderAction={(r: KaikkiSearchResult) => (
           <button type="button" className="btn btn-secondary" onClick={() => selectUpstream(r)}>
-            {isMultiWord(r.standardForms[0] ?? r.form) ? 'Use as this phrase' : 'Add it as a word first'}
+            {isMultiWord(r.form) ? 'Use as this phrase' : 'Add it as a word first'}
           </button>
         )}
         placeholder="Search Wiktionary for this phrase, or for a missing word..."
@@ -1512,7 +1519,7 @@ export function AddWord({ onOpenWord }: AddWordProps = {}) {
       </nav>
       {wordForPhrase ? (
         <p className="field-note" aria-label="Adding for a phrase">
-          Adding <strong>{wordForPhrase.standardForms[0] ?? wordForPhrase.form}</strong> as a word first. It will be added
+          Adding <strong>{wordForPhrase.form}</strong> as a word first. It will be added
           to the phrase you were building as soon as it is saved.
         </p>
       ) : null}
