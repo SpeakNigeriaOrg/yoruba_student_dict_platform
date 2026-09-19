@@ -103,6 +103,65 @@ describe('AddWord - Word tab', () => {
     expect(screen.getByRole('radio', { name: 'ẹan' })).not.toBeChecked();
   });
 
+  it("shows Wiktionary's own suggested components before the question is even asked", async () => {
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        {
+          form: 'ojúlé',
+          pos: 'noun',
+          glosses: ['doorway'],
+          matchedVia: 'yoruba_exact',
+          altOfTargets: [],
+          standardForms: ['ojúlé'],
+          entryId: 'en-ojule-yo-noun-ABC',
+          etymologyNumber: null,
+          componentCandidates: [
+            { form: 'ojú', provenance: 'etymology_template' },
+            { form: 'ilé', provenance: 'etymology_template' },
+          ],
+        },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('ojúlé'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    // Visible even before the components section is opened.
+    expect(screen.getByLabelText("Wiktionary's suggested components")).toHaveTextContent('ojú + ilé');
+    expect(screen.queryByLabelText('Word components section')).not.toBeInTheDocument();
+  });
+
+  it('says nothing when Kaikki proposes only a single root - a root is not a breakdown', async () => {
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        {
+          form: 'ọba',
+          pos: 'noun',
+          glosses: ['king'],
+          matchedVia: 'yoruba_exact',
+          altOfTargets: [],
+          standardForms: ['ọba'],
+          entryId: 'en-oba-yo-noun-ABC',
+          etymologyNumber: null,
+          componentCandidates: [{ form: 'ba', provenance: 'etymology_template' }],
+        },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('ọba'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.queryByLabelText("Wiktionary's suggested components")).not.toBeInTheDocument();
+  });
+
   it('submits createWord citing the picked etymology, not just its spelling', async () => {
     const fetchMock = mockFetch();
     vi.stubGlobal('fetch', fetchMock);

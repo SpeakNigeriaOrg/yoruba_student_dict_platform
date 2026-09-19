@@ -18,7 +18,7 @@ import {
   type GlossStats,
 } from './englishRelevance.js';
 import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
-import type { KaikkiLexicon, KaikkiSense } from './types.js';
+import type { ComponentCandidate, KaikkiLexicon, KaikkiSense } from './types.js';
 
 export interface KaikkiSearchRecord {
   form: string;
@@ -131,6 +131,17 @@ export interface KaikkiSearchResult {
    * a cited word sharing a spelling with a different etymology is the `kọ́` false positive, and
    * suppressing it is the point rather than an omission. */
   spellingMatches?: Array<{ wordId: string; displayText: string }>;
+  /** Wiktionary's own structured decomposition of this etymology, unresolved against our vocab -
+   * the same field diagnoseEntry/componentsAxis read for an EXISTING word's etymology review, here
+   * for a word that does not exist yet. Add Word's "is this word built from other words?" used to
+   * ask blind, with no way to know upstream had already answered - a curator picking `ojúlé`
+   * (from `ojú` + `ilé`) got no hint that Wiktionary's own etymology template said so, and had to
+   * either already know it or wait until the word existed and Review re-asked the same question
+   * with the answer shown. Null when Kaikki records no structured template for this etymology at
+   * all - a real, sizeable fraction, distinct from an empty array (a template that resolved to
+   * nothing, which does not happen in practice but is worth keeping distinguishable from "there
+   * was no template to begin with"). */
+  componentCandidates: ComponentCandidate[] | null;
 }
 
 // One key per ETYMOLOGY. The lexicon deliberately cross-indexes the same
@@ -295,5 +306,6 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     // spelling maps to several etymologies).
     entryId: sense.entryId ?? null,
     etymologyNumber: sense.etymologyNumber ?? null,
+    componentCandidates: sense.componentCandidates ?? null,
   }));
 }

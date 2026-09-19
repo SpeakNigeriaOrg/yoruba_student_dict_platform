@@ -22,12 +22,12 @@ interface SearchKaikkiFixture {
 const fixtures = loadFixture<SearchKaikkiFixture[]>('search_kaikki.json');
 
 /** These fixtures assert PARITY with kaikki_search.py: which senses are found,
- * ranked in what order. entryId/etymologyNumber have no Python counterpart -
- * they carry the citation this engine added - so they are not part of that
- * contract and are dropped before comparing. Their own behaviour is covered by
- * the 'carries the citation' block below, not here. */
+ * ranked in what order. entryId/etymologyNumber/componentCandidates have no Python counterpart -
+ * they carry data this engine added on top (the citation, and Wiktionary's own structured
+ * decomposition for Add Word's benefit) - so they are not part of that contract and are dropped
+ * before comparing. Their own behaviour is covered elsewhere, not here. */
 function withoutCitation(results: ReturnType<typeof searchKaikki>): unknown[] {
-  return results.map(({ entryId: _entryId, etymologyNumber: _etymologyNumber, ...rest }) => rest);
+  return results.map(({ entryId: _entryId, etymologyNumber: _etymologyNumber, componentCandidates: _componentCandidates, ...rest }) => rest);
 }
 
 /** Queries where the English RANKING deliberately no longer matches kaikki_search.py.
@@ -183,6 +183,27 @@ describe('searchKaikki carries the citation (an entry IS a Wiktionary etymology)
     // is nothing to tell them apart by, so they still collapse.
     const idless = twins.map((s) => ({ ...s, entryId: null }));
     expect(searchKaikki(buildSearchIndex({ ko: idless }), 'kọ́')).toHaveLength(1);
+  });
+
+  it("carries Wiktionary's own component candidates through, unresolved, for Add Word to show", () => {
+    const withParts = sense({
+      glosses: ['bed'],
+      componentCandidates: [
+        { form: 'ibi', provenance: 'etymology_template' },
+        { form: 'sùn', provenance: 'etymology_template' },
+      ],
+    });
+    const [result] = searchKaikki(buildSearchIndex({ ibusun: [withParts] }), withParts.canonicalForm.value);
+    expect(result.componentCandidates).toEqual([
+      { form: 'ibi', provenance: 'etymology_template' },
+      { form: 'sùn', provenance: 'etymology_template' },
+    ]);
+  });
+
+  it('reports null, not an empty array, when Kaikki records no structured template at all', () => {
+    const noTemplate = sense({ glosses: ['a word with no etymology template'], componentCandidates: null });
+    const [result] = searchKaikki(buildSearchIndex({ notmpl: [noTemplate] }), noTemplate.canonicalForm.value);
+    expect(result.componentCandidates).toBeNull();
   });
 
   it('leaves the claim fields UNSET - whether an etymology is taken is production state, not corpus', () => {

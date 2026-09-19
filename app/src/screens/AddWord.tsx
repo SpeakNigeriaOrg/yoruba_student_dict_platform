@@ -664,8 +664,21 @@ function WordTab({
             </>
           ) : null}
 
+          {/* Said before the question is even asked, not left for Review to reveal later - a
+              curator answering blind here had no way to know Wiktionary's own etymology template
+              already proposed one, and would meet the identical proposal again on the etymology
+              review screen after the fact. One candidate is a root, not a breakdown - see
+              EtymologyReview's singleRootProposal - so only shown once there is a real one to
+              weigh. Unresolved against our vocab on purpose: this is a hint to act on with the
+              picker below, not a claim about whether we already hold these words. */}
+          {selected && selected.componentCandidates && selected.componentCandidates.length > 1 ? (
+            <p className="field-note" aria-label="Wiktionary's suggested components">
+              Wiktionary suggests this is built from: {selected.componentCandidates.map((c) => c.form).join(' + ')}
+            </p>
+          ) : null}
+
           {/* Optional, collapsed, and last of the content fields.
-              
+
               A word's components are a claim ABOUT it rather than its identity - the citation above
               is the identity (0017) - so this asks a question most words answer with silence, and
               the section stays shut until somebody has one to give. Opening it and picking nothing
