@@ -95,7 +95,7 @@ export const GAME_BLOCKER_LABEL: Record<GameBlocker, string> = {
 export const WIKTIONARY_BLOCKER_LABEL: Record<WiktionaryBlocker, string> = {
   no_citation_row: 'no citation',
   no_part_of_speech: 'no part of speech',
-  no_english_gloss: 'no gloss',
+  no_english_gloss: 'no extended definition',
 };
 
 /** Red, because a blocker is a dead end for the action in question rather than a caution to

@@ -125,7 +125,7 @@ export function describeWiktionaryBlocker(blocker: WiktionaryBlocker): string {
     case 'no_part_of_speech':
       return 'no part of speech (set golden_record.pos)';
     case 'no_english_gloss':
-      return 'no English gloss (set golden_record.english_gloss)';
+      return 'no extended definition (set golden_record.english_gloss)';
   }
 }
 

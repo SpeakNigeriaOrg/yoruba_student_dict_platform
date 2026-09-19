@@ -368,6 +368,62 @@ describe('EtymologyReview', () => {
     });
   });
 
+  it("refuses a second pick from search, but 'Duplicate' makes a genuine reduplication (méjì méjì)", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/etymology')) return Promise.resolve({ ok: true, json: async () => etymologyFixture });
+      if (url.includes('/vocab-search')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            results: [{ wordId: 'meji_word', displayText: 'méjì', syllables: ['mé', 'jì'], definition: 'two', baseSpelling: 'meji', matchedVia: 'yoruba_exact' }],
+          }),
+        });
+      }
+      if (url.includes('/kaikki-search')) return Promise.resolve({ ok: true, json: async () => ({ results: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+    await openCuratorTools(user);
+
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('méjì'));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    // Picking it again from search is refused - the accidental-double-click guard stays in place.
+    expect(screen.getByRole('button', { name: 'Added ✓' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate méjì' }));
+    const draft = screen.getByLabelText('Draft components');
+    expect(draft.querySelectorAll('li')).toHaveLength(2);
+    expect(draft).toHaveTextContent('1.');
+    expect(draft).toHaveTextContent('2.');
+
+    // The search result is still correctly marked added - a reduplication is still a use of the
+    // word, not a reason to invite picking it a third time from search.
+    expect(screen.getByRole('button', { name: 'Added ✓' })).toBeDisabled();
+
+    // Removing ONE copy removes only that position - not both, which is what filtering by
+    // word_id instead of position used to do.
+    await user.click(screen.getAllByRole('button', { name: 'Remove' })[0]);
+    expect(draft.querySelectorAll('li')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Added ✓' })).toBeDisabled();
+
+    // And removing the last copy really does free the search result up again.
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(screen.queryByLabelText('Draft components')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Save these parts' }));
+    const decisionCall = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
+    const savedBody = JSON.parse(decisionCall![1].body);
+    expect(savedBody.components).toEqual(['meji_word']);
+  });
+
   it('removing a draft component removes its chip', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyConfirmedFixture }));
     const user = userEvent.setup();

@@ -527,12 +527,37 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     }
   }
 
-  function removeManualComponent(componentWordId: string) {
+  /** By position, not by word_id - removeManualComponent used to filter every occurrence of the
+   * id out at once, which was invisible until duplicateDraftComponent existed to create a second
+   * one: removing ONE méjì out of méjì méjì removed both. */
+  function removeManualComponent(index: number) {
+    const removedWordId = draftComponents[index];
     setAnswerRecorded(false);
-    setDraftComponents((prev) => prev.filter((id) => id !== componentWordId));
-    setSelectedCandidateWordIds((selected) =>
-      Object.fromEntries(Object.entries(selected).filter(([, wordId]) => wordId !== componentWordId)),
-    );
+    setDraftComponents((prev) => prev.filter((_, i) => i !== index));
+    // Only clear the "already added" mark on the search result once no other occurrence of this
+    // word remains in the draft - removing one copy of a reduplicated word does not mean the word
+    // stopped being used here, and re-enabling the result mid-edit would invite a second
+    // *accidental* copy right after removing a deliberate one.
+    if (!draftComponents.some((id, i) => id === removedWordId && i !== index)) {
+      setSelectedCandidateWordIds((selected) =>
+        Object.fromEntries(Object.entries(selected).filter(([, wordId]) => wordId !== removedWordId)),
+      );
+    }
+  }
+
+  /** The escape hatch for reduplication (méjì méjì, mẹ́ta mẹ́ta...), which is common and
+   * legitimate in Yoruba. addDraftComponent still refuses a second pick of the same word from
+   * search - that refusal is what catches an ACCIDENTAL double-click, and is worth keeping - so
+   * an intentional repeat is asked for explicitly, right next to the copy it repeats, rather than
+   * by changing what the search results do. Inserted right after its source rather than appended,
+   * so the pair reads together instead of the copy having to be walked back into place. */
+  function duplicateDraftComponent(index: number) {
+    setAnswerRecorded(false);
+    setDraftComponents((prev) => {
+      const next = [...prev];
+      next.splice(index + 1, 0, prev[index]);
+      return next;
+    });
   }
 
   /** Swaps the draft component at `index` with its neighbor in `direction`. Order here is
@@ -959,7 +984,19 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
                     >
                       ↓
                     </button>
-                    <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(componentWordId)}>
+                    {/* Reduplication (méjì méjì, mẹ́ta mẹ́ta...) is ordinary Yoruba morphology, not a
+                        mistake - but re-picking the same word from search below is refused, on
+                        purpose, to catch an accidental double-click. This is the deliberate way to
+                        get a genuine second copy instead. */}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => duplicateDraftComponent(i)}
+                      aria-label={`Duplicate ${drafted?.displayText ?? componentWordId}`}
+                    >
+                      Duplicate
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={() => removeManualComponent(i)}>
                       Remove
                     </button>
                   </li>

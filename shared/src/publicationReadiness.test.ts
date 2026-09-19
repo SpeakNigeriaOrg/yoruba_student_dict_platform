@@ -71,7 +71,7 @@ describe('wiktionaryBlockers', () => {
     // The scripts print these sentences; the survey counts the codes. Both come from here,
     // so the two can never describe the same gap differently.
     expect(describeWiktionaryBlocker('no_part_of_speech')).toBe('no part of speech (set golden_record.pos)');
-    expect(describeWiktionaryBlocker('no_english_gloss')).toBe('no English gloss (set golden_record.english_gloss)');
+    expect(describeWiktionaryBlocker('no_english_gloss')).toBe('no extended definition (set golden_record.english_gloss)');
   });
 });
 
