@@ -1361,9 +1361,22 @@ function PhraseTab({
         </div>
       ) : null}
 
-      {/* Collected only for a locally composed phrase. An adopted one has a citation pin holding
-          both already; asking again would be asking a curator to retype what upstream said. */}
-      {adopted ? null : (
+      {/* Asked for only on a locally composed phrase - an adopted one has a citation pin holding
+          both already, captured from Wiktionary's own tags at the moment it was picked, so asking
+          again would be asking a curator to retype what upstream said.
+
+          But said out loud rather than silently trusted: a curator who has just routed a compound
+          noun like `ọkọ̀ ayọ́kẹ́lẹ́` here on the strength of its spelling having a space in it (most
+          multi-word entries are NOT grammatically phrases - see the corpus figure on EMPTY_DRAFT)
+          could not previously tell whether "noun" actually got captured or the by-nature default
+          silently won, because nothing on this screen or the dossier afterward ever showed the pin's
+          own values back - the dossier's "(from the pin)" is a literal placeholder, not a resolved
+          one. This is the one moment a wrong or missing upstream tag is still catchable. */}
+      {adopted ? (
+        <p className="field-note" aria-label="Wiktionary's part of speech and gloss">
+          Part of speech: <strong>{adopted.pos}</strong>{adopted.glosses.length > 0 ? ` (${adopted.glosses.join('; ')})` : ''}
+        </p>
+      ) : (
         <>
           {/* Still two different facts: that this entry is a phrase is recorded structurally, by
               having components - createPhrase writes entry_type without asking - while this asks

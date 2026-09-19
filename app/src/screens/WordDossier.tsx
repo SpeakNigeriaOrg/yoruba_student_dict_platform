@@ -35,6 +35,17 @@ function when(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 16).replace('T', ' ');
 }
 
+// dossier.pin is `unknown` because an exempt/atomic word's pin is `{}`, which UpstreamPin's own
+// required `pos` field cannot describe - so these read it defensively rather than casting.
+function pinPos(pin: unknown): string | null {
+  const pos = (pin as { pos?: unknown } | null)?.pos;
+  return typeof pos === 'string' && pos ? pos : null;
+}
+function pinGloss(pin: unknown): string | null {
+  const glosses = (pin as { glosses?: unknown } | null)?.glosses;
+  return Array.isArray(glosses) && typeof glosses[0] === 'string' ? glosses[0] : null;
+}
+
 export interface WordDossierProps {
   wordId: string;
   onOpenWord: (wordId: string) => void;
@@ -104,11 +115,14 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
             <dt>Type</dt>
             <dd>{dossier.entryType ?? 'word'}</dd>
             {/* 0018's overrides. Written at creation and, until this screen, readable only
-                by an offline export script - so nobody could check them. */}
+                by an offline export script - so nobody could check them.
+
+                Null means "read the pin", not "missing" - shown resolved rather than as a bare
+                placeholder, which said nothing about what the pin actually held. */}
             <dt>Part of speech</dt>
-            <dd>{dossier.pos ?? '(from the pin)'}</dd>
+            <dd>{dossier.pos ?? pinPos(dossier.pin) ?? '(none)'}</dd>
             <dt>Extended definition</dt>
-            <dd>{dossier.englishGloss ?? '(from the pin)'}</dd>
+            <dd>{dossier.englishGloss ?? pinGloss(dossier.pin) ?? '(none)'}</dd>
             <dt>Etymid label</dt>
             <dd>{dossier.etymidLabel ?? '(derived from the word_id)'}</dd>
             <dt>Last changed</dt>

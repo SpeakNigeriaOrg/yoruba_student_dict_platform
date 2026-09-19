@@ -1126,8 +1126,14 @@ describe('AddWord - the phrase path can finish the job', () => {
     await user.click(screen.getByRole('button', { name: 'Add as component' }));
     expect(screen.getByLabelText('The phrase, spelled as it is said')).toHaveValue('o ṣé');
 
-    // An adopted phrase cites its own etymology, and does not re-ask for what the pin holds.
+    // An adopted phrase cites its own etymology, and does not re-ask for what the pin holds - but
+    // it does say what got captured instead, so a curator can catch a bad or missing upstream tag
+    // rather than trusting it silently.
     expect(screen.queryByLabelText('Part of speech')).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Wiktionary's part of speech and gloss")).toHaveTextContent('intj');
+    expect(screen.getByLabelText("Wiktionary's part of speech and gloss")).toHaveTextContent(
+      'thank you (non-honorific, to a singular person)',
+    );
 
     // The student definition is asked for anyway, because no pin can hold it - the wording a student
     // reads is ours, cited or not. Seeded from upstream's gloss, which is what there is to simplify.

@@ -61,6 +61,25 @@ describe('the word dossier', () => {
     expect(upstream).toHaveTextContent('ọwọ́');
   });
 
+  it("falls back to the pin's own values for part of speech and extended definition, not a bare placeholder", async () => {
+    // Null on these two columns means "read the pin" (0018), not "missing" - the row used to print
+    // the literal string "(from the pin)" without ever reading it.
+    mount({
+      pos: null,
+      englishGloss: null,
+      pin: { pos: 'verb', glosses: ['to hold'], canonicalForm: 'ọwọ́' },
+    });
+    await waitFor(() => screen.getByText('Part of speech'));
+    expect(screen.getByText('verb')).toBeInTheDocument();
+    expect(screen.getByText('to hold')).toBeInTheDocument();
+  });
+
+  it('shows "(none)" when neither an override nor the pin has one', async () => {
+    mount({ pos: null, englishGloss: null, pin: {} });
+    await waitFor(() => screen.getByText('Part of speech'));
+    expect(screen.getAllByText('(none)')).toHaveLength(2);
+  });
+
   it('shows superseded contributions, marked as set aside', async () => {
     mount({
       contributions: [
