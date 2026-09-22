@@ -12,16 +12,19 @@
 
 import { useEffect, useState } from 'react';
 import {
+  base64ToAudioUrl,
   confirmConsensus,
   excludeContribution,
   excludeExample,
   getConsensus,
   getWordDossier,
+  listUtterances,
   wordImageUrl,
   type ConsensusGroup,
   type DossierContribution,
   type DossierExample,
   type DossierRecording,
+  type UtteranceSummary,
   type WordDossier as Dossier,
 } from '../api.js';
 import { CitationMark } from './StateMarks.js';
@@ -56,6 +59,7 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [audioByUtterance, setAudioByUtterance] = useState<Map<string, UtteranceSummary>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +71,25 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wordId, reloadToken]);
+
+  // A second fetch, unlike Composition's reuse of the dossier's own data below - the dossier
+  // query leaves out audio bytes on purpose (they're the bulk of a recording row, and most of
+  // this screen never needs them), so the clips have to come from the same endpoint the review
+  // screen uses. Keyed by utteranceId so RecordingRow can look its own clip up; a failure here
+  // is silent because the rest of the dossier is fully useful without playback.
+  useEffect(() => {
+    let cancelled = false;
+    listUtterances(wordId)
+      .then((utterances) => {
+        if (!cancelled) setAudioByUtterance(new Map(utterances.map((u) => [u.utteranceId, u])));
+      })
+      .catch(() => {
+        if (!cancelled) setAudioByUtterance(new Map());
       });
     return () => {
       cancelled = true;
@@ -254,7 +277,7 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
           ) : (
             <ul className="plain-list">
               {dossier.recordings.map((r) => (
-                <RecordingRow key={r.utteranceId} recording={r} />
+                <RecordingRow key={r.utteranceId} recording={r} audio={audioByUtterance.get(r.utteranceId)} />
               ))}
             </ul>
           )}
@@ -426,7 +449,7 @@ function ExampleRow({ example, onExcluded }: { example: DossierExample; onExclud
   );
 }
 
-function RecordingRow({ recording }: { recording: DossierRecording }) {
+function RecordingRow({ recording, audio }: { recording: DossierRecording; audio: UtteranceSummary | undefined }) {
   return (
     <li>
       <strong>{recording.speakerName}</strong> · take {recording.takeNumber} ·{' '}
@@ -446,6 +469,26 @@ function RecordingRow({ recording }: { recording: DossierRecording }) {
           : ''}
         {' · '}rights: {recording.releaseState} · {when(recording.recordedAt)}
       </div>
+      {/* Missing rather than null while the second fetch (listUtterances) is still loading, or
+          absent entirely for an observer, who is never sent another speaker's audio - see
+          listUtterances.ts's includeOtherSpeakers. Either way, the metadata above stands on its
+          own, so there's nothing to say here beyond simply not offering a player. */}
+      {audio?.audioDataBase64 ? (
+        <>
+          <br />
+          <audio controls src={base64ToAudioUrl(audio.audioDataBase64)} />
+        </>
+      ) : null}
+      {audio && audio.segments.length > 0 ? (
+        <ul aria-label={`take ${recording.takeNumber} segments`} className="plain-list segment-list">
+          {audio.segments.map((seg) => (
+            <li key={seg.syllablePosition}>
+              Syllable {seg.syllablePosition + 1} ({seg.syllableText})
+              <audio controls src={base64ToAudioUrl(seg.audioDataBase64)} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 }

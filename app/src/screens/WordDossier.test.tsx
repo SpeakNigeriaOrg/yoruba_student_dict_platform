@@ -116,6 +116,65 @@ describe('the word dossier', () => {
     expect(section).toHaveTextContent('lowest confidence 0.31');
   });
 
+  it("lets a curator play a recording's audio, fetched from the utterances endpoint rather than the dossier itself", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/utterances')) {
+        return {
+          ok: true,
+          json: async () => ({
+            utterances: [
+              {
+                utteranceId: 'u1',
+                speakerId: 's1',
+                speakerDisplayName: 'Teacher A',
+                isOwnRecording: false,
+                takeNumber: 1,
+                status: 'segmented',
+                recordedDisplayText: 'ọwọ',
+                recordedSyllables: ['ọ', 'wọ'],
+                divergesFromGolden: true,
+                durationS: 1.2,
+                sampleRate: 44100,
+                recordedAt: '2026-07-05T00:00:00.000Z',
+                audioDataBase64: 'QUJD',
+                rawAudioDataBase64: 'QUJD',
+                rawMediaType: 'audio/webm',
+                rawContainer: 'webm',
+                deliveryMediaType: 'audio/wav',
+                segments: [],
+              },
+            ],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          ...BASE,
+          recordings: [
+            { utteranceId: 'u1', speakerId: 's1', speakerName: 'Teacher A', releaseState: 'agreed', takeNumber: 1, recordedDisplayText: 'ọwọ', recordedSyllables: ['ọ', 'wọ'], matchesGolden: false, durationS: 1.2, status: 'segmented', recordedAt: '2026-07-05T00:00:00.000Z', segmentCount: 0, lowestSegmentConfidence: null },
+          ],
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WordDossier wordId="owo_hand" onOpenWord={vi.fn()} onOpenDossier={vi.fn()} />);
+
+    const section = await waitFor(() => screen.getByLabelText('Recordings'));
+    await waitFor(() => expect(section.querySelector('audio')).not.toBeNull());
+  });
+
+  it("shows a recording's metadata even when it has no audio yet (still loading, or an observer with no access to it)", async () => {
+    mount({
+      recordings: [
+        { utteranceId: 'u1', speakerId: 's1', speakerName: 'Teacher A', releaseState: 'agreed', takeNumber: 1, recordedDisplayText: 'ọwọ', recordedSyllables: ['ọ', 'wọ'], matchesGolden: false, durationS: 1.2, status: 'segmented', recordedAt: '2026-07-05T00:00:00.000Z', segmentCount: 0, lowestSegmentConfidence: null },
+      ],
+    });
+    const section = await waitFor(() => screen.getByLabelText('Recordings'));
+    expect(section).toHaveTextContent('said as “ọwọ”');
+    expect(section.querySelector('audio')).toBeNull();
+  });
+
   it('flags an example recorded under a superseded spelling', async () => {
     mount({
       examples: [
