@@ -33,6 +33,7 @@ import {
   type ContributionOutcome,
 } from '@yoruba-student-dict-platform/shared';
 import { WordNotFoundError } from './errors.js';
+import { ENTRY_USAGE_COLUMNS, usageObserved, validateEntryUsageInput, type EntryUsageRow } from '../entryUsage.js';
 import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import { PhraseNeedsComponentsError, type ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
 import type { UpstreamCitationInput } from './upstreamCitations.js';
@@ -93,6 +94,7 @@ async function loadObservedState(
   syllables: string[];
   definition: string | null;
   citedEntryId: string | null;
+  usage: ReturnType<typeof usageObserved>;
   components: string[];
   isPhrase: boolean;
 }> {
@@ -101,14 +103,16 @@ async function loadObservedState(
   // as the rest of it. Null covers both "no citation row" and "explicitly
   // exempt", which are the same thing from a contributor's point of view - there
   // is no etymology to agree or disagree about.
-  const word = await client.query<{
-    display_text: string;
-    syllables: string[];
-    definition: string | null;
-    entry_type: 'phrase' | null;
-    entry_id: string | null;
-  }>(
-    `select g.display_text, g.syllables, g.definition, g.entry_type, c.entry_id
+  const word = await client.query<
+    {
+      display_text: string;
+      syllables: string[];
+      definition: string | null;
+      entry_type: 'phrase' | null;
+      entry_id: string | null;
+    } & EntryUsageRow
+  >(
+    `select g.display_text, g.syllables, g.definition, g.entry_type, c.entry_id, ${ENTRY_USAGE_COLUMNS}
      from golden_record g
      left join upstream_citations c on c.word_id = g.word_id
      where g.word_id = $1`,
@@ -127,6 +131,7 @@ async function loadObservedState(
     syllables: row.syllables,
     definition: row.definition,
     citedEntryId: row.entry_id,
+    usage: usageObserved(row),
     components: components.rows.map((r) => r.component_word_id),
     isPhrase: row.entry_type === 'phrase',
   };
@@ -139,12 +144,14 @@ function resolveOutcome(
   observed: Awaited<ReturnType<typeof loadObservedState>>,
 ): ContributionOutcome {
   if (input.axis === 'entry') {
+    validateEntryUsageInput(input.proposedValue);
     return resolveEntryOutcome(
       {
         displayText: observed.displayText,
         syllables: observed.syllables,
         definition: observed.definition,
         citedEntryId: observed.citedEntryId,
+        ...observed.usage,
       },
       input.proposedValue,
     );

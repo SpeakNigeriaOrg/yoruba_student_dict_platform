@@ -30,11 +30,22 @@ import {
   type KaikkiLexicon,
 } from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
+import {
+  ENTRY_USAGE_COLUMNS,
+  usageObserved,
+  validateEntryUsageInput,
+  writeEntryUsageInTransaction,
+  type EntryUsageInput,
+  type EntryUsageRow,
+} from '../entryUsage.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { WordNotFoundError } from './errors.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
 
-export interface ApplyEntryDecisionInput {
+/** EntryUsageInput carries the part of speech, usage labels and only-in-derived-terms flag
+ * (0029). Optional, unlike the two halves above: absent means "confirm what is on record", which
+ * is what every decision made before those fields existed asserted. */
+export interface ApplyEntryDecisionInput extends EntryUsageInput {
   /** The written-form half. Required - see the module comment. */
   action?: 'keep_ours' | 'select_candidate' | 'adopt_kaikki' | 'respell';
   candidateForm?: string;
@@ -155,6 +166,7 @@ export function validateEntryDecisionInput(input: ApplyEntryDecisionInput): void
     if (joined !== whole) throw new RespellMismatchError(input.newDisplayText, input.newSyllables.join(''));
   }
   if (input.definitionAction === 'custom' && !input.definitionText) throw new MissingDefinitionTextError();
+  validateEntryUsageInput(input);
 }
 
 export async function applyEntryDecision(
@@ -180,14 +192,16 @@ export async function applyEntryDecisionInTransaction(
 ): Promise<void> {
   // definition is read alongside the rest so the outcome can be fingerprinted
   // below against the state observed before any of this handler's writes.
-  const existing = await client.query<{
-    display_text: string;
-    syllables: string[];
-    entry_type: string | null;
-    definition: string | null;
-    entry_id: string | null;
-  }>(
-    `select g.display_text, g.syllables, g.entry_type, g.definition, c.entry_id
+  const existing = await client.query<
+    {
+      display_text: string;
+      syllables: string[];
+      entry_type: string | null;
+      definition: string | null;
+      entry_id: string | null;
+    } & EntryUsageRow
+  >(
+    `select g.display_text, g.syllables, g.entry_type, g.definition, c.entry_id, ${ENTRY_USAGE_COLUMNS}
      from golden_record g
      left join upstream_citations c on c.word_id = g.word_id
      where g.word_id = $1`,
@@ -309,6 +323,12 @@ export async function applyEntryDecisionInTransaction(
     // spelling that was actually settled rather than re-proposing from scratch.
     newDisplayText: input.action === 'respell' ? input.newDisplayText : undefined,
     newSyllables: input.action === 'respell' ? input.newSyllables : undefined,
+    posAction: input.posAction,
+    pos: input.posAction === 'set' ? input.pos : undefined,
+    usageLabelsAction: input.usageLabelsAction,
+    usageLabels: input.usageLabelsAction === 'set' ? input.usageLabels : undefined,
+    onlyInDerivedTermsAction: input.onlyInDerivedTermsAction,
+    onlyInDerivedTerms: input.onlyInDerivedTermsAction === 'set' ? input.onlyInDerivedTerms : undefined,
   };
   // Fingerprinted with the same function contributions use, so a later
   // contribution that disagrees with this decision can be detected by equality
@@ -320,6 +340,7 @@ export async function applyEntryDecisionInTransaction(
       syllables: currentRow.syllables,
       definition: currentRow.definition,
       citedEntryId: currentRow.entry_id,
+      ...usageObserved(currentRow),
     },
     input,
   );
@@ -332,6 +353,8 @@ export async function applyEntryDecisionInTransaction(
   if (input.senseEntryId && input.senseEntryId !== currentRow.entry_id) {
     await writeCitationInTransaction(client, wordId, { entryId: input.senseEntryId }, decidedBy);
   }
+  // After the re-cite, never before: which pos the record resolves to depends on the pin.
+  await writeEntryUsageInTransaction(client, wordId, outcome, decidedBy);
 
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
@@ -402,6 +425,7 @@ export async function applyEntryOutcomeInTransaction(
       [outcome.displayText, outcome.syllables, outcome.definitionText, decidedBy, wordId],
     );
   }
+  await writeEntryUsageInTransaction(client, wordId, outcome, decidedBy);
 
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)

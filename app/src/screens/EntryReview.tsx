@@ -67,6 +67,7 @@ import { PhraseComposer } from './PhraseComposer.js';
 import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
 import { ToneEditor } from './ToneEditor.js';
+import { UsageFields, usageActions, usageDraftFrom, type UsageDraft } from './UsageFields.js';
 
 export interface EntryReviewProps {
   wordId: string;
@@ -212,6 +213,8 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const [definitionText, setDefinitionText] = useState('');
   const [definitionSourceForm, setDefinitionSourceForm] = useState<string | undefined>(undefined);
   const [note, setNote] = useState('');
+  /** Part of speech, usage labels and the only-in-derived-terms flag (0029), seeded from the record. */
+  const [usageDraft, setUsageDraft] = useState<UsageDraft | null>(null);
   /** Curator-only escape hatch, collapsed by default. Re-linking or overriding
    * the matched record is not part of a routine review even for a curator. */
   const [showTools, setShowTools] = useState(false);
@@ -228,6 +231,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
     setLettersSnapshot(null);
     setSyllableAction(undefined);
     setShowTools(false);
+    setUsageDraft(null);
     getEntryReview(wordId)
       .then((result) => {
         if (cancelled) return;
@@ -259,6 +263,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         setDefinitionText(result.definitionCurrent ?? result.definitionProposed ?? '');
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);
         setNote(result.note ?? '');
+        setUsageDraft(usageDraftFrom(result.usage));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -316,6 +321,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         ? { definitionAction: 'confirm' as const }
         : { definitionAction: 'custom' as const, definitionText: definitionText.trim() }),
       ...(definitionSourceForm ? { definitionSourceForm } : {}),
+      ...(usageDraft ? usageActions(usageDraft, review.usage) : {}),
       ...(note ? { note } : {}),
     };
 
@@ -578,6 +584,8 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         Plain wording a student will understand. Simplifying Wiktionary's wording is expected - it is a simplification,
         not a correction.
       </p>
+
+      {usageDraft ? <UsageFields draft={usageDraft} onChange={setUsageDraft} usage={review.usage} /> : null}
 
       {/* One label for everyone, and it names what actually happens. */}
       <button type="button" className="btn btn-primary" onClick={submit} disabled={!readyToSubmit || submitting}>

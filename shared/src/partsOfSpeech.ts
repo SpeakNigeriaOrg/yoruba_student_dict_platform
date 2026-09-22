@@ -60,3 +60,26 @@ export const PARTS_OF_SPEECH: PartOfSpeech[] = [
 export function isKnownPartOfSpeech(value: string): boolean {
   return PARTS_OF_SPEECH.some((p) => p.value === value);
 }
+
+// ---------------------------------------------------------------------------
+// "Survives only inside other words" (golden_record.only_in_derived_terms, 0029)
+// ---------------------------------------------------------------------------
+//
+// That flag is for a WORD - a verb, a noun, a particle - that no longer appears as a separate
+// word in sentences and survives only inside other words: lá "to be big", in ńlá and Ayélála.
+// It is not "cannot be said on its own as an utterance". kò and ń cannot either, and they are
+// separate words in every sentence they occur in.
+//
+// These are the parts of speech the flag does not apply to. An affix never was a separate word,
+// so the flag would only restate the part of speech, and a Wiktionary usage note saying a suffix
+// "survives only in derived terms" is noise upstream would strip. A character is a letter, not a
+// word at all. The consensus outcome forces the flag false for them, so two reviewers who agree a
+// thing is a suffix agree - whether or not one of them also ticked the box before choosing it.
+export const FLAG_EXEMPT_PARTS_OF_SPEECH: readonly string[] = ['prefix', 'interfix', 'suffix', 'character'];
+
+/** Whether "survives only inside other words" can be said of this part of speech. An unknown or
+ * absent pos accepts it: the flag's meaning does not depend on knowing the class, only on the
+ * class not ruling it out. */
+export function acceptsOnlyInDerivedTerms(pos: string | null | undefined): boolean {
+  return pos == null || !FLAG_EXEMPT_PARTS_OF_SPEECH.includes(pos);
+}

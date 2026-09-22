@@ -38,7 +38,9 @@
 // text contributions: callers resolve ONCE, at submit time, against the state
 // the contributor actually saw, and store the result.
 
+import { acceptsOnlyInDerivedTerms } from './partsOfSpeech.js';
 import { syllabifyWord } from './syllabify.js';
+import { canonicalUsageLabels } from './usageLabels.js';
 import { FIELD_SEP, LIST_SEP, NULL_MARKER, normalizeGloss, normalizeText } from './textFingerprint.js';
 
 /** How many agreeing contributions make a (word, axis) eligible for rapid
@@ -62,6 +64,12 @@ export interface EntryObservedState {
    * confirming an entry, not a separate act. Null for a word whose citation
    * predates 0014 or which is explicitly exempt. */
   citedEntryId?: string | null;
+  /** The part of speech as the record resolves it - golden_record.pos, else the cited pin's pos
+   * (0018) - because that is what a reviewer is shown and what confirming it asserts. */
+  pos?: string | null;
+  /** golden_record.usage_labels and only_in_derived_terms (0029). */
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
 }
 
 /** The action-shaped submission. Mirrors ApplyEntryDecisionInput's content
@@ -80,6 +88,14 @@ export interface EntryContributionInput {
   /** The etymology this contributor says the word is. Set when they picked a
    * different one from the candidates; absent means "the one already cited". */
   senseEntryId?: string;
+  /** 'set' names a part of speech; 'confirm' or absent asserts the one on record. Same shape for
+   * the usage labels and the only-in-derived-terms flag. */
+  posAction?: 'confirm' | 'set';
+  pos?: string;
+  usageLabelsAction?: 'confirm' | 'set';
+  usageLabels?: string[];
+  onlyInDerivedTermsAction?: 'confirm' | 'set';
+  onlyInDerivedTerms?: boolean;
 }
 
 /** The asserted content state.
@@ -107,6 +123,14 @@ export interface EntryOutcome {
   syllables: string[];
   definitionText: string | null;
   citedEntryId: string | null;
+  /** Optional in the TYPE only because outcomes are also read back out of
+   * contributions.resolved_value, and rows stored before 0029 have no such keys. Every outcome
+   * resolveEntryOutcome produces carries all three, and the 0029 backfill
+   * (backfillEntryUsageFields) writes them into the old rows - pos was never editable before
+   * then, so the value a legacy vote asserted is simply the word's resolved pos. */
+  pos?: string | null;
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
 }
 
 /** Resolves an entry submission into the content state it asserts.
@@ -132,6 +156,8 @@ export interface EntryOutcome {
  *     already present.
  *   - the cited etymology changes only when the contributor names a different
  *     one; otherwise they are asserting the one already on record.
+ *   - pos, usage labels and the only-in-derived-terms flag change only on 'set'.
+ *     The flag is forced false for a part of speech it cannot apply to.
  */
 export function resolveEntryOutcome(observed: EntryObservedState, input: EntryContributionInput): EntryOutcome {
   const respelled = input.action === 'respell' && input.newDisplayText;
@@ -154,7 +180,20 @@ export function resolveEntryOutcome(observed: EntryObservedState, input: EntryCo
   // "no change".
   const citedEntryId = input.senseEntryId ?? observed.citedEntryId ?? null;
 
-  return { kind: 'entry', displayText, syllables, definitionText, citedEntryId };
+  const pos = input.posAction === 'set' && input.pos ? input.pos : (observed.pos ?? null);
+  const usageLabels = canonicalUsageLabels(
+    input.usageLabelsAction === 'set' ? (input.usageLabels ?? []) : (observed.usageLabels ?? []),
+  );
+  // Forced false where the part of speech rules it out (see partsOfSpeech.ts), so "suffix, box
+  // ticked" and "suffix, box unticked" are the same claim - as they are in what applying either
+  // one writes.
+  const onlyInDerivedTerms =
+    acceptsOnlyInDerivedTerms(pos) &&
+    (input.onlyInDerivedTermsAction === 'set'
+      ? input.onlyInDerivedTerms === true
+      : observed.onlyInDerivedTerms === true);
+
+  return { kind: 'entry', displayText, syllables, definitionText, citedEntryId, pos, usageLabels, onlyInDerivedTerms };
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +275,7 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
       // so the word reads as permanently dissented. Absent and null are the same
       // claim - "no etymology cited" - and must fingerprint identically.
       outcome.citedEntryId ?? NULL_MARKER,
+      ...usageFields(outcome),
     ].join(FIELD_SEP);
   }
   return [
@@ -243,6 +283,20 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
     outcome.atomic ? 'atomic' : 'composite',
     outcome.components.map(normalizeText).join(LIST_SEP),
   ].join(FIELD_SEP);
+}
+
+/** The part of speech, usage labels and only-in-derived-terms flag, as fingerprint fields.
+ *
+ * pos is compared exactly: it is one of upstream's ASCII tags, not text a person typed. Labels go
+ * through canonicalUsageLabels, so the order boxes were ticked in never matters. Absent keys (a
+ * row from before 0029 the backfill has not reached) fingerprint as null / none / free - the
+ * `?? NULL_MARKER` lesson on citedEntryId above, for the same reason. */
+function usageFields(outcome: EntryOutcome): [string, string, string] {
+  return [
+    outcome.pos ?? NULL_MARKER,
+    canonicalUsageLabels(outcome.usageLabels ?? []).join(LIST_SEP),
+    outcome.onlyInDerivedTerms ? 'derived-only' : 'free',
+  ];
 }
 
 /** Rewrites one component word_id inside an already-stored fingerprint, leaving every
@@ -265,7 +319,8 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
 export function renameComponentInFingerprint(fingerprint: string, from: string, to: string): string {
   const fields = fingerprint.split(FIELD_SEP);
   // Only an etymology fingerprint carries component word_ids. An entry fingerprint's fields
-  // are spelling, syllables, gloss and an upstream entry id, none of which a word_id names.
+  // are spelling, syllables, gloss, an upstream entry id, a pos tag, usage labels and a flag,
+  // none of which a word_id names.
   if (fields.length !== 3 || fields[0] !== 'etymology' || fields[2] === '') return fingerprint;
   const before = normalizeText(from);
   const after = normalizeText(to);
@@ -274,8 +329,37 @@ export function renameComponentInFingerprint(fingerprint: string, from: string, 
   return ['etymology', fields[1], components.map((c) => (c === before ? after : c)).join(LIST_SEP)].join(FIELD_SEP);
 }
 
+/** How many FIELD_SEP-separated fields an entry fingerprint had before 0029 added usageFields:
+ * 'entry', spelling, syllables, definition, cited etymology. */
+const PRE_USAGE_ENTRY_FIELDS = 5;
+
+/** Extends a fingerprint stored before 0029 with the usage fields, leaving the rest byte-identical.
+ *
+ * For backfillEntryUsageFields. Appends rather than recomputes, for renameComponentInFingerprint's
+ * reason: a word_decisions row stores only the fingerprint, not the outcome it was taken from, so
+ * there is nothing to recompute FROM - and re-deriving a contribution's would rewrite fields the
+ * backfill was never asked to touch. Appending is exact because pos was not editable before 0029:
+ * whatever the word resolves to now is what every earlier vote saw, with no labels and the flag
+ * off, which is precisely what these three fields would have said.
+ *
+ * Returns null for anything that is not a pre-0029 entry fingerprint, including one already
+ * extended, so running the backfill twice changes nothing. */
+export function extendLegacyEntryFingerprint(fingerprint: string, pos: string | null): string | null {
+  const fields = fingerprint.split(FIELD_SEP);
+  if (fields[0] !== 'entry' || fields.length !== PRE_USAGE_ENTRY_FIELDS) return null;
+  return [fingerprint, ...usageFields({ kind: 'entry', displayText: '', syllables: [], definitionText: null, citedEntryId: null, pos, usageLabels: [], onlyInDerivedTerms: false })].join(FIELD_SEP);
+}
+
 /** Which fields two claims about one word can differ on. */
-export type ClaimField = 'spelling' | 'syllables' | 'definition' | 'etymology' | 'components';
+export type ClaimField =
+  | 'spelling'
+  | 'syllables'
+  | 'definition'
+  | 'etymology'
+  | 'partOfSpeech'
+  | 'usageLabels'
+  | 'onlyInDerivedTerms'
+  | 'components';
 
 /** The entry fingerprint WITHOUT the student definition: what word this is, not what it means.
  *
@@ -299,6 +383,9 @@ export function fingerprintIdentity(outcome: ContributionOutcome): string {
     normalizeText(outcome.displayText),
     outcome.syllables.map(normalizeText).join(LIST_SEP),
     outcome.citedEntryId ?? NULL_MARKER,
+    // Part of speech and usage have one right answer each, like the three fields above - they are
+    // not a rendering - so disagreeing about them is a conflict, never "wording only".
+    ...usageFields(outcome),
   ].join(FIELD_SEP);
 }
 
@@ -320,6 +407,9 @@ export function differingFields(outcomes: ContributionOutcome[]): ClaimField[] {
   if (varies((o) => o.syllables.map(normalizeText).join(LIST_SEP))) fields.push('syllables');
   if (varies((o) => (o.definitionText === null ? NULL_MARKER : normalizeGloss(o.definitionText)))) fields.push('definition');
   if (varies((o) => o.citedEntryId ?? NULL_MARKER)) fields.push('etymology');
+  if (varies((o) => usageFields(o)[0])) fields.push('partOfSpeech');
+  if (varies((o) => usageFields(o)[1])) fields.push('usageLabels');
+  if (varies((o) => usageFields(o)[2])) fields.push('onlyInDerivedTerms');
   return fields;
 }
 

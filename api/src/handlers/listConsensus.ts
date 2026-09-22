@@ -25,6 +25,7 @@ import {
   type ContributionRecord,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
+import { ENTRY_USAGE_COLUMNS, type EntryUsageRow } from '../entryUsage.js';
 import type { DecisionAxis } from '../reviewShared.js';
 
 /** How one Wiktionary etymology reads to a human.
@@ -69,6 +70,10 @@ export interface ConsensusGroup {
    * showed. `displayText` above is the same spelling; these are the rest of it. */
   currentSyllables: string[];
   currentCitedEntryId: string | null;
+  /** The record's resolved part of speech, usage labels and only-in-derived-terms flag (0029). */
+  currentPos: string | null;
+  currentUsageLabels: string[];
+  currentOnlyInDerivedTerms: boolean;
   axis: DecisionAxis;
   /** Present only once a curator has decided. */
   decidedAt: string | null;
@@ -148,8 +153,8 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       definition: string | null;
       syllables: string[];
       cited_entry_id: string | null;
-    }>(
-      `select g.word_id, g.display_text, g.definition, g.syllables, c.entry_id as cited_entry_id
+    } & EntryUsageRow>(
+      `select g.word_id, g.display_text, g.definition, g.syllables, c.entry_id as cited_entry_id, ${ENTRY_USAGE_COLUMNS}
        from golden_record g
        left join upstream_citations c on c.word_id = g.word_id
        where g.word_id = any($1)`,
@@ -202,6 +207,9 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       currentDefinition: word.definition,
       currentSyllables: word.syllables ?? [],
       currentCitedEntryId: word.cited_entry_id,
+      currentPos: word.resolved_pos,
+      currentUsageLabels: word.usage_labels,
+      currentOnlyInDerivedTerms: word.only_in_derived_terms,
       axis,
       decidedAt: decision?.decided_at ?? null,
       decidedByEmail: decision?.email ?? null,

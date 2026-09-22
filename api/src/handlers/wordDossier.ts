@@ -125,6 +125,9 @@ export interface WordDossier {
   pos: string | null;
   englishGloss: string | null;
   etymidLabel: string | null;
+  /** 0029. */
+  usageLabels: string[];
+  onlyInDerivedTerms: boolean;
   updatedAt: string;
   updatedByEmail: string | null;
 
@@ -157,11 +160,13 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     pos: string | null;
     english_gloss: string | null;
     etymid_label: string | null;
+    usage_labels: string[];
+    only_in_derived_terms: boolean;
     updated_at: string;
     updated_by_email: string | null;
   }>(
     `select g.display_text, g.syllables, g.definition, g.entry_type, g.pos, g.english_gloss,
-            g.etymid_label, g.updated_at, u.email as updated_by_email
+            g.etymid_label, g.usage_labels, g.only_in_derived_terms, g.updated_at, u.email as updated_by_email
        from golden_record g
        left join users u on u.user_id = g.updated_by
       where g.word_id = $1`,
@@ -341,6 +346,8 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     pos: w.pos,
     englishGloss: w.english_gloss,
     etymidLabel: w.etymid_label,
+    usageLabels: w.usage_labels,
+    onlyInDerivedTerms: w.only_in_derived_terms,
     updatedAt: w.updated_at,
     updatedByEmail: w.updated_by_email,
     citation: citationState(cite?.entry_id ?? null, cite?.exempt_reason ?? null),

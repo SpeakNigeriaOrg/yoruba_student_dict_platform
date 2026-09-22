@@ -53,6 +53,10 @@ const LENSES: Lens[] = [
   { key: 'audio:stale', label: 'Has stale recordings', test: (w) => w.divergedSpeakerCount > 0 },
   { key: 'image:none', label: 'No image', test: (w) => w.imageCount === 0 },
   { key: 'examples:any', label: 'Has examples', test: (w) => w.exampleCount > 0 },
+  // For re-checking words filed as particles only because nothing else seemed to fit - lá "to be
+  // big" is an obsolete verb that survives inside ńlá, not a particle. Each one is judged on the
+  // entry review; most particles here are genuine (kò, ń, bí), so nothing is changed in bulk.
+  { key: 'pos:particle', label: 'Filed as a particle', test: (w) => w.resolvedPos === 'particle' },
   { key: 'game:ready', label: 'Ready for the game', test: (w) => w.gameBlockers.length === 0 },
   { key: 'game:blocked', label: 'Blocked from the game', test: (w) => w.gameBlockers.length > 0 },
   { key: 'wik:ready', label: 'Ready for Wiktionary', test: (w) => w.wiktionaryBlockers.length === 0 },

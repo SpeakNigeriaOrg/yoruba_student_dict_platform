@@ -25,6 +25,7 @@ import {
   planAuthoringVoteBackfill,
   type BackfillPlan,
 } from '../handlers/backfillAuthoringVotes.js';
+import { applyEntryUsageBackfill, planEntryUsageBackfill } from '../handlers/backfillEntryUsageFields.js';
 
 /** Counts rather than the item lists. The plan is thousands of rows on a real
  * corpus, and the screen shows totals per axis and per skip reason - shipping
@@ -86,6 +87,51 @@ export async function backfillAuthoringVotesFunction(
     throw err;
   }
 }
+
+/** POST /api/maintenance/entry-usage-fields - see handlers/backfillEntryUsageFields.ts. Same
+ * preview-then-apply and batching contract as the authoring-votes repair above. Rows per request
+ * are single UPDATEs, so the batch can be larger. */
+export async function backfillEntryUsageFieldsFunction(
+  request: HttpRequest,
+  _context: InvocationContext,
+): Promise<HttpResponseInit> {
+  try {
+    await requireCurator(request);
+    const body = (await request.json().catch(() => ({}))) as { apply?: unknown };
+    const pool = getPool();
+    const plan = await planEntryUsageBackfill(pool);
+    const counts = {
+      planned: plan.planned.length,
+      plannedContributions: plan.planned.filter((p) => p.kind === 'contribution').length,
+      plannedDecisions: plan.planned.filter((p) => p.kind === 'decision').length,
+    };
+    if (body?.apply !== true) return { status: 200, jsonBody: { applied: false, ...counts } };
+
+    const result = await applyEntryUsageBackfill(pool, plan, 200);
+    return {
+      status: 200,
+      jsonBody: {
+        applied: true,
+        ...counts,
+        written: result.written,
+        remaining: result.remaining,
+        failed: result.failed.map((f) => ({ kind: f.kind, id: f.id, wordId: f.wordId, error: f.error })),
+      },
+    };
+  } catch (err) {
+    if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
+    if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
+    if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
+    throw err;
+  }
+}
+
+app.http('BackfillEntryUsageFields', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'maintenance/entry-usage-fields',
+  handler: backfillEntryUsageFieldsFunction,
+});
 
 app.http('BackfillAuthoringVotes', {
   methods: ['POST'],

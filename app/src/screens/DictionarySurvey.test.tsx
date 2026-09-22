@@ -25,6 +25,7 @@ function word(wordId: string, over: Partial<SurveyWord> = {}): SurveyWord {
     definition: 'a thing',
     entryType: null,
     pos: null,
+    resolvedPos: null,
     englishGloss: null,
     etymidLabel: null,
     entry: 'none',
@@ -183,6 +184,18 @@ describe('the two levels are offered separately', () => {
     await waitFor(() => expect(screen.getByLabelText('Word survey')).toBeInTheDocument());
 
     await user.selectOptions(screen.getByLabelText('Filter'), 'image:none');
+    expect(screen.getByLabelText('Survey count')).toHaveTextContent('1 of 2 entries');
+    expect(screen.queryByText('display_w2')).not.toBeInTheDocument();
+  });
+
+  it('lists the words filed as particles by their RESOLVED pos, pin included', async () => {
+    // w1 is a particle only through its pin (no override) - exactly the cited case a filter on
+    // the bare override column would miss.
+    const user = userEvent.setup();
+    mount([word('w1', { resolvedPos: 'particle' }), word('w2', { resolvedPos: 'verb', pos: 'verb' })], 'words');
+    await waitFor(() => expect(screen.getByLabelText('Word survey')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Filter'), 'pos:particle');
     expect(screen.getByLabelText('Survey count')).toHaveTextContent('1 of 2 entries');
     expect(screen.queryByText('display_w2')).not.toBeInTheDocument();
   });

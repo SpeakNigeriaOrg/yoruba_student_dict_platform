@@ -465,6 +465,17 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
    * asked to say the word the way they just said it is said, not the way the record still
    * has it. Null when they have not answered, or answered with what is already on record. */
   myProposedEntry: { displayText: string; syllables: string[] } | null;
+  /** Mirrors getEntryReview.ts's EntryUsage (0029). */
+  usage: {
+    /** Resolved - our override, else the pin's. What confirming asserts. */
+    pos: string | null;
+    /** What the cited Wiktionary etymology files it under, shown beside ours. */
+    pinPos: string | null;
+    usageLabels: string[];
+    onlyInDerivedTerms: boolean;
+    /** Words that name this one as a component - not a complete list of where it occurs. */
+    derivedTerms: { wordId: string; displayText: string }[];
+  };
 }
 
 export function getEntryReview(wordId: string): Promise<EntryReviewResult> {
@@ -494,6 +505,14 @@ export interface ApplyEntryDecisionInput {
    * which identifies nothing when several etymologies share it), this is what
    * actually gets cited. */
   senseEntryId?: string;
+  /** Part of speech, usage labels, and "survives only inside other words" (0029). Absent or
+   * 'confirm' asserts what is on record; 'set' asserts the value alongside. */
+  posAction?: 'confirm' | 'set';
+  pos?: string;
+  usageLabelsAction?: 'confirm' | 'set';
+  usageLabels?: string[];
+  onlyInDerivedTermsAction?: 'confirm' | 'set';
+  onlyInDerivedTerms?: boolean;
   note?: string;
 }
 
@@ -667,6 +686,8 @@ export interface SurveyWord {
   definition: string | null;
   entryType: 'phrase' | null;
   pos: string | null;
+  /** Override, else pin - see dictionarySurvey.ts. */
+  resolvedPos: string | null;
   englishGloss: string | null;
   etymidLabel: string | null;
   entry: GlobalAxisState;
@@ -795,6 +816,8 @@ export interface WordDossier {
   pos: string | null;
   englishGloss: string | null;
   etymidLabel: string | null;
+  usageLabels: string[];
+  onlyInDerivedTerms: boolean;
   updatedAt: string;
   updatedByEmail: string | null;
   citation: CitationState;
@@ -1125,6 +1148,9 @@ export interface ConsensusGroup {
   currentDefinition: string | null;
   currentSyllables: string[];
   currentCitedEntryId: string | null;
+  currentPos: string | null;
+  currentUsageLabels: string[];
+  currentOnlyInDerivedTerms: boolean;
   axis: 'entry' | 'etymology';
   decidedAt: string | null;
   decidedByEmail: string | null;

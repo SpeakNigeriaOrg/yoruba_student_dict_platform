@@ -47,6 +47,15 @@ describe('differingFields', () => {
     expect(differingFields([entry({ definitionText: null }), entry()])).toEqual(['definition']);
   });
 
+  it('names part of speech, usage labels and the only-in-derived-terms flag after the others', () => {
+    expect(
+      differingFields([
+        entry({ pos: 'particle' }),
+        entry({ pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true, definitionText: 'sky' }),
+      ]),
+    ).toEqual(['definition', 'partOfSpeech', 'usageLabels', 'onlyInDerivedTerms']);
+  });
+
   it('reports components for the etymology axis', () => {
     const a = { kind: 'etymology' as const, atomic: false, components: ['oju_face'] };
     const b = { kind: 'etymology' as const, atomic: false, components: ['ile_house'] };
@@ -65,6 +74,10 @@ describe('fingerprintIdentity', () => {
     expect(fingerprintIdentity(entry({ displayText: 'oju sanma' }))).not.toBe(id);
     expect(fingerprintIdentity(entry({ syllables: ['ojú', 'sánmà'] }))).not.toBe(id);
     expect(fingerprintIdentity(entry({ citedEntryId: 'en-yo-noun-2' }))).not.toBe(id);
+  });
+
+  it('differs when the part of speech differs - that is a conflict, not wording', () => {
+    expect(fingerprintIdentity(entry({ pos: 'particle' }))).not.toBe(fingerprintIdentity(entry({ pos: 'verb' })));
   });
 
   it('does not collide with the full fingerprint of the same outcome', () => {

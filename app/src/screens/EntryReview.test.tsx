@@ -570,6 +570,73 @@ describe('the student definition is a simplification, not a correction', () => {
   });
 });
 
+describe('part of speech and usage (0029)', () => {
+  it('seeds the part of speech from the record and confirms everything left alone', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+    expect(screen.getByLabelText('Part of speech')).toHaveValue('noun');
+    expect(screen.getByLabelText('Wiktionary part of speech')).toHaveTextContent('Wiktionary files this under: noun');
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({
+        posAction: 'confirm',
+        usageLabelsAction: 'confirm',
+        onlyInDerivedTermsAction: 'confirm',
+      }),
+    );
+  });
+
+  it('sends the lá correction: verb, obsolete, survives only inside other words', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'verb');
+    await user.click(screen.getByRole('checkbox', { name: /obsolete/ }));
+    await user.click(screen.getByRole('checkbox', { name: /survives only inside other words/ }));
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({
+        posAction: 'set',
+        pos: 'verb',
+        usageLabelsAction: 'set',
+        usageLabels: ['obsolete'],
+        onlyInDerivedTermsAction: 'set',
+        onlyInDerivedTerms: true,
+      }),
+    );
+  });
+
+  it('offers the flag to a particle - a particle can fossilize too', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'particle');
+    expect(screen.getByRole('checkbox', { name: /survives only inside other words/ })).toBeInTheDocument();
+  });
+
+  it('hides the flag for an affix, and choosing one clears a tick already made', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+
+    await user.click(screen.getByRole('checkbox', { name: /survives only inside other words/ }));
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'suffix');
+    expect(screen.queryByRole('checkbox', { name: /survives only inside other words/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ posAction: 'set', pos: 'suffix', onlyInDerivedTermsAction: 'confirm' }));
+  });
+
+  it('offers only labels Wiktionary defines', async () => {
+    await loaded(entryFixture);
+    const box = screen.getByRole('group', { name: 'Usage labels' });
+    const names = within(box)
+      .getAllByRole('checkbox')
+      .map((c) => (c.closest('label')?.textContent ?? '').split(' ')[0]);
+    expect(names).toEqual(['obsolete', 'archaic', 'dated', 'historical', 'rare']);
+  });
+});
+
 describe('atomicity: an entry is decided as a whole', () => {
   it('is answerable immediately, because the tone row IS the answer', async () => {
     // Deliberately different from the old screen, which required arming a separate

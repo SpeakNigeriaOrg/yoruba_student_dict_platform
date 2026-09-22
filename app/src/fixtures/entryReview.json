@@ -52,5 +52,12 @@
       "etymologyNumber": "1"
     }
   },
-  "spellingVsUpstream": "matches"
+  "spellingVsUpstream": "matches",
+  "usage": {
+    "pos": "noun",
+    "pinPos": "noun",
+    "usageLabels": [],
+    "onlyInDerivedTerms": false,
+    "derivedTerms": []
+  }
 }

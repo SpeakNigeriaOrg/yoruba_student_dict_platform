@@ -93,6 +93,10 @@ describe('submitContribution freezes the outcome', () => {
       // These test words are created without a citation, so the contributor is
       // asserting "no etymology cited" - which is itself the state they saw.
       citedEntryId: null,
+      // Likewise no pos anywhere (no override, no pin), no labels, flag off (0029).
+      pos: null,
+      usageLabels: [],
+      onlyInDerivedTerms: false,
     });
     expect(row.rows[0].value_fingerprint).toBe(fingerprintOutcome(row.rows[0].resolved_value));
     expect(row.rows[0].status).toBe('active');

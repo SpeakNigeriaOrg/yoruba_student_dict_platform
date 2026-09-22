@@ -270,6 +270,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
                       syllables={g.currentSyllables}
                       definition={g.currentDefinition}
                       citedEntryId={g.currentCitedEntryId}
+                      usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
                       labels={g.labels}
                     />
                   ) : null}

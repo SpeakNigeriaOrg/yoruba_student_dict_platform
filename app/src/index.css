@@ -486,6 +486,23 @@ audio {
   min-height: 44px;
   font-size: 0.88rem;
 }
+/* The usage-label checkboxes on the entry review (UsageFields.tsx). Not inside .field, whose
+   `label { display: block }` would stack each box above its own text. */
+.usage-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.usage-fieldset legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.usage-hint {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
 .field-note {
   font-size: 0.82rem;
   color: var(--ink-soft);

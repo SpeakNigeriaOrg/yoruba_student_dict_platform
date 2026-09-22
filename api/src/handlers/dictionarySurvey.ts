@@ -51,6 +51,10 @@ export interface SurveyWord {
   /** 0018's publication overrides. Written at creation and, until now, readable only by an
    * offline script - so a curator could neither see nor check them. */
   pos: string | null;
+  /** The pos as everything else reads it - the override, else the pin. `pos` above is the bare
+   * override, which is null for nearly every cited word, so it cannot answer "which words are
+   * filed as particles?" and this can. */
+  resolvedPos: string | null;
   englishGloss: string | null;
   etymidLabel: string | null;
 
@@ -231,6 +235,7 @@ export async function loadDictionarySurvey(client: Queryable): Promise<SurveyWor
       definition: row.definition,
       entryType: row.entry_type,
       pos: row.pos,
+      resolvedPos: pos,
       englishGloss: row.english_gloss,
       etymidLabel: row.etymid_label,
       entry: status.entry,

@@ -41,6 +41,7 @@ import {
   type UpstreamPin,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
+import { ENTRY_USAGE_COLUMNS, type EntryUsageRow } from '../entryUsage.js';
 import { loadFullKaikkiLexicon } from '../kaikkiData.js';
 import { loadAxisDecided, loadAxisOverride, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
@@ -58,6 +59,21 @@ export interface EntryCitation {
   exemptReason: string | null;
   /** The pinned upstream content. Null for an exempt word, which has none. */
   pin: UpstreamPin | null;
+}
+
+/** Part of speech and usage as the record holds them (0029), plus what a reviewer needs to judge
+ * them: upstream's own pos, and the words this one survives in. */
+export interface EntryUsage {
+  /** Resolved: the override, else the pin's - what confirming asserts. */
+  pos: string | null;
+  /** What the cited Wiktionary etymology files it under, shown beside ours, because upstream is
+   * sometimes the one that is wrong (it files jí, "to wake up", as a particle). */
+  pinPos: string | null;
+  usageLabels: string[];
+  onlyInDerivedTerms: boolean;
+  /** Words that name this one as a component - the reverse golden_record_components links. Not
+   * a complete list of where the word occurs, only the ones this dictionary has linked. */
+  derivedTerms: { wordId: string; displayText: string }[];
 }
 
 export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
@@ -86,6 +102,7 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
    * re-derived, so it is what they actually asserted rather than what that assertion would
    * mean against a record that has since moved. */
   myProposedEntry: { displayText: string; syllables: string[] } | null;
+  usage: EntryUsage;
 }
 
 export async function getEntryReview(client: Queryable, wordId: string, userId: string): Promise<EntryReviewResult> {
@@ -97,6 +114,7 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
   const axisDecided = await loadAxisDecided(client, wordId, userId);
   const citation = await loadCitation(client, wordId);
   const myProposedEntry = await loadMyProposedEntry(client, wordId, userId, entry);
+  const usage = await loadEntryUsage(client, wordId);
   const override = await loadAxisOverride(client, wordId, 'entry');
   const lexicon = await loadFullKaikkiLexicon(client);
 
@@ -137,6 +155,34 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
     // the superseded one.
     spellingVsUpstream: compareSpellingToPin(effective.displayText, citation?.pin),
     myProposedEntry,
+    usage,
+  };
+}
+
+export async function loadEntryUsage(client: Queryable, wordId: string): Promise<EntryUsage> {
+  const own = await client.query<EntryUsageRow & { pin_pos: string | null }>(
+    `select ${ENTRY_USAGE_COLUMNS}, c.pin ->> 'pos' as pin_pos
+     from golden_record g
+     left join upstream_citations c on c.word_id = g.word_id
+     where g.word_id = $1`,
+    [wordId],
+  );
+  const row = own.rows[0];
+  if (!row) throw new WordNotFoundError(wordId);
+  const derived = await client.query<{ word_id: string; display_text: string }>(
+    `select distinct g.word_id, g.display_text
+     from golden_record_components gc
+     join golden_record g on g.word_id = gc.word_id
+     where gc.component_word_id = $1 and gc.word_id <> $1
+     order by g.display_text`,
+    [wordId],
+  );
+  return {
+    pos: row.resolved_pos,
+    pinPos: row.pin_pos,
+    usageLabels: row.usage_labels,
+    onlyInDerivedTerms: row.only_in_derived_terms,
+    derivedTerms: derived.rows.map((r) => ({ wordId: r.word_id, displayText: r.display_text })),
   };
 }
 

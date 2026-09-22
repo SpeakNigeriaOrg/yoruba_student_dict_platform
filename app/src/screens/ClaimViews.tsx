@@ -87,6 +87,33 @@ function ComponentList({ components, labels }: { components: string[]; labels: R
   );
 }
 
+/** Part of speech, usage labels and the only-in-derived-terms flag (0029), on one line:
+ * "verb · obsolete · survives only inside other words".
+ *
+ * Renders nothing for a claim that predates those fields and has not been backfilled - it
+ * asserted nothing about them, and "(no part of speech)" would put words in its mouth. */
+export function UsageLine({
+  pos,
+  usageLabels,
+  onlyInDerivedTerms,
+}: {
+  pos?: string | null;
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
+}) {
+  if (pos === undefined && usageLabels === undefined && onlyInDerivedTerms === undefined) return null;
+  const parts = [
+    pos ?? 'no part of speech',
+    ...(usageLabels ?? []),
+    ...(onlyInDerivedTerms ? ['survives only inside other words'] : []),
+  ];
+  return (
+    <div className="field-note" aria-label="Part of speech and usage">
+      {parts.join(' · ')}
+    </div>
+  );
+}
+
 /** Renders an outcome as the claim it is, rather than as the action that
  * produced it - the curator is comparing assertions about a word, and two
  * routes to the same assertion should look identical here. */
@@ -128,6 +155,7 @@ export function OutcomeSummary({
           <em>cites no Wiktionary etymology</em>
         )}
       </div>
+      <UsageLine pos={outcome.pos} usageLabels={outcome.usageLabels} onlyInDerivedTerms={outcome.onlyInDerivedTerms} />
     </span>
   );
 }
@@ -137,6 +165,9 @@ const FIELD_LABELS: Record<ClaimField, string> = {
   syllables: 'the syllable split',
   definition: 'the student definition',
   etymology: 'which etymology it cites',
+  partOfSpeech: 'the part of speech',
+  usageLabels: 'the usage labels',
+  onlyInDerivedTerms: 'whether it survives only inside other words',
   components: 'the components',
 };
 
@@ -158,8 +189,8 @@ export function DisagreementNote({ summary }: { summary: ConsensusSummary }) {
   if (summary.wordingOnly) {
     return (
       <p className="field-note" aria-label="Wording only">
-        <strong>Same word, different wording.</strong> Every claim agrees on the spelling, the syllables and the
-        etymology, and they differ only in how the student definition is worded — so this is a choice between good
+        <strong>Same word, different wording.</strong> Every claim agrees on the spelling, the syllables, the
+        etymology and the part of speech, and they differ only in how the student definition is worded — so this is a choice between good
         sentences, not a conflict to settle.
       </p>
     );
@@ -186,6 +217,7 @@ export function CurrentRecord({
   definition,
   citedEntryId,
   components,
+  usage,
   labels = NO_LABELS,
 }: {
   axis: 'entry' | 'etymology';
@@ -193,6 +225,8 @@ export function CurrentRecord({
   syllables: string[];
   definition: string | null;
   citedEntryId: string | null;
+  /** The record's resolved part of speech and usage (0029). Entry axis only. */
+  usage?: { pos: string | null; usageLabels: string[]; onlyInDerivedTerms: boolean };
   /** Only meaningful on the etymology axis, and only where the caller holds them. */
   components?: string[];
   labels?: ConsensusLabels;
@@ -226,6 +260,7 @@ export function CurrentRecord({
                 <em>cites no Wiktionary etymology</em>
               )}
             </div>
+            {usage ? <UsageLine {...usage} /> : null}
           </>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGREEMENT_THRESHOLD,
+  extendLegacyEntryFingerprint,
   fingerprintOutcome,
   renameComponentInFingerprint,
   resolveEntryOutcome,
@@ -175,6 +176,9 @@ describe('resolveEntryOutcome', () => {
       syllables: ['i', 'kun'],
       definitionText: 'stomach',
       citedEntryId: null,
+      pos: null,
+      usageLabels: [],
+      onlyInDerivedTerms: false,
     });
   });
 
@@ -232,6 +236,114 @@ describe('resolveEntryOutcome', () => {
   it('carries a null observed definition through as null', () => {
     const out = resolveEntryOutcome({ ...OBSERVED, definition: null }, { action: 'keep_ours', definitionAction: 'confirm' });
     expect(out.definitionText).toBeNull();
+  });
+});
+
+describe('part of speech and usage (0029)', () => {
+  const LA: EntryObservedState = {
+    displayText: 'lá',
+    syllables: ['lá'],
+    definition: 'to be big',
+    pos: 'particle',
+    usageLabels: [],
+    onlyInDerivedTerms: false,
+  };
+
+  it("'confirm' (or no action) asserts what is on record", () => {
+    const out = resolveEntryOutcome(LA, { action: 'keep_ours', definitionAction: 'confirm' });
+    expect(out.pos).toBe('particle');
+    expect(out.usageLabels).toEqual([]);
+    expect(out.onlyInDerivedTerms).toBe(false);
+  });
+
+  it("'set' asserts the reviewer's values - the lá correction", () => {
+    const out = resolveEntryOutcome(LA, {
+      action: 'keep_ours',
+      definitionAction: 'confirm',
+      posAction: 'set',
+      pos: 'verb',
+      usageLabelsAction: 'set',
+      usageLabels: ['obsolete'],
+      onlyInDerivedTermsAction: 'set',
+      onlyInDerivedTerms: true,
+    });
+    expect(out).toMatchObject({ pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true });
+  });
+
+  it('the order labels were ticked in does not make two claims differ', () => {
+    const a = resolveEntryOutcome(LA, { usageLabelsAction: 'set', usageLabels: ['rare', 'archaic', 'rare'] });
+    const b = resolveEntryOutcome(LA, { usageLabelsAction: 'set', usageLabels: ['archaic', 'rare'] });
+    expect(a.usageLabels).toEqual(['archaic', 'rare']);
+    expect(fingerprintOutcome(a)).toBe(fingerprintOutcome(b));
+  });
+
+  it('forces the flag off for a part of speech it cannot apply to, so those votes agree', () => {
+    const ticked = resolveEntryOutcome(LA, {
+      posAction: 'set',
+      pos: 'suffix',
+      onlyInDerivedTermsAction: 'set',
+      onlyInDerivedTerms: true,
+    });
+    const unticked = resolveEntryOutcome(LA, { posAction: 'set', pos: 'suffix' });
+    expect(ticked.onlyInDerivedTerms).toBe(false);
+    expect(fingerprintOutcome(ticked)).toBe(fingerprintOutcome(unticked));
+  });
+
+  it('leaves the flag available to a particle - a particle can fossilize too', () => {
+    const out = resolveEntryOutcome(LA, { onlyInDerivedTermsAction: 'set', onlyInDerivedTerms: true });
+    expect(out.pos).toBe('particle');
+    expect(out.onlyInDerivedTerms).toBe(true);
+  });
+
+  it('clears a flag already on record when a vote makes the word an affix', () => {
+    const out = resolveEntryOutcome({ ...LA, onlyInDerivedTerms: true }, { posAction: 'set', pos: 'prefix' });
+    expect(out.onlyInDerivedTerms).toBe(false);
+  });
+
+  it('distinguishes claims that differ only in pos, labels or the flag', () => {
+    const base = entryOutcome({ pos: 'verb', usageLabels: [], onlyInDerivedTerms: false });
+    const prints = new Set(
+      [
+        base,
+        { ...base, pos: 'particle' },
+        { ...base, usageLabels: ['obsolete'] },
+        { ...base, onlyInDerivedTerms: true },
+      ].map(fingerprintOutcome),
+    );
+    expect(prints.size).toBe(4);
+  });
+
+  it('a legacy outcome with no pos keys reads as null / none / free, never as "undefined"', () => {
+    const legacy = entryOutcome();
+    delete legacy.pos;
+    delete legacy.usageLabels;
+    delete legacy.onlyInDerivedTerms;
+    expect(fingerprintOutcome(legacy)).toBe(
+      fingerprintOutcome(entryOutcome({ pos: null, usageLabels: [], onlyInDerivedTerms: false })),
+    );
+    expect(fingerprintOutcome(legacy)).not.toContain('undefined');
+  });
+
+  it('extending a stored pre-0029 fingerprint equals fingerprinting the backfilled outcome', () => {
+    const old = entryOutcome({ displayText: 'lá', syllables: ['lá'], definitionText: 'to be big' });
+    delete old.pos;
+    delete old.usageLabels;
+    delete old.onlyInDerivedTerms;
+    // What fingerprintOutcome produced before 0029: the first five fields.
+    const stored = fingerprintOutcome(old).split('').slice(0, 5).join('');
+    const extended = extendLegacyEntryFingerprint(stored, 'particle');
+    const fresh = resolveEntryOutcome(LA, { action: 'keep_ours', definitionAction: 'confirm' });
+    expect(extended).toBe(fingerprintOutcome(fresh));
+    // Idempotent: an already-extended fingerprint, or any non-entry one, is left alone.
+    expect(extendLegacyEntryFingerprint(extended as string, 'particle')).toBeNull();
+    expect(extendLegacyEntryFingerprint(fingerprintOutcome(resolveEtymologyOutcome({ components: [] }, { componentsAction: 'confirm_atomic' })), null)).toBeNull();
+  });
+
+  it('once backfilled with the resolved pos, a legacy vote agrees with a new confirm vote', () => {
+    // What backfillEntryUsageFields writes: the word's resolved pos, no labels, flag off.
+    const backfilled = { ...entryOutcome({ displayText: 'lá', syllables: ['lá'], definitionText: 'to be big' }), pos: 'particle', usageLabels: [], onlyInDerivedTerms: false };
+    const fresh = resolveEntryOutcome(LA, { action: 'keep_ours', definitionAction: 'confirm' });
+    expect(fingerprintOutcome(backfilled)).toBe(fingerprintOutcome(fresh));
   });
 });
 

@@ -39,7 +39,29 @@ export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionI
   if (definitionAction !== undefined && definitionAction !== 'confirm' && definitionAction !== 'custom') {
     throw new Error("definitionAction must be 'confirm' or 'custom' if provided");
   }
+  const setOrConfirm = (key: string) => {
+    const v = b[key];
+    if (v !== undefined && v !== 'confirm' && v !== 'set') throw new Error(`${key} must be 'confirm' or 'set' if provided`);
+    return v as 'confirm' | 'set' | undefined;
+  };
+  const posAction = setOrConfirm('posAction');
+  const usageLabelsAction = setOrConfirm('usageLabelsAction');
+  const onlyInDerivedTermsAction = setOrConfirm('onlyInDerivedTermsAction');
+  if (b.usageLabels !== undefined && (!Array.isArray(b.usageLabels) || !b.usageLabels.every((x) => typeof x === 'string'))) {
+    throw new Error('usageLabels must be an array of strings if provided');
+  }
+  if (b.onlyInDerivedTerms !== undefined && typeof b.onlyInDerivedTerms !== 'boolean') {
+    throw new Error('onlyInDerivedTerms must be a boolean if provided');
+  }
   return {
+    // Whether a pos or label is in the vocabulary is a business rule, checked by
+    // validateEntryUsageInput on both the decision and the contribution path.
+    posAction,
+    pos: typeof b.pos === 'string' && b.pos ? b.pos : undefined,
+    usageLabelsAction,
+    usageLabels: b.usageLabels as string[] | undefined,
+    onlyInDerivedTermsAction,
+    onlyInDerivedTerms: b.onlyInDerivedTerms as boolean | undefined,
     action,
     candidateForm: typeof b.candidateForm === 'string' ? b.candidateForm : undefined,
     newDisplayText: typeof b.newDisplayText === 'string' ? b.newDisplayText : undefined,

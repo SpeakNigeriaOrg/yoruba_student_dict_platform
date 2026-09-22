@@ -44,7 +44,15 @@
 //                  added before 0018 - the commonest blocker below.
 //   sense line     golden_record.english_gloss, else the pin's glosses. NOT
 //                  golden_record.definition, which is deliberately simplified for
-//                  students and would be the wrong register upstream.
+//                  students and would be the wrong register upstream. Prefixed with
+//                  {{lb|yo|...}} from golden_record.usage_labels (0029), a closed list
+//                  of labels Wiktionary itself defines.
+//   usage notes    golden_record.only_in_derived_terms (0029): "no longer used as a
+//                  separate word; survives in derived terms such as ...". Deliberately
+//                  NOT {{only used in}}, which asserts the COMPLETE list of words a term
+//                  occurs in - a claim nobody can make.
+//   derived terms  the reverse of golden_record_components: every entry that names this
+//                  one as a part. An open list by nature, as the section is upstream.
 //   {{etymid}}     golden_record.etymid_label, else derived from the word_id hint,
 //                  which is already exactly that: a short English disambiguator a
 //                  curator chose when they picked the etymology.
@@ -89,6 +97,7 @@ import {
   describeWiktionaryBlocker,
   etymidLabelFromWordId,
   recordingMatchesGoldenSql,
+  renderLabelTemplate,
   wiktionaryBlockers,
   wiktionaryPageTitle,
 } from '../shared/dist/index.js';
@@ -120,6 +129,13 @@ const POS_NAMES = {
   character: 'Letter',
   phrase: 'Phrase',
   proverb: 'Proverb',
+  // The five codes shared/src/partsOfSpeech.ts offers that were missing here, which produced
+  // headings like ===Prep_phrase===.
+  prep_phrase: 'Prepositional phrase',
+  contraction: 'Contraction',
+  prefix: 'Prefix',
+  interfix: 'Interfix',
+  suffix: 'Suffix',
 };
 
 function posName(pos) {
@@ -149,7 +165,7 @@ function wikiArg(text) {
 async function loadEntries(pool, only) {
   const { rows } = await pool.query(
     `select g.word_id, g.display_text, g.syllables, g.definition, g.entry_type,
-            g.pos, g.english_gloss, g.etymid_label,
+            g.pos, g.english_gloss, g.etymid_label, g.usage_labels, g.only_in_derived_terms,
             c.entry_id, c.exempt_reason, c.pin
        from golden_record g
        left join upstream_citations c on c.word_id = g.word_id
@@ -184,6 +200,28 @@ async function loadComponents(pool) {
   }
   return byWord;
 }
+
+/** The words each entry is a part OF - golden_record_components read backwards. Feeds the
+ * Derived terms section and the examples in an only-in-derived-terms usage note. */
+async function loadDerivedTerms(pool) {
+  const { rows } = await pool.query(
+    `select distinct gc.component_word_id as word_id, g.display_text
+       from golden_record_components gc
+       join golden_record g on g.word_id = gc.word_id
+      where gc.word_id <> gc.component_word_id
+      order by gc.component_word_id, g.display_text`,
+  );
+  const byWord = new Map();
+  for (const row of rows) {
+    if (!byWord.has(row.word_id)) byWord.set(row.word_id, []);
+    byWord.get(row.word_id).push(row.display_text);
+  }
+  return byWord;
+}
+
+/** How many derived terms a usage note names as examples. The note says "such as", so this is a
+ * readability cap, not a completeness claim; the full list is the Derived terms section. */
+const USAGE_NOTE_EXAMPLES = 5;
 
 /** Usage examples, paired with their AUTHOR's release rights.
  *
@@ -268,11 +306,13 @@ function commonsAudioName(wordId, speaker, speakerId) {
   return `Yo-${wordId}-${speakerPart}.wav`;
 }
 
-function buildDraft(entry, components, examples, audio) {
+export function buildDraft(entry, components, examples, audio, derivedTerms = []) {
   const pin = entry.pin && Object.keys(entry.pin).length > 0 ? entry.pin : null;
   const cited = Boolean(entry.entry_id);
 
   const pos = entry.pos ?? pin?.pos ?? null;
+  const usageLabels = entry.usage_labels ?? [];
+  const onlyInDerivedTerms = entry.only_in_derived_terms === true;
   const glosses = entry.english_gloss ? [entry.english_gloss] : (pin?.glosses ?? []);
   const etymid = entry.etymid_label ?? etymidLabelFromWordId(entry.word_id, entry.display_text);
 
@@ -288,6 +328,21 @@ function buildDraft(entry, components, examples, audio) {
     glosses,
   }).map(describeWiktionaryBlocker);
   if (!etymid) notes.push('no etymid label, and the word_id is not in <spelling>_<hint> shape to derive one');
+
+  // Our part of speech overrides the one upstream files it under. For a new entry that is just
+  // the heading; for an additions draft it is a disagreement with a live page, which needs to be
+  // raised on that page rather than smuggled in under a different heading.
+  if (cited && entry.pos && pin?.pos && entry.pos !== pin.pos) {
+    notes.push(`part of speech differs from upstream: we say '${entry.pos}', Wiktionary files it as '${pin.pos}' - raise it on the live page`);
+  }
+  // Wiktionary accepts one use or mention for a less-documented language like Yoruba, but it
+  // does want one - and an obsolete or archaic sense is exactly the kind that gets challenged.
+  if (usageLabels.some((l) => l === 'obsolete' || l === 'archaic')) {
+    notes.push('labelled obsolete or archaic: add an attesting source - one use or mention suffices for Yoruba');
+  }
+  if (onlyInDerivedTerms && derivedTerms.length === 0) {
+    notes.push('marked as surviving only inside other words, but no entry here lists it as a component, so the usage note has no examples');
+  }
 
   // A phrase whose spelling its parts cannot produce. Reported rather than resolved:
   // the honest etymology is usually a clipping or a contraction of something else
@@ -343,8 +398,9 @@ function buildDraft(entry, components, examples, audio) {
   if (cited) {
     lines.push(`<!-- ALREADY ON WIKTIONARY as ${entry.entry_id}.`);
     lines.push('     This is NOT a page to create. What is new here is the audio, the usage');
-    lines.push('     examples, and the etymid label; the rest is rendered from the citation pin so');
-    lines.push('     it can be compared against the live entry before anything is added. -->');
+    lines.push('     examples, the etymid label, and any sense labels, usage note or derived terms;');
+    lines.push('     the rest is rendered from the citation pin so it can be compared against the');
+    lines.push('     live entry before anything is added. -->');
   }
   lines.push('==Yoruba==');
   lines.push('');
@@ -395,10 +451,26 @@ function buildDraft(entry, components, examples, audio) {
   if (glosses.length === 0) {
     lines.push('# UNKNOWN SENSE');
   } else {
-    for (const gloss of glosses) lines.push(`# ${wikiArg(gloss)}`);
+    // One golden record is one sense, so its labels apply to every gloss line it carries.
+    const label = renderLabelTemplate(usageLabels);
+    for (const gloss of glosses) lines.push(`# ${label ? `${label} ` : ''}${wikiArg(gloss)}`);
   }
   for (const ex of publishableExamples) {
     lines.push(`#: {{uxi|yo|${wikiArg(ex.text)}|${wikiArg(ex.translation)}}}`);
+  }
+
+  // Both sections sit one level below the part-of-speech heading, where upstream puts them.
+  if (onlyInDerivedTerms) {
+    const shown = derivedTerms.slice(0, USAGE_NOTE_EXAMPLES).map((t) => `{{l|yo|${wikiArg(t)}}}`);
+    const list = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
+    lines.push('');
+    lines.push('====Usage notes====');
+    lines.push(`* No longer used as a separate word${shown.length > 0 ? `; survives in derived terms such as ${list}` : ''}.`);
+  }
+  if (derivedTerms.length > 0) {
+    lines.push('');
+    lines.push('====Derived terms====');
+    lines.push(`{{col2|yo|${derivedTerms.map(wikiArg).join('|')}}}`);
   }
 
   // A hyphenated lemma implies pages we cannot record. Wiktionary's policy: "For elongated nasal
@@ -497,11 +569,12 @@ async function main() {
 
   const pool = new pg.Pool({ connectionString });
   try {
-    const [entries, components, examples, audio] = await Promise.all([
+    const [entries, components, examples, audio, derived] = await Promise.all([
       loadEntries(pool, only),
       loadComponents(pool),
       loadExamples(pool),
       loadAudio(pool),
+      loadDerivedTerms(pool),
     ]);
 
     if (entries.length === 0) {
@@ -510,7 +583,13 @@ async function main() {
     }
 
     const drafts = entries.map((entry) =>
-      buildDraft(entry, components.get(entry.word_id) ?? [], examples.get(entry.word_id) ?? [], audio.get(entry.word_id) ?? []),
+      buildDraft(
+        entry,
+        components.get(entry.word_id) ?? [],
+        examples.get(entry.word_id) ?? [],
+        audio.get(entry.word_id) ?? [],
+        derived.get(entry.word_id) ?? [],
+      ),
     );
 
     const text = report(drafts);

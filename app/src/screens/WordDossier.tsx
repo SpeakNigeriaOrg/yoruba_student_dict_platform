@@ -143,7 +143,13 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
                 Null means "read the pin", not "missing" - shown resolved rather than as a bare
                 placeholder, which said nothing about what the pin actually held. */}
             <dt>Part of speech</dt>
-            <dd>{dossier.pos ?? pinPos(dossier.pin) ?? '(none)'}</dd>
+            <dd>
+              {[
+                dossier.pos ?? pinPos(dossier.pin) ?? '(none)',
+                ...(dossier.usageLabels ?? []),
+                ...(dossier.onlyInDerivedTerms ? ['survives only inside other words'] : []),
+              ].join(' · ')}
+            </dd>
             <dt>Extended definition</dt>
             <dd>{dossier.englishGloss ?? pinGloss(dossier.pin) ?? '(none)'}</dd>
             <dt>Etymid label</dt>
@@ -591,6 +597,7 @@ function DecideSection({ wordId, components }: { wordId: string; components: str
               syllables={g.currentSyllables}
               definition={g.currentDefinition}
               citedEntryId={g.currentCitedEntryId}
+              usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
               components={components}
               labels={g.labels}
             />
