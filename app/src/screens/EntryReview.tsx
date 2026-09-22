@@ -135,14 +135,6 @@ function resolveWrittenForm(pick: SpellingChoice | null, edited: SpellingChoice 
   return senseEntryId ? { ...edited, senseEntryId } : edited;
 }
 
-/** Compared NFC-normalized, for the same reason writtenFormFromSyllables is: a
- * difference of Unicode composition alone is not an edit, and five production words
- * store their text in NFD. */
-function sameSyllables(a: string[], b: string[] | null): boolean {
-  if (!b || a.length !== b.length) return false;
-  return a.every((s, i) => s.normalize('NFC') === b[i].normalize('NFC'));
-}
-
 /** The written-form half, derived from the syllable row.
  *
  * Unchanged syllables mean the reviewer left the word as it stands - keep_ours, the
@@ -401,7 +393,6 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
               setLettersSnapshot(null);
               setEditingLetters(false);
             }}
-            lettersDirty={lettersSnapshot !== null && !sameSyllables(lettersSnapshot, syllables)}
           />
 
           <p aria-label="Spelling comparison">

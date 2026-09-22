@@ -3,7 +3,10 @@
 // The tone control: one COLUMN per syllable, one ROW per tone, high at the top.
 //
 // Extracted from ToneEditor once a second caller appeared (PhraseComposer, which renders
-// one grid per word of an example phrase). One definition of the grid, two users.
+// one grid per word of an example phrase). One definition of the grid, two users - and
+// since ToneEditor's letters correction moved to a single whole-word field (a plain text
+// input, not a per-column one), the grid itself no longer needs to know about letters
+// editing at all.
 //
 // ---------------------------------------------------------------------------
 // Why the arrangement is the feature
@@ -32,7 +35,6 @@
 // rule this file already follows for the tone buttons themselves, and the reason it asks
 // nasalSplit.ts rather than pattern-matching letters here.
 
-import type { ReactNode } from 'react';
 import {
   absorbNasalAt,
   applyTone,
@@ -52,10 +54,6 @@ const TONES: Array<{ tone: Tone; hint: string }> = [
 export interface ToneGridProps {
   syllables: string[];
   onChange: (syllables: string[]) => void;
-  /** The pitch-axis labels down the left. Off when a caller stacks something above the
-   * tone buttons (the letters boxes), because those make each column taller than a bare
-   * label column and a misaligned axis is worse than none. */
-  showAxis?: boolean;
   /** Disambiguates aria-labels when a screen shows more than one grid.
    *
    * PhraseComposer renders a grid per word, so without this every word would announce
@@ -66,28 +64,22 @@ export interface ToneGridProps {
    * mid tone", and an empty value leaves the entry axis's labels byte-identical to what
    * they were before this extraction - so its tests keep testing the same thing. */
   labelSuffix?: string;
-  /** Injected above the tone buttons of each syllable - the entry axis puts its letters
-   * box and palette here. Kept as a render prop so ToneGrid knows nothing about letters
-   * editing, which is the one thing that differs between its two callers. */
-  renderPerSyllable?: (index: number) => ReactNode;
 }
 
-export function ToneGrid({ syllables, onChange, showAxis = true, labelSuffix = '', renderPerSyllable }: ToneGridProps) {
+export function ToneGrid({ syllables, onChange, labelSuffix = '' }: ToneGridProps) {
   function setTone(index: number, tone: Tone) {
     onChange(syllables.map((s, i) => (i === index ? applyTone(s, tone) : s)));
   }
 
   return (
-    <div className={`tone-grid${showAxis ? '' : ' editing-letters'}`}>
-      {showAxis ? (
-        <div className="tone-axis" aria-hidden="true">
-          {TONES.map(({ tone, hint }) => (
-            <div key={tone} className="tone-axis-label">
-              {hint}
-            </div>
-          ))}
-        </div>
-      ) : null}
+    <div className="tone-grid">
+      <div className="tone-axis" aria-hidden="true">
+        {TONES.map(({ tone, hint }) => (
+          <div key={tone} className="tone-axis-label">
+            {hint}
+          </div>
+        ))}
+      </div>
 
       {syllables.map((syllable, index) => {
         const bearerTone = toneOf(syllable);
@@ -110,8 +102,6 @@ export function ToneGrid({ syllables, onChange, showAxis = true, labelSuffix = '
                 {syllable}
               </div>
             ) : null}
-
-            {renderPerSyllable?.(index)}
 
             {toneable ? (
               <div className="tone-choices" role="group" aria-label={`Tone of syllable ${index + 1}${labelSuffix}`}>

@@ -804,13 +804,6 @@ audio {
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
-.syllable-letters {
-  width: 100%;
-  box-sizing: border-box;
-  text-align: center;
-  font-size: 1.05rem;
-  padding: 6px 2px;
-}
 /* Vertical inside a column: this is the pitch axis. */
 .tone-choices {
   display: flex;

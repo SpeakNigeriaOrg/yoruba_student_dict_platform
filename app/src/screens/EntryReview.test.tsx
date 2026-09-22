@@ -111,11 +111,11 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    // A consonant-only syllable. NOT a bare nasal: `n` reads as mid, because the macron
+    // A consonant-only word. NOT a bare nasal: `n` reads as mid, because the macron
     // convention is not universal, so its row is highlighted like any other.
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'gb');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'gb');
 
     expect(screen.getByLabelText('Syllable 1')).toHaveTextContent('gb');
     expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
@@ -126,9 +126,9 @@ describe('the tone row is an EDITOR, not a Yes button', () => {
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'n');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'n');
 
     expect(screen.getByLabelText('Syllable 1 mid tone')).toHaveAttribute('aria-pressed', 'true');
   });
@@ -250,9 +250,9 @@ describe('the comparison line says WHICH kind of difference it is', () => {
     await loaded(entryDiffersFixture);
 
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'ba');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'bàhun');
 
     expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('the letters differ, not just the tone');
   });
@@ -293,17 +293,16 @@ describe('the comparison line says WHICH kind of difference it is', () => {
 describe('correcting the letters', () => {
   it('is behind an explicit choice, because it asserts the word itself was wrong', async () => {
     await loaded(entryFixture);
-    expect(screen.queryByLabelText('Letters of syllable 1')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('The word, spelled as it is said')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'The letters are wrong' })).toBeInTheDocument();
   });
 
-  it('reveals one letters box per syllable, tone stripped', async () => {
+  it('reveals a single letters field, seeded with the whole word', async () => {
     const user = userEvent.setup();
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('du');
-    expect(screen.getByLabelText('Letters of syllable 2')).toHaveValue('jẹ');
+    expect(screen.getByLabelText('The word, spelled as it is said')).toHaveValue('dùjẹ̀kù');
   });
 
   it('offers the ẹ ọ ṣ palette, which is the whole non-ASCII gap once tone is handled', async () => {
@@ -311,23 +310,71 @@ describe('correcting the letters', () => {
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    const palette = screen.getByLabelText('Extra letters for syllable 1');
+    const palette = screen.getByLabelText('Extra letters');
     for (const letter of ['ẹ', 'ọ', 'ṣ']) {
       expect(within(palette).getByRole('button', { name: letter })).toBeInTheDocument();
     }
   });
 
-  it('the palette appends without dropping the tone already chosen', async () => {
+  it('the palette inserts at the end by default - which is how a syllable gets ADDED', async () => {
+    // The whole gap the old per-syllable boxes left: the array's length could only ever
+    // change through the nasal split/absorb buttons, never by adding a syllable outright.
     const user = userEvent.setup();
-    await loaded(entryFixture);
+    const fetchMock = await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    // Syllable 1 is `dù` - low. Appending ọ must keep the low tone.
-    const palette = screen.getByLabelText('Extra letters for syllable 1');
+    // Nothing has been focused yet, so the insert lands at the end - a fourth syllable,
+    // not an edit to any of the first three.
+    const palette = screen.getByLabelText('Extra letters');
     await user.click(within(palette).getByRole('button', { name: 'ọ' }));
 
-    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('duọ');
-    expect(screen.getByLabelText('Syllable 1 low tone')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('The word, spelled as it is said')).toHaveValue('dùjẹ̀kùọ');
+    expect(screen.getByLabelText('Tone of syllable 4')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.newDisplayText).toBe('dùjẹ̀kùọ');
+      expect(body.newSyllables).toEqual(['dù', 'jẹ̀', 'kù', 'ọ']);
+    });
+  });
+
+  it('lets a reviewer REMOVE a syllable outright, not just empty its letters', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'dùjẹ̀');
+
+    expect(screen.getByLabelText('Tone of syllable 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tone of syllable 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Tone of syllable 3')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.newDisplayText).toBe('dùjẹ̀');
+      expect(body.newSyllables).toEqual(['dù', 'jẹ̀']);
+    });
+  });
+
+  it('lets a reviewer REORDER syllables by retyping them in the order they belong', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(entryFixture);
+    await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
+
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'kùjẹ̀dù'); // the same three syllables, reordered
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() => {
+      const body = postedBody(fetchMock);
+      expect(body.newDisplayText).toBe('kùjẹ̀dù');
+      expect(body.newSyllables).toEqual(['kù', 'jẹ̀', 'dù']);
+    });
   });
 
   it('submits the edited letters as a respelling with matching syllables', async () => {
@@ -335,9 +382,9 @@ describe('correcting the letters', () => {
     const fetchMock = await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    const box = screen.getByLabelText('Letters of syllable 3');
-    await user.clear(box);
-    await user.type(box, 'ko');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'dùjẹ̀ko');
     await user.click(screen.getByRole('button', { name: 'Record my answer' }));
 
     await waitFor(() => {
@@ -402,15 +449,15 @@ describe('correcting the letters', () => {
     const fetchMock = await loaded(entryFixture);
 
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'xyz');
-    expect(screen.getByLabelText('Letters of syllable 1')).toHaveValue('xyz');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'xyz');
+    expect(field).toHaveValue('xyz');
 
     await user.click(screen.getByRole('button', { name: 'Discard changes' }));
 
     // Back to the normal flow, with the word restored.
-    expect(screen.queryByLabelText('Letters of syllable 1')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('The word, spelled as it is said')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Spelling comparison')).toHaveTextContent('dùjẹ̀kù');
 
     // And submitting now claims nothing was changed.
@@ -418,16 +465,18 @@ describe('correcting the letters', () => {
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('keep_ours'));
   });
 
-  it('Discard is disabled until something has actually changed', async () => {
+  it('Discard is disabled until something has actually changed, even before it syllabifies', async () => {
+    // 'z' alone never becomes valid syllables (see handleLettersChange) - Discard still has
+    // to notice something was typed, which is why dirtiness compares the raw text rather
+    // than waiting for the grid to accept it.
     const user = userEvent.setup();
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
     expect(screen.getByRole('button', { name: 'Discard changes' })).toBeDisabled();
 
-    const box = screen.getByLabelText('Letters of syllable 2');
-    await user.clear(box);
-    await user.type(box, 'ba');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.type(field, 'z');
 
     expect(screen.getByRole('button', { name: 'Discard changes' })).toBeEnabled();
   });
@@ -440,9 +489,9 @@ describe('correcting the letters', () => {
 
     await user.click(screen.getByLabelText('Syllable 3 high tone'));
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'xyz');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'xyz');
     await user.click(screen.getByRole('button', { name: 'Discard changes' }));
 
     await user.click(screen.getByRole('button', { name: 'Record my answer' }));
@@ -456,12 +505,12 @@ describe('correcting the letters', () => {
     const fetchMock = await loaded(entryFixture);
 
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
-    const box = screen.getByLabelText('Letters of syllable 3');
-    await user.clear(box);
-    await user.type(box, 'ko');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'dùjẹ̀ko');
     await user.click(screen.getByRole('button', { name: 'Done with letters' }));
 
-    expect(screen.queryByLabelText('Letters of syllable 3')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('The word, spelled as it is said')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Record my answer' }));
     await waitFor(() => expect(postedBody(fetchMock).action).toBe('respell'));
   });
@@ -471,9 +520,9 @@ describe('correcting the letters', () => {
     await loaded(entryFixture);
     await user.click(screen.getByRole('button', { name: 'The letters are wrong' }));
 
-    const box = screen.getByLabelText('Letters of syllable 1');
-    await user.clear(box);
-    await user.type(box, 'gb');
+    const field = screen.getByLabelText('The word, spelled as it is said');
+    await user.clear(field);
+    await user.type(field, 'gb');
 
     expect(screen.queryByLabelText('Tone of syllable 1')).not.toBeInTheDocument();
   });
