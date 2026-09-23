@@ -16,6 +16,7 @@ import {
 } from '../handlers/createPhrase.js';
 import { EntryAlreadyCitedError } from '../handlers/upstreamCitations.js';
 import { parsePublicationFields } from '../handlers/publicationFields.js';
+import { parseCreationUsage } from '../entryUsage.js';
 
 /** A phrase may cite an etymology but never claim the exemption - createPhrase decides that itself,
  * from whether a citation was supplied. Accepting `exemptReason` on the wire would let a caller
@@ -56,6 +57,7 @@ function parseCreatePhraseInput(body: unknown): CreatePhraseInput {
     // entry_id with nothing reporting the loss. Absent still means the by-nature exemption.
     ...(b.citation === undefined ? {} : { citation: parseEntryIdCitation(b.citation) }),
     ...parsePublicationFields(b),
+    ...parseCreationUsage(b),
   };
 }
 

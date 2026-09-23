@@ -25,8 +25,11 @@ import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
 import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
 import { recordAuthoringVote } from './authoringVote.js';
+import { writeCreationUsageInTransaction, type CreationUsage } from '../entryUsage.js';
 
-export interface CreateWordInput {
+/** CreationUsage: usage labels and "survives only inside other words" (0029). Optional; absent
+ * means no labels and the flag off. */
+export interface CreateWordInput extends CreationUsage {
   wordId: string;
   displayText: string;
   syllables: string[];
@@ -128,5 +131,7 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
   await writeComponents(client, input.wordId, input.components ?? []);
 
   await writeCitationInTransaction(client, input.wordId, input.citation, createdBy);
+  // After the citation: the flag is checked against the resolved pos, which may be the pin's.
+  await writeCreationUsageInTransaction(client, input.wordId, input);
 }
 

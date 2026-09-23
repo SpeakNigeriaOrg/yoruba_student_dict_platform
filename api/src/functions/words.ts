@@ -14,6 +14,7 @@ import { createWord, WordIdAlreadyExistsError, type CreateWordInput } from '../h
 // own message.
 import { EntryAlreadyCitedError, parseCitationInput } from '../handlers/upstreamCitations.js';
 import { parsePublicationFields } from '../handlers/publicationFields.js';
+import { parseCreationUsage } from '../entryUsage.js';
 
 /** Exported for its own test.
  *
@@ -48,6 +49,7 @@ export function parseCreateWordInput(body: unknown): CreateWordInput {
     // client actually said.
     ...(b.components === undefined ? {} : { components: b.components as string[] }),
     ...parsePublicationFields(b),
+    ...parseCreationUsage(b),
   };
 }
 

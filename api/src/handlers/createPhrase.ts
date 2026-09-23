@@ -27,8 +27,10 @@ import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
 import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
 import { recordAuthoringVote } from './authoringVote.js';
+import { writeCreationUsageInTransaction, type CreationUsage } from '../entryUsage.js';
 
-export interface CreatePhraseInput {
+/** CreationUsage: see createWord. */
+export interface CreatePhraseInput extends CreationUsage {
   wordId: string;
   displayText: string;
   syllables: string[];
@@ -144,4 +146,5 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
     },
     createdBy,
   );
+  await writeCreationUsageInTransaction(client, input.wordId, input);
 }

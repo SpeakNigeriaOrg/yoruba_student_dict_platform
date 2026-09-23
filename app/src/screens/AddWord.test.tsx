@@ -1408,3 +1408,107 @@ describe('AddWord - the component picker says what it is offering', () => {
     expect(screen.getByText(/open it and use its Etymology tab/)).toBeInTheDocument();
   });
 });
+
+describe('AddWord - usage labels and "survives only inside other words" (0029)', () => {
+  const wordsBody = (fetchMock: ReturnType<typeof mockFetch>) =>
+    JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+
+  it('creates lá "to be big" already saying what is true of it: verb, obsolete, inside other words', async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+    await user.type(screen.getByLabelText('Spelling'), 'la');
+    await user.type(screen.getByLabelText(/Word ID hint/), 'be_big');
+    await user.type(screen.getByLabelText(/not in Wiktionary/), 'no Wiktionary sense for this meaning');
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'verb');
+    await user.click(screen.getByRole('checkbox', { name: /obsolete/ }));
+    await user.click(screen.getByRole('checkbox', { name: /survives only inside other words/ }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    expect(wordsBody(fetchMock)).toMatchObject({ pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true });
+  });
+
+  it('asks about usage for a cited word too, and sends nothing when nothing is ticked', async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('testform'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    expect(screen.getByRole('group', { name: 'Usage labels' })).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/Word ID hint/));
+    await user.type(screen.getByLabelText(/Word ID hint/), 'meaning');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = wordsBody(fetchMock);
+    expect(body).not.toHaveProperty('usageLabels');
+    expect(body).not.toHaveProperty('onlyInDerivedTerms');
+  });
+
+  it('hides the flag for a cited affix, whose pos comes from Wiktionary', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        kaikkiResults: [
+          { form: 'oní', pos: 'prefix', glosses: ['owner of'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['oní'], entryId: 'en-oni-yo-prefix-A', etymologyNumber: null },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('oní'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    expect(screen.getByRole('group', { name: 'Usage labels' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /survives only inside other words/ })).not.toBeInTheDocument();
+  });
+
+  it('drops a tick made before the part of speech was changed to a suffix', async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: "This word isn't in Wiktionary" }));
+    await user.type(screen.getByLabelText('Spelling'), 'la');
+    await user.type(screen.getByLabelText(/Word ID hint/), 'be_big');
+    await user.type(screen.getByLabelText(/not in Wiktionary/), 'no Wiktionary sense');
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'verb');
+    await user.click(screen.getByRole('checkbox', { name: /survives only inside other words/ }));
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'suffix');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    expect(wordsBody(fetchMock)).not.toHaveProperty('onlyInDerivedTerms');
+  });
+
+  it('asks on the Phrase tab too', async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Phrase' }));
+    const dictSearch = () => within(screen.getByRole('search', { name: 'Search words already in the dictionary' }));
+    await user.click(dictSearch().getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('existingspelling', { exact: false }));
+    await user.click(screen.getByRole('button', { name: 'Add as component' }));
+    await user.type(screen.getByLabelText('Word ID hint'), 'phrasehint');
+    await user.click(screen.getByRole('checkbox', { name: /archaic/ }));
+    await user.click(screen.getByRole('button', { name: 'Add phrase to vocabulary' }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/phrases')![1].body);
+    expect(body.usageLabels).toEqual(['archaic']);
+  });
+});

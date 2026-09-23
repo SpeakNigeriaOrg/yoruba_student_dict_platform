@@ -7,7 +7,9 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { extendLegacyEntryFingerprint, fingerprintOutcome } from '@yoruba-student-dict-platform/shared';
-import { cleanUpTestData, getTestPool } from '../testSupport.js';
+import { cleanUpTestData, deleteTestKaikkiSenses, getTestPool, insertTestKaikkiSense } from '../testSupport.js';
+import { createWord } from './createWord.js';
+import { parseCreationUsage } from '../entryUsage.js';
 import { applyEntryDecision, type ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import { submitContribution } from './submitContribution.js';
 import { confirmConsensus } from './confirmConsensus.js';
@@ -17,6 +19,7 @@ import { applyEntryUsageBackfill, planEntryUsageBackfill } from './backfillEntry
 import { InvalidEntryUsageError } from '../entryUsage.js';
 
 const NS = 'testusage_';
+const ENTRY_NS = 'testusage-entry-';
 const pool = getTestPool();
 let ada: string;
 let ben: string;
@@ -38,6 +41,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanUpTestData(pool, NS);
+  await deleteTestKaikkiSenses(pool, ENTRY_NS);
   await pool.end();
 });
 
@@ -78,6 +82,62 @@ const LA_FIX: ApplyEntryDecisionInput = {
   onlyInDerivedTermsAction: 'set',
   onlyInDerivedTerms: true,
 };
+
+describe('at creation', () => {
+  it('creates lá already obsolete and surviving only inside other words, and the author votes for that', async () => {
+    const wordId = `${NS}la_be_big`;
+    await createWord(
+      pool,
+      {
+        wordId,
+        displayText: 'lá',
+        syllables: ['lá'],
+        definition: 'to be big',
+        citation: { exemptReason: 'no Wiktionary sense for this meaning' },
+        pos: 'verb',
+        usageLabels: ['obsolete'],
+        onlyInDerivedTerms: true,
+      },
+      curator,
+    );
+    expect(await record(wordId)).toEqual({ pos: 'verb', usage_labels: ['obsolete'], only_in_derived_terms: true });
+
+    const vote = await pool.query<{ resolved_value: Record<string, unknown> }>(
+      "select resolved_value from contributions where word_id = $1 and axis = 'entry'",
+      [wordId],
+    );
+    expect(vote.rows[0].resolved_value).toMatchObject({ pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true });
+  });
+
+  it('refuses the flag on a word whose CITED etymology is a suffix, and creates nothing', async () => {
+    const entryId = `${ENTRY_NS}suffix`;
+    await insertTestKaikkiSense(pool, {
+      entryId,
+      headword: 'ni',
+      canonicalValue: 'ni',
+      pos: 'suffix',
+      etymologyNumber: null,
+      etymologyText: null,
+      glosses: ['a test suffix'],
+    });
+    const wordId = `${NS}ni_suffix`;
+    await expect(
+      createWord(
+        pool,
+        { wordId, displayText: 'ni', syllables: ['ni'], citation: { entryId }, onlyInDerivedTerms: true },
+        curator,
+      ),
+    ).rejects.toBeInstanceOf(InvalidEntryUsageError);
+    expect((await pool.query('select 1 from golden_record where word_id = $1', [wordId])).rowCount).toBe(0);
+  });
+
+  it('parses only the closed list off the wire', () => {
+    expect(parseCreationUsage({ usageLabels: ['rare', 'obsolete'] })).toEqual({ usageLabels: ['obsolete', 'rare'] });
+    expect(() => parseCreationUsage({ usageLabels: ['in compounds'] })).toThrow(InvalidEntryUsageError);
+    expect(() => parseCreationUsage({ onlyInDerivedTerms: 'yes' })).toThrow(InvalidEntryUsageError);
+    expect(parseCreationUsage({})).toEqual({});
+  });
+});
 
 describe('a direct decision', () => {
   it('records the lá correction: verb, obsolete, only inside other words', async () => {

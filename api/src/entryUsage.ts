@@ -8,6 +8,8 @@
 // describes: a stored fingerprint no later vote can ever equal.
 
 import {
+  acceptsOnlyInDerivedTerms,
+  canonicalUsageLabels,
   isKnownPartOfSpeech,
   isKnownUsageLabel,
   type EntryOutcome,
@@ -64,6 +66,77 @@ export function validateEntryUsageInput(input: EntryUsageInput): void {
   if (input.onlyInDerivedTermsAction === 'set' && typeof input.onlyInDerivedTerms !== 'boolean') {
     throw new InvalidEntryUsageError("onlyInDerivedTermsAction 'set' needs onlyInDerivedTerms: true or false");
   }
+}
+
+// ---------------------------------------------------------------------------
+// At creation (createWord, createPhrase)
+// ---------------------------------------------------------------------------
+// The same two facts, said by whoever adds the word. Written straight onto the new row, and the
+// author's vote (authoringVote.ts: keep_ours + confirm, resolved against the row just written)
+// then carries them - so the author's position includes them without a second construction.
+
+export interface CreationUsage {
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
+}
+
+/** Off the wire. Absent means "nothing to say" - no labels, flag off - which is what every word
+ * created before 0029 said. Unknown labels are refused rather than dropped: the form only offers
+ * the closed list, so an unknown one is a client bug worth hearing about. */
+export function parseCreationUsage(body: Record<string, unknown>): CreationUsage {
+  const out: CreationUsage = {};
+  if (body.usageLabels !== undefined) {
+    if (!Array.isArray(body.usageLabels) || !body.usageLabels.every((l) => typeof l === 'string')) {
+      throw new InvalidEntryUsageError('usageLabels must be an array of strings if provided');
+    }
+    const unknown = body.usageLabels.filter((l) => !isKnownUsageLabel(l));
+    if (unknown.length > 0) throw new InvalidEntryUsageError(`unknown usage label(s): ${unknown.join(', ')}`);
+    out.usageLabels = canonicalUsageLabels(body.usageLabels);
+  }
+  if (body.onlyInDerivedTerms !== undefined) {
+    if (typeof body.onlyInDerivedTerms !== 'boolean') {
+      throw new InvalidEntryUsageError('onlyInDerivedTerms must be a boolean if provided');
+    }
+    out.onlyInDerivedTerms = body.onlyInDerivedTerms;
+  }
+  return out;
+}
+
+/** Writes CreationUsage onto a row created in this transaction. Must run AFTER the citation is
+ * written: the flag is checked against the RESOLVED pos, and for a cited word that is the pin's.
+ *
+ * A flag on an affix or a character is refused, not silently cleared. The form hides the box for
+ * those, so reaching here means a client that did not - and quietly storing something other than
+ * what was sent would be exactly the kind of mismatch the author could never see. */
+export async function writeCreationUsageInTransaction(
+  client: Queryable,
+  wordId: string,
+  usage: CreationUsage,
+): Promise<void> {
+  const labels = usage.usageLabels ?? [];
+  const flag = usage.onlyInDerivedTerms === true;
+  if (labels.length === 0 && !flag) return;
+
+  if (flag) {
+    const r = await client.query<{ resolved_pos: string | null }>(
+      `select coalesce(g.pos, c.pin ->> 'pos') as resolved_pos
+       from golden_record g
+       left join upstream_citations c on c.word_id = g.word_id
+       where g.word_id = $1`,
+      [wordId],
+    );
+    const pos = r.rows[0]?.resolved_pos ?? null;
+    if (!acceptsOnlyInDerivedTerms(pos)) {
+      throw new InvalidEntryUsageError(
+        `'survives only inside other words' does not apply to a ${pos} - an affix or a letter never was a separate word`,
+      );
+    }
+  }
+  await client.query('update golden_record set usage_labels = $1, only_in_derived_terms = $2 where word_id = $3', [
+    labels,
+    flag,
+    wordId,
+  ]);
 }
 
 /** Makes the record say what `outcome` says about usage, writing only what differs.

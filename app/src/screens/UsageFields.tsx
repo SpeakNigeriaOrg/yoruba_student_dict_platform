@@ -4,6 +4,10 @@
 // review (0029). Controlled: EntryReview owns the state and turns it into the confirm/set actions
 // it submits, the same way it already does for the definition.
 //
+// UsageCheckboxes (the labels and the flag, without the part of speech) is also rendered by
+// AddWord, so a word can be created already saying it is obsolete and survives only inside other
+// words - rather than created bare and corrected by a second vote straight afterwards.
+//
 // Why these three sit together: the case that prompted them is lá "to be big", which had been
 // filed as a particle only because there was nowhere to say what is actually true of it - that it
 // is a verb, that it is obsolete, and that it survives inside ńlá and Ayélála. Asked separately,
@@ -52,6 +56,78 @@ export function usageActions(
   };
 }
 
+/** The usage-label checkboxes and the "survives only inside other words" box, for whatever part of
+ * speech the caller has. The flag box is hidden when that pos rules it out; callers must also drop
+ * a tick made before the pos changed (usageActions does, and AddWord does at submit). */
+export function UsageCheckboxes({
+  usageLabels,
+  onlyInDerivedTerms,
+  pos,
+  onChange,
+  derivedTerms,
+}: {
+  usageLabels: string[];
+  onlyInDerivedTerms: boolean;
+  pos: string | null;
+  onChange: (next: { usageLabels: string[]; onlyInDerivedTerms: boolean }) => void;
+  /** Words this one is a part of, when known. Omitted on Add Word, where the word is new and
+   * nothing can list it as a component yet. */
+  derivedTerms?: { displayText: string }[];
+}) {
+  function toggleLabel(value: string, on: boolean) {
+    const next = on ? [...usageLabels, value] : usageLabels.filter((l) => l !== value);
+    onChange({ usageLabels: canonicalUsageLabels(next), onlyInDerivedTerms });
+  }
+
+  return (
+    <>
+      <fieldset className="usage-fieldset">
+        <legend>Usage labels</legend>
+        {USAGE_LABELS.map((l) => (
+          <label key={l.value} className="field-inline">
+            <input
+              type="checkbox"
+              checked={usageLabels.includes(l.value)}
+              onChange={(e) => toggleLabel(l.value, e.target.checked)}
+            />
+            <span>
+              {l.value} <span className="usage-hint">- {l.description}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="field-note">Leave all unticked for a word in ordinary use today.</p>
+
+      {acceptsOnlyInDerivedTerms(pos) ? (
+        <div className="usage-fieldset">
+          <label className="field-inline">
+            <input
+              type="checkbox"
+              checked={onlyInDerivedTerms}
+              onChange={(e) => onChange({ usageLabels, onlyInDerivedTerms: e.target.checked })}
+            />
+            <span>No longer used as a separate word - survives only inside other words</span>
+          </label>
+          <p className="field-note">
+            For a word (verb, noun, particle...) that no longer appears as a separate word in sentences, only inside
+            other words. Not for words that simply cannot stand alone as a whole sentence, such as kò or ń. If it never
+            was a word, only something attached to other words, choose Prefix or Suffix instead.
+          </p>
+          {derivedTerms === undefined ? null : derivedTerms.length > 0 ? (
+            <p className="field-note" aria-label="Derived terms">
+              Words in this dictionary built from it: {derivedTerms.map((d) => d.displayText).join(', ')}
+            </p>
+          ) : onlyInDerivedTerms ? (
+            <p className="field-note" aria-label="Derived terms">
+              No word in this dictionary lists this one as a part yet, so there is nothing to show as an example.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function UsageFields({
   draft,
   onChange,
@@ -61,18 +137,11 @@ export function UsageFields({
   onChange: (next: UsageDraft) => void;
   usage: EntryReviewResult['usage'];
 }) {
-  const flagApplies = acceptsOnlyInDerivedTerms(draft.pos || null);
-
   function setPos(pos: string) {
     // Switching to an affix or a character clears the flag rather than hiding a tick nobody can
     // see - the server would drop it anyway (resolveEntryOutcome), and a hidden true is a claim
     // the reviewer can no longer see they are making.
     onChange({ ...draft, pos, onlyInDerivedTerms: acceptsOnlyInDerivedTerms(pos || null) && draft.onlyInDerivedTerms });
-  }
-
-  function toggleLabel(value: string, on: boolean) {
-    const next = on ? [...draft.usageLabels, value] : draft.usageLabels.filter((l) => l !== value);
-    onChange({ ...draft, usageLabels: canonicalUsageLabels(next) });
   }
 
   return (
@@ -85,50 +154,13 @@ export function UsageFields({
         </p>
       ) : null}
       <PartOfSpeechField id="entry-pos-field" value={draft.pos} onChange={setPos} />
-
-      <fieldset className="usage-fieldset">
-        <legend>Usage labels</legend>
-        {USAGE_LABELS.map((l) => (
-          <label key={l.value} className="field-inline">
-            <input
-              type="checkbox"
-              checked={draft.usageLabels.includes(l.value)}
-              onChange={(e) => toggleLabel(l.value, e.target.checked)}
-            />
-            <span>
-              {l.value} <span className="usage-hint">- {l.description}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <p className="field-note">Leave all unticked for a word in ordinary use today.</p>
-
-      {flagApplies ? (
-        <div className="usage-fieldset">
-          <label className="field-inline">
-            <input
-              type="checkbox"
-              checked={draft.onlyInDerivedTerms}
-              onChange={(e) => onChange({ ...draft, onlyInDerivedTerms: e.target.checked })}
-            />
-            <span>No longer used as a separate word - survives only inside other words</span>
-          </label>
-          <p className="field-note">
-            For a word (verb, noun, particle...) that no longer appears as a separate word in sentences, only inside
-            other words. Not for words that simply cannot stand alone as a whole sentence, such as kò or ń. If it never
-            was a word, only something attached to other words, choose Prefix or Suffix instead.
-          </p>
-          {usage.derivedTerms.length > 0 ? (
-            <p className="field-note" aria-label="Derived terms">
-              Words in this dictionary built from it: {usage.derivedTerms.map((d) => d.displayText).join(', ')}
-            </p>
-          ) : draft.onlyInDerivedTerms ? (
-            <p className="field-note" aria-label="Derived terms">
-              No word in this dictionary lists this one as a part yet, so there is nothing to show as an example.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      <UsageCheckboxes
+        usageLabels={draft.usageLabels}
+        onlyInDerivedTerms={draft.onlyInDerivedTerms}
+        pos={draft.pos || null}
+        onChange={(next) => onChange({ ...draft, ...next })}
+        derivedTerms={usage.derivedTerms}
+      />
     </>
   );
 }

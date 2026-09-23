@@ -30,6 +30,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
 import {
+  acceptsOnlyInDerivedTerms,
   checkPhraseSpelling,
   describePhraseSpelling,
   isMultiWord,
@@ -39,6 +40,7 @@ import {
 } from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
 import { PartOfSpeechField } from './PartOfSpeechField.js';
+import { UsageCheckboxes } from './UsageFields.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
@@ -215,6 +217,11 @@ function WordTab({
    * the person adding it knows the answer, rather than a reconstruction job later. */
   const [pos, setPos] = useState('');
   const [englishGloss, setEnglishGloss] = useState('');
+  /** Usage labels and "survives only inside other words" (0029). Asked on BOTH branches, unlike pos:
+   * a cited word's pin says what part of speech upstream files it under, but nothing about whether
+   * it is obsolete - that is ours to say, and saying it here saves a correction vote later. */
+  const [usageLabels, setUsageLabels] = useState<string[]>([]);
+  const [onlyInDerivedTerms, setOnlyInDerivedTerms] = useState(false);
   /** Whether the extended definition has been typed into directly, rather than just following the
    * student definition. Same pattern as the Phrase tab's `definitionEdited` (see PhraseDraft),
    * mirrored in the opposite direction: there, the dictionary wording is the thing adopted from
@@ -320,6 +327,8 @@ function WordTab({
     setExemptReason('');
     setPos('');
     setEnglishGloss('');
+    setUsageLabels([]);
+    setOnlyInDerivedTerms(false);
     setGlossEdited(false);
     setOffPath(false);
     setDuplicates(null);
@@ -350,6 +359,9 @@ function WordTab({
   }
 
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
+  /** The part of speech this word will resolve to: the one typed here off-path, else the cited
+   * etymology's own. What decides whether "survives only inside other words" can apply. */
+  const effectivePos = offPath ? pos || null : (selected?.pos ?? null);
   const citable = offPath ? Boolean(exemptReason.trim()) : Boolean(selected?.entryId);
 
   async function submit() {
@@ -393,6 +405,11 @@ function WordTab({
         // Off-path only: a cited word reads both from its pin, and 0018 keeps these as overrides
         // precisely so the cited majority needs no second copy of what upstream already said.
         ...(offPath ? { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null } : {}),
+        // Omitted when there is nothing to say. The flag is dropped when the part of speech rules
+        // it out (an affix, a letter) - the box is hidden then, so a tick made earlier is not
+        // something the curator can still see they are sending.
+        ...(usageLabels.length > 0 ? { usageLabels } : {}),
+        ...(onlyInDerivedTerms && acceptsOnlyInDerivedTerms(effectivePos) ? { onlyInDerivedTerms: true } : {}),
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
       const syllablesOut = offPath ? composedSyllables : syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
@@ -617,6 +634,18 @@ function WordTab({
               </div>
               <PartOfSpeechField id="word-pos-field" value={pos} onChange={setPos} />
             </>
+          ) : null}
+
+          {selected || offPath ? (
+            <UsageCheckboxes
+              usageLabels={usageLabels}
+              onlyInDerivedTerms={onlyInDerivedTerms}
+              pos={effectivePos}
+              onChange={(next) => {
+                setUsageLabels(next.usageLabels);
+                setOnlyInDerivedTerms(next.onlyInDerivedTerms);
+              }}
+            />
           ) : null}
 
           {/* Said before the question is even asked, not left for Review to reveal later - a
@@ -941,6 +970,9 @@ interface PhraseDraft {
    * them from - i.e. when it is locally composed rather than adopted from upstream. */
   pos: string;
   englishGloss: string;
+  /** 0029, asked whether the phrase is adopted or composed - see the Word tab's note. */
+  usageLabels: string[];
+  onlyInDerivedTerms: boolean;
   /** The student definition, when it is NOT the dictionary wording verbatim.
    *
    * Same two-field shape as the spelling above, for the same reason: the answer is usually already
@@ -984,6 +1016,8 @@ const EMPTY_DRAFT: PhraseDraft = {
   adopted: null,
   pos: 'phrase',
   englishGloss: '',
+  usageLabels: [],
+  onlyInDerivedTerms: false,
   definition: '',
   definitionEdited: false,
 };
@@ -1141,6 +1175,10 @@ function PhraseTab({
         ...(adopted
           ? {}
           : { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null }),
+        ...(draft.usageLabels.length > 0 ? { usageLabels: draft.usageLabels } : {}),
+        ...(draft.onlyInDerivedTerms && acceptsOnlyInDerivedTerms(adopted ? adopted.pos : pos || null)
+          ? { onlyInDerivedTerms: true }
+          : {}),
       });
       setStatus(`Added phrase ${wordIdPreview} to vocabulary.`);
       resetForm();
@@ -1384,6 +1422,15 @@ function PhraseTab({
           </div>
         </>
       )}
+
+      {/* Asked adopted or composed, like the student definition below: a pin can say what part of
+          speech upstream files a phrase under, but not whether it is obsolete. */}
+      <UsageCheckboxes
+        usageLabels={draft.usageLabels}
+        onlyInDerivedTerms={draft.onlyInDerivedTerms}
+        pos={adopted ? adopted.pos : pos || null}
+        onChange={(next) => setDraft({ ...draft, ...next })}
+      />
 
       {/* Asked for whatever the citation says, unlike the two fields above. A pin holds the wording
           upstream uses; it cannot hold the wording we would put in front of a student, because that

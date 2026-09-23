@@ -562,6 +562,10 @@ export type UpstreamCitationInput = { entryId: string } | { exemptReason: string
  * the locally composed phrase. A cited entry leaves them absent, and the generator reads
  * pin.pos / pin.glosses instead. */
 export interface PublicationFields {
+  /** Usage labels and "survives only inside other words" (0029) - unlike the three overrides
+   * here, sent for a cited entry too: no pin carries them. Absent means none. */
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
   pos?: string | null;
   englishGloss?: string | null;
   etymidLabel?: string | null;
