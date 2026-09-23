@@ -635,6 +635,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   // One wording for everyone. It used to be the volunteer who got the explicit "Propose:"
   // while the curator got the bare verb - the person writing fact had the vaguer label.
   const label = (text: string) => text;
+  /** The word as this reviewer has said it is - see api/src/myEntryAnswer.ts. */
+  const shownDisplayText = review.myProposedEntry?.spellingChanged ? review.myProposedEntry.displayText : review.displayText;
 
   return (
     <section aria-label="Etymology review" className={`card${review.axisDecided.etymology ? ' decided' : ''}`}>
@@ -644,6 +646,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         definition={review.definition}
         axisDecided={review.axisDecided}
         currentAxis="Etymology"
+        mine={review.myProposedEntry}
         showAxisChips={showAxisChips}
       />
 
@@ -831,7 +834,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           etymology" are not available answers about one, and it was being offered both. */}
       {isPhrase && !hasRealExistingComponents ? (
         <p className="field-note" aria-label="Phrase with no words linked">
-          No words are linked to this phrase yet. Add one for each word of <strong>{review.displayText}</strong>.
+          No words are linked to this phrase yet. Add one for each word of <strong>{shownDisplayText}</strong>.
         </p>
       ) : null}
       {!isPhrase && !hasProposal && !hasRealExistingComponents ? (
@@ -921,7 +924,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           <p className="field-note">
             {isPhrase ? (
               <>
-                One entry per word of <strong>{review.displayText}</strong>, in the order they are said. Words already in
+                One entry per word of <strong>{shownDisplayText}</strong>, in the order they are said. Words already in
                 the dictionary come first; anything below them comes from Wiktionary, and picking it asks a curator to add
                 it. Either way you can finish here now.
               </>

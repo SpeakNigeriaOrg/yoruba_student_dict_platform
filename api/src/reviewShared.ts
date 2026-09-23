@@ -121,6 +121,32 @@ export interface AxisDecided {
 // mismatch: it reports it (audioDiverges) where they exclude.
 const RECORDING_MATCHES_GOLDEN = recordingMatchesGoldenSql('u', 'g');
 
+/** The caller's own active entry answer for u's word, as a lateral join aliased `mine`. $N is the
+ * caller's user_id. */
+const MY_ANSWER_JOIN = (userParam: string) => `left join lateral (
+      select n.resolved_value as v from contributions n
+       where n.word_id = u.word_id and n.submitted_by = ${userParam} and n.axis = 'entry' and n.status = 'active'
+       order by n.submitted_at desc limit 1
+    ) mine on true`;
+
+/** Whether a recording matches the word AS THIS CALLER HAS SAID IT IS: their own entry answer when
+ * it differs from the record, else the record (see myEntryAnswer.ts).
+ *
+ * This is the per-user task status, not the publish rule - publish still compares against
+ * golden_record (RECORDING_MATCHES_GOLDEN), and a recording of an unconfirmed spelling still does
+ * not publish. But a volunteer who corrected a spelling and then recorded it has done exactly what
+ * they should; telling them their own recording "won't publish" or "no longer matches" contradicted
+ * the word every other screen now shows them. Their answer counts only when it genuinely differs
+ * (NFC-compared, as myEntryAnswer does), so a composition-only difference cannot flip a match. */
+const RECORDING_MATCHES_MY_VIEW = `(case
+      when mine.v ? 'displayText' and mine.v ? 'syllables'
+       and (normalize(mine.v ->> 'displayText', NFC) <> normalize(g.display_text, NFC)
+            or array(select jsonb_array_elements_text(mine.v -> 'syllables')) <> g.syllables)
+      then u.recorded_display_text = mine.v ->> 'displayText'
+       and u.recorded_syllables = array(select jsonb_array_elements_text(mine.v -> 'syllables'))
+      else ${RECORDING_MATCHES_GOLDEN}
+    end)`;
+
 export { recordingMatchesGolden };
 
 export async function loadAxisDecided(client: Queryable, wordId: string, userId: string): Promise<AxisDecided> {
@@ -135,9 +161,10 @@ export async function loadAxisDecided(client: Queryable, wordId: string, userId:
     // clean while half its audio is being dropped, and would contradict the per-recording
     // "no longer matches" badges on the same screen.
     client.query<{ all_match: boolean | null }>(
-      `select bool_and(${RECORDING_MATCHES_GOLDEN}) as all_match from utterances u
+      `select bool_and(${RECORDING_MATCHES_MY_VIEW}) as all_match from utterances u
          join speakers s on s.speaker_id = u.speaker_id
          join golden_record g on g.word_id = u.word_id
+         ${MY_ANSWER_JOIN('$2')}
        where u.word_id = $1 and s.user_id = $2`,
       [wordId, userId],
     ),
@@ -182,9 +209,10 @@ export async function loadAxisDecidedBatch(
     // Grouped counterpart of loadAxisDecided's aggregate - a word_id present here has been
     // recorded by this user; its all_match says whether publish will take all of it.
     client.query<{ word_id: string; all_match: boolean | null }>(
-      `select u.word_id, bool_and(${RECORDING_MATCHES_GOLDEN}) as all_match from utterances u
+      `select u.word_id, bool_and(${RECORDING_MATCHES_MY_VIEW}) as all_match from utterances u
          join speakers s on s.speaker_id = u.speaker_id
          join golden_record g on g.word_id = u.word_id
+         ${MY_ANSWER_JOIN('$1')}
        where s.user_id = $1 and u.word_id = any($2)
        group by u.word_id`,
       [userId, wordIds],

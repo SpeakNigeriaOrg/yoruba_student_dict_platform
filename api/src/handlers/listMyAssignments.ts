@@ -8,10 +8,14 @@
 
 import type { Queryable } from '../db.js';
 import { loadAxisDecidedBatch, type AxisDecided } from '../reviewShared.js';
+import { loadMyEntryAnswers } from '../myEntryAnswer.js';
 
 export interface AssignmentSummary {
   wordId: string;
+  /** The assignee's own spelling when they have corrected it, else the record's. */
   displayText: string;
+  /** The record's spelling, only when the one above is the assignee's correction - for the marker. */
+  recordDisplayText: string | null;
   syllables: string[];
   definition: string | null;
   entryType: 'phrase' | null;
@@ -23,6 +27,8 @@ export interface AssignmentSummary {
   axisDecided: AxisDecided;
 }
 
+/** Assignments carry the word as the assignee has said it is (myEntryAnswer.ts): their own
+ * task list must not show them the spelling they just corrected. */
 export async function listMyAssignments(db: Queryable, userId: string): Promise<AssignmentSummary[]> {
   const result = await db.query<{
     word_id: string;
@@ -40,9 +46,11 @@ export async function listMyAssignments(db: Queryable, userId: string): Promise<
     [userId],
   );
   const axisDecidedByWord = await loadAxisDecidedBatch(db, result.rows.map((row) => row.word_id), userId);
+  const mine = await loadMyEntryAnswers(db, result.rows.map((row) => row.word_id), userId);
   return result.rows.map((row) => ({
     wordId: row.word_id,
-    displayText: row.display_text,
+    displayText: mine.get(row.word_id)?.spellingChanged ? mine.get(row.word_id)!.displayText : row.display_text,
+    recordDisplayText: mine.get(row.word_id)?.spellingChanged ? row.display_text : null,
     syllables: row.syllables,
     definition: row.definition,
     entryType: row.entry_type,

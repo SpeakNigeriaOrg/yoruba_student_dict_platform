@@ -33,8 +33,17 @@ import { useEffect, useState } from 'react';
 import { decodeToSamples } from '../audio/decodeToSamples.js';
 import { encodeWavFromPCM } from '../audio/encodeWav.js';
 import { useAudioRecorder } from '../audio/useAudioRecorder.js';
-import { base64ToAudioUrl, getEntryReview, getExamples, submitExample, type ExampleSummary, type ExampleType } from '../api.js';
+import {
+  base64ToAudioUrl,
+  getEntryReview,
+  getExamples,
+  submitExample,
+  type ExampleSummary,
+  type ExampleType,
+  type MyEntryAnswer,
+} from '../api.js';
 import { PhraseComposer } from './PhraseComposer.js';
+import { YourChangeNote } from './YourChangeNote.js';
 
 export interface ExampleContributionProps {
   wordId: string;
@@ -62,6 +71,7 @@ const KIND_LABEL: Record<ExampleType, string> = {
 
 export function ExampleContribution({ wordId, onDecided, isCurator = false }: ExampleContributionProps) {
   const [displayText, setDisplayText] = useState<string | null>(null);
+  const [mine, setMine] = useState<MyEntryAnswer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [kind, setKind] = useState<ExampleType | null>(null);
@@ -90,7 +100,11 @@ export function ExampleContribution({ wordId, onDecided, isCurator = false }: Ex
     setStatus(null);
     getEntryReview(wordId)
       .then((review) => {
-        if (!cancelled) setDisplayText(review.displayText);
+        if (cancelled) return;
+        // The word as this contributor has said it is (api/src/myEntryAnswer.ts) - and the server
+        // stamps the example with that same spelling, so what they illustrate is what is recorded.
+        setDisplayText(review.myProposedEntry?.spellingChanged ? review.myProposedEntry.displayText : review.displayText);
+        setMine(review.myProposedEntry);
       })
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
@@ -155,6 +169,7 @@ export function ExampleContribution({ wordId, onDecided, isCurator = false }: Ex
   return (
     <section aria-label="Example of use" className={`card${submitted ? ' decided' : ''}`}>
       <h2>{displayText}</h2>
+      <YourChangeNote answer={mine} />
       <p className="field-note">
         Show this word being used. One example is enough - whichever kind is easiest for you.
       </p>

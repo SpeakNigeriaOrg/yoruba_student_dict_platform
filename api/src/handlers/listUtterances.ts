@@ -33,6 +33,7 @@
 
 import type { Queryable } from '../db.js';
 import { recordingMatchesGolden } from '../reviewShared.js';
+import { loadMyEntryAnswer } from '../myEntryAnswer.js';
 import { WordNotFoundError } from './errors.js';
 
 export interface UtteranceSegmentSummary {
@@ -112,7 +113,14 @@ export async function listUtterances(
     [wordId],
   );
   if (wordResult.rowCount === 0) throw new WordNotFoundError(wordId);
-  const current = wordResult.rows[0];
+  // What a recording is compared against. For a volunteer looking at their own recordings: the word
+  // as they have said it is (myEntryAnswer.ts), so recording their own correction is not reported
+  // as a mismatch. For a curator reviewing everyone's: the record, because there the badge is
+  // about what publish will drop.
+  const mine = includeOtherSpeakers ? null : await loadMyEntryAnswer(client, wordId, userId);
+  const current = mine?.spellingChanged
+    ? { display_text: mine.displayText, syllables: mine.syllables }
+    : wordResult.rows[0];
 
   // Delegated rather than hand-rolled here, so this badge and what publish actually drops
   // cannot drift apart - see reviewShared.ts's note on the one rule in five places.

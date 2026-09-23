@@ -254,16 +254,35 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         // `aárùn-ún`) on a branch that says a curator must fix it. The last case is still real
         // and still refuses: an Ajami spelling like `شعِ` has no syllable model at all, and a
         // text box with no grids would let it be silently mangled.
-        const spans = syllabifySpans(result.displayText);
+        //
+        // Seeded from the reviewer's OWN answer when they have one (api/src/myEntryAnswer.ts). They
+        // told us what the word is; coming back to this screen and finding the record's spelling in
+        // the grid made their answer look lost, and pressing Record again would have silently voted
+        // for the spelling they had just corrected. Their authored syllables are kept when they
+        // still spell the text - a freed syllabic nasal is a split re-deriving would undo.
+        const mine = result.myProposedEntry;
+        const text = mine?.spellingChanged ? mine.displayText : result.displayText;
+        const spans = syllabifySpans(text);
+        const authored =
+          mine?.spellingChanged && mine.syllables.join('').normalize('NFC') === text.replace(/[\s-]+/g, '').normalize('NFC')
+            ? mine.syllables
+            : null;
         if (spans) {
-          setSyllables(spans);
-        } else if (splitPhrase(result.displayText).words.some((w) => w.syllables !== null)) {
-          setPhraseText(result.displayText);
+          setSyllables(authored ?? spans);
+        } else if (splitPhrase(text).words.some((w) => w.syllables !== null)) {
+          setPhraseText(text);
         }
-        setDefinitionText(result.definitionCurrent ?? result.definitionProposed ?? '');
+        setDefinitionText(
+          mine?.definitionChanged ? (mine.definition ?? '') : (result.definitionCurrent ?? result.definitionProposed ?? ''),
+        );
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);
         setNote(result.note ?? '');
-        setUsageDraft(usageDraftFrom(result.usage));
+        const recordUsage = usageDraftFrom(result.usage);
+        setUsageDraft({
+          pos: mine?.pos !== undefined ? (mine.pos ?? '') : recordUsage.pos,
+          usageLabels: mine?.usageLabels ?? recordUsage.usageLabels,
+          onlyInDerivedTerms: mine?.onlyInDerivedTerms ?? recordUsage.onlyInDerivedTerms,
+        });
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -362,7 +381,9 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
       writtenFormFromPhrase(review.displayText, phraseText),
   );
   const readyToSubmit = Boolean(written) && definitionText.trim().length > 0;
-  const proposed = syllables ? syllables.join('') : (phraseText?.trim() ?? review.displayText);
+  /** The word as this reviewer has said it is - their answer, else the record. */
+  const shownDisplayText = review.myProposedEntry?.spellingChanged ? review.myProposedEntry.displayText : review.displayText;
+  const proposed = syllables ? syllables.join('') : (phraseText?.trim() ?? shownDisplayText);
   // The specific kind of difference, not a bare "differs". classifyToneMatch already
   // separates a tone disagreement from a letters one, and that distinction is the
   // whole point of this screen - it was previously computed and thrown away.
@@ -374,6 +395,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         displayText={review.displayText}
         syllables={review.syllables}
         definition={review.definitionCurrent}
+        mine={review.myProposedEntry}
         axisDecided={review.axisDecided}
         currentAxis="Entry"
         showAxisChips={showAxisChips}
@@ -445,7 +467,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         // Add Phrase tab authors with, so a phrase is corrected here the way it was written.
         <>
           <p aria-label="Spelling question">
-            We have <strong>{review.displayText}</strong>. It is more than one word, so each word gets its own tone
+            We have <strong>{shownDisplayText}</strong>. It is more than one word, so each word gets its own tone
             grid. Edit it if the spelling or the tone is wrong.
           </p>
           <PhraseComposer
@@ -517,7 +539,7 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         // existed, which is how a phrase became uncorrectable.
         <>
           <p aria-label="Spelling question">
-            We have <strong>{review.displayText}</strong>. This word cannot be broken into syllables here, so its
+            We have <strong>{shownDisplayText}</strong>. This word cannot be broken into syllables here, so its
             spelling can only be changed by a curator.
           </p>
           <div className="btn-row" role="group" aria-label="Spelling choice">

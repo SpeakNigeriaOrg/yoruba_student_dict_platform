@@ -41,7 +41,7 @@ export function AxisStatusBadges({ axisDecided }: AxisStatusBadgesProps) {
         className={`badge${axisDecided.audio ? (axisDecided.audioDiverges ? ' diverged' : ' decided') : ''}`}
       >
         audio:{' '}
-        {!axisDecided.audio ? 'not yet recorded' : axisDecided.audioDiverges ? "recorded - won't publish" : 'recorded'}
+        {!axisDecided.audio ? 'not yet recorded' : axisDecided.audioDiverges ? 'recorded - spelling changed since' : 'recorded'}
       </span>{' '}
       {/* Per-user like audio, and worded the same way: several different examples are more
           material rather than a conflict, so "given" is about this reader's own contribution. */}

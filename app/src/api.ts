@@ -47,7 +47,10 @@ export type AppRole = 'curator' | 'volunteer' | 'observer';
 
 export interface AssignmentSummary {
   wordId: string;
+  /** The assignee's own spelling when they corrected it, else the record's. */
   displayText: string;
+  /** The record's spelling, only when displayText is the assignee's correction. */
+  recordDisplayText?: string | null;
   syllables: string[];
   definition: string | null;
   entryType: 'phrase' | null;
@@ -406,6 +409,8 @@ export interface EtymologyReviewResult {
   /** 'phrase' for a composed multi-word entry. A phrase's identity IS its constituent words, so it
    * is asked which words it is made of rather than whether it has parts. */
   entryType: 'phrase' | null;
+  /** See MyEntryAnswer - shown in place of displayText / definition above. */
+  myProposedEntry: MyEntryAnswer | null;
   componentsProposal: ComponentsProposalItem[];
   components: string[];
   /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
@@ -440,6 +445,21 @@ export function postEtymologyDecision(wordId: string, input: ApplyEtymologyDecis
   });
 }
 
+/** Mirrors api/src/myEntryAnswer.ts. The word as THIS caller has said it is, when that differs from
+ * the record - every screen shows it in place of the record, with a YourChangeNote marker. */
+export interface MyEntryAnswer {
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  spellingChanged: boolean;
+  definitionChanged: boolean;
+  pos?: string | null;
+  usageLabels?: string[];
+  onlyInDerivedTerms?: boolean;
+  recordDisplayText: string;
+  recordDefinition: string | null;
+}
+
 // Mirrors api/src/handlers/getEntryReview.ts's EntryReviewResult - the
 // written-form fields (DiagnoseEntryResult + CheckSyllableSplitResult) and
 // the meaning fields (CheckDefinitionResult) arrive in ONE response, because
@@ -464,7 +484,7 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
    * The audio screen seeds from it: someone who has just corrected a spelling should be
    * asked to say the word the way they just said it is said, not the way the record still
    * has it. Null when they have not answered, or answered with what is already on record. */
-  myProposedEntry: { displayText: string; syllables: string[] } | null;
+  myProposedEntry: MyEntryAnswer | null;
   /** Mirrors getEntryReview.ts's EntryUsage (0029). */
   usage: {
     /** Resolved - our override, else the pin's. What confirming asserts. */

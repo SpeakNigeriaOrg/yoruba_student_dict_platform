@@ -1260,3 +1260,50 @@ describe('entry admin', () => {
     );
   });
 });
+
+describe("the reviewer's own answer is the word they work with", () => {
+  // They told us the word is dùjẹ̀kú, defined "a hen". Coming back must not hand them the record's
+  // dùjẹ̀kù again - and pressing Record untouched must re-assert THEIR answer, not quietly vote for
+  // the spelling they corrected.
+  const MINE = {
+    ...entryFixture,
+    myProposedEntry: {
+      displayText: 'dùjẹ̀kú',
+      syllables: ['dù', 'jẹ̀', 'kú'],
+      definition: 'a hen',
+      spellingChanged: true,
+      definitionChanged: true,
+      recordDisplayText: entryFixture.displayText,
+      recordDefinition: entryFixture.definitionCurrent,
+    },
+  };
+
+  it('shows their spelling and definition, with a one-line marker naming what they changed', async () => {
+    await loaded(MINE);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('dùjẹ̀kú');
+    expect(screen.getByLabelText('Student definition')).toHaveValue('a hen');
+    expect(screen.getByLabelText('Your change')).toHaveTextContent(
+      `You changed this word's spelling (was ${entryFixture.displayText}) and definition (was chicken).`,
+    );
+  });
+
+  it('re-submits their answer when they record again without touching anything', async () => {
+    const user = userEvent.setup();
+    const fetchMock = await loaded(MINE);
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({
+        action: 'respell',
+        newDisplayText: 'dùjẹ̀kú',
+        newSyllables: ['dù', 'jẹ̀', 'kú'],
+        definitionAction: 'custom',
+        definitionText: 'a hen',
+      }),
+    );
+  });
+
+  it('shows no marker for someone with no answer of their own', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByLabelText('Your change')).not.toBeInTheDocument();
+  });
+});

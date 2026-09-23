@@ -335,3 +335,29 @@ describe('failures', () => {
     expect(screen.getByLabelText(/in Yoruba/)).toHaveValue('abo adiyẹ');
   });
 });
+
+describe("the contributor's own spelling", () => {
+  it('is the word they write an example for, with the marker', async () => {
+    const mine = {
+      ...entryFixture,
+      myProposedEntry: {
+        displayText: 'dùjẹ̀kú',
+        syllables: ['dù', 'jẹ̀', 'kú'],
+        definition: 'chicken',
+        spellingChanged: true,
+        definitionChanged: false,
+        recordDisplayText: entryFixture.displayText,
+        recordDefinition: 'chicken',
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({ ok: true, json: async () => (url.includes('/entry') ? mine : { examples: [] }) }),
+      ),
+    );
+    render(<ExampleContribution wordId="w" />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('dùjẹ̀kú'));
+    expect(screen.getByLabelText('Your change')).toHaveTextContent(`spelling (was ${entryFixture.displayText})`);
+  });
+});

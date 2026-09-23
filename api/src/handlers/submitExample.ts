@@ -75,10 +75,20 @@ export async function submitExample(
   // pins: this example illustrates the word AS IT WAS SPELLED THEN. Phase F made tone
   // corrections routine, so a later respelling must not silently reinterpret what someone
   // chose to illustrate.
+  //
+  // "Spelled then" means as THIS contributor was shown it: their own active entry answer when they
+  // have one (myEntryAnswer.ts), else the record. Recordings already work this way. Freezing the
+  // record's spelling instead marked the example stale at exactly the moment their correction was
+  // adopted - the example that matched best was reported as the one that no longer matched.
   const result = await client.query<{ example_id: string }>(
     `insert into word_examples
        (word_id, submitted_by, example_type, example_text, translation, audio_data, recorded_word_text)
-     select g.word_id, $2, $3, $4, $5, decode($6, 'base64'), g.display_text
+     select g.word_id, $2, $3, $4, $5, decode($6, 'base64'),
+            coalesce(
+              (select n.resolved_value ->> 'displayText' from contributions n
+                where n.word_id = g.word_id and n.submitted_by = $2 and n.axis = 'entry' and n.status = 'active'
+                order by n.submitted_at desc limit 1),
+              g.display_text)
      from golden_record g where g.word_id = $1
      on conflict (word_id, submitted_by) do update set
        example_type       = excluded.example_type,

@@ -50,6 +50,13 @@ export function AssignmentsList({ onSelect, assignments: provided }: Assignments
           <button type="button" className="row-title" onClick={() => onSelect(a.wordId)}>
             {a.displayText}
           </button>
+          {/* Their own spelling, shown as the word; the marker only names that it is theirs. */}
+          {a.recordDisplayText ? (
+            <span className="field-note your-change" aria-label="Your change">
+              {' '}
+              ✎ your spelling (was {a.recordDisplayText})
+            </span>
+          ) : null}
           {a.definition ? <span> — {a.definition}</span> : null}
           <br />
           <AxisStatusBadges axisDecided={a.axisDecided} />

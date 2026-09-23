@@ -220,7 +220,7 @@ describe('the caller\'s own pending answer about the spelling', () => {
     await proposeSpelling(wordId, userId, 'ọwọ́', ['ọ', 'wọ́']);
 
     const result = await getEntryReview(pool, wordId, userId);
-    expect(result.myProposedEntry).toEqual({ displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'] });
+    expect(result.myProposedEntry).toMatchObject({ displayText: 'ọwọ́', syllables: ['ọ', 'wọ́'], spellingChanged: true, recordDisplayText: 'owo' });
     // The record itself is untouched - a contribution is not a decision.
     expect(result.displayText).toBe('owo');
   });
@@ -249,7 +249,7 @@ describe('the caller\'s own pending answer about the spelling', () => {
     await proposeSpelling(wordId, curatorId, 'ọwọ́', ['ọ', 'wọ́']);
 
     expect((await getEntryReview(pool, wordId, userId)).myProposedEntry).toBeNull();
-    expect((await getEntryReview(pool, wordId, curatorId)).myProposedEntry).toEqual({
+    expect((await getEntryReview(pool, wordId, curatorId)).myProposedEntry).toMatchObject({
       displayText: 'ọwọ́',
       syllables: ['ọ', 'wọ́'],
     });

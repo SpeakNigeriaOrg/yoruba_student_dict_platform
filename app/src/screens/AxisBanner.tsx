@@ -10,7 +10,8 @@
 // viewport before the actual task, and the axis tab bar already says which
 // axis is open. The aria-label is unchanged so it stays queryable.
 
-import type { AxisDecided } from '../api.js';
+import type { AxisDecided, MyEntryAnswer } from '../api.js';
+import { YourChangeNote } from './YourChangeNote.js';
 
 export interface AxisBannerProps {
   displayText: string;
@@ -26,6 +27,9 @@ export interface AxisBannerProps {
    * other axes to someone who was handed one specific task, and the progress line
    * above already says where they are. */
   showAxisChips?: boolean;
+  /** The caller's own entry answer, when it differs from the record. Shown AS the word - their
+   * spelling, syllables and definition - with a one-line marker (see api/src/myEntryAnswer.ts). */
+  mine?: MyEntryAnswer | null;
 }
 
 export function AxisBanner({
@@ -35,25 +39,30 @@ export function AxisBanner({
   axisDecided,
   currentAxis,
   showAxisChips = true,
+  mine,
 }: AxisBannerProps) {
-  // The audio chip carries a mark when the recording exists but no longer matches the word.
-  // Leaving it plain green would be the same claim the badge row just stopped making: done AND
-  // publishable, when only the first is true.
+  const shownText = mine?.spellingChanged ? mine.displayText : displayText;
+  const shownSyllables = mine?.spellingChanged ? mine.syllables : syllables;
+  const shownDefinition = mine?.definitionChanged ? mine.definition : definition;
+  // The audio chip carries a mark when the recording exists but no longer matches the word - the
+  // word as THIS person sees it, their own correction included (reviewShared.ts). Said as what
+  // happened, not as "won't publish": recording their own corrected spelling is not a mistake.
   const chips: Array<{ label: string; done: boolean }> = [
     { label: 'entry', done: axisDecided.entry },
     { label: 'etymology', done: axisDecided.etymology },
-    { label: axisDecided.audio && axisDecided.audioDiverges ? "audio (won't publish)" : 'audio', done: axisDecided.audio },
+    { label: axisDecided.audio && axisDecided.audioDiverges ? 'audio (spelling changed since)' : 'audio', done: axisDecided.audio },
     { label: 'example', done: axisDecided.example },
   ];
 
   return (
     <>
-      <h2>{displayText}</h2>
+      <h2>{shownText}</h2>
       <p>
-        <strong>Syllables:</strong> {syllables.join(' · ')}
+        <strong>Syllables:</strong> {shownSyllables.join(' · ')}
         <br />
-        <strong>Definition:</strong> {definition ?? '(not yet decided)'}
+        <strong>Definition:</strong> {shownDefinition ?? '(not yet decided)'}
       </p>
+      <YourChangeNote answer={mine} />
 
       {showAxisChips ? (
         <>

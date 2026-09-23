@@ -38,6 +38,7 @@ import type { Queryable } from '../db.js';
 import { loadKaikkiSensesForKey } from '../kaikkiData.js';
 import { loadAxisDecided, loadDefinition, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
+import { loadMyEntryAnswer, type MyEntryAnswer } from '../myEntryAnswer.js';
 
 /** Deliberately NOT `extends ComponentsAxisFieldsResult`: that type carries the reverse-direction
  * fields, and spreading it is how they reached this response in the first place. Listing what the
@@ -54,6 +55,10 @@ export interface EtymologyReviewResult {
    * break into parts?" and "it has no parts" are not available answers about one, and it was being
    * offered both. */
   entryType: 'phrase' | null;
+  /** The word as this caller has said it is, when that differs from the record - shown in place
+   * of displayText / definition above. See myEntryAnswer.ts. The Kaikki lookup and component
+   * proposal still key on the record's spelling: they are about which etymology the word is. */
+  myProposedEntry: MyEntryAnswer | null;
   componentsProposal: ComponentsProposalItem[];
   components: string[];
   /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
@@ -115,6 +120,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
   }
   const definition = await loadDefinition(client, wordId);
   const axisDecided = await loadAxisDecided(client, wordId, userId);
+  const myProposedEntry = await loadMyEntryAnswer(client, wordId, userId);
 
   const key = orthographyInsensitiveForm(entry.displayText);
   const senses = await loadKaikkiSensesForKey(client, key);
@@ -143,6 +149,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     definition,
     entryType: entry.type === 'phrase' ? 'phrase' : null,
     axisDecided,
+    myProposedEntry,
     etymologyText: diagnosis.matchedEtymologyText ?? null,
     // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
     // usedAsComponentOf stop here.
