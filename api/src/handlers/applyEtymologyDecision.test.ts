@@ -46,6 +46,15 @@ describe('applyEtymologyDecision', () => {
     expect(components.rowCount).toBe(0);
   });
 
+  it('confirm_atomic REMOVES parts already on record - undoing parts added by mistake', async () => {
+    const wordId = `${NS}atomic_over_parts`;
+    await insertWord(wordId);
+    await applyEtymologyDecision(pool, wordId, { componentsAction: 'custom', components: [`${NS}comp_a`] }, curatorUserId);
+    await applyEtymologyDecision(pool, wordId, { componentsAction: 'confirm_atomic' }, curatorUserId);
+    const components = await pool.query('select 1 from golden_record_components where word_id = $1', [wordId]);
+    expect(components.rowCount).toBe(0);
+  });
+
   it('accept_proposed replaces golden_record_components with the given list, in order', async () => {
     const wordId = `${NS}accept_word`;
     await insertWord(wordId);

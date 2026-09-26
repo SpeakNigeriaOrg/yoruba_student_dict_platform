@@ -475,10 +475,19 @@ describe('resolveEtymologyOutcome', () => {
     expect(resolveEtymologyOutcome(observed, { componentsAction: 'custom', components: ['y', 'z'] }).components).toEqual(['y', 'z']);
   });
 
-  it('the other three leave the observed list untouched', () => {
-    for (const componentsAction of ['confirm_atomic', 'confirm_existing', 'reject_proposed'] as const) {
+  it('confirm_existing and reject_proposed leave the observed list untouched', () => {
+    for (const componentsAction of ['confirm_existing', 'reject_proposed'] as const) {
       expect(resolveEtymologyOutcome(observed, { componentsAction }).components).toEqual(['comp_a', 'comp_b']);
     }
+  });
+
+  it('confirm_atomic asserts NO parts, even over a recorded list - it used to keep them', () => {
+    // The Add Word mistake: parts recorded wrongly, and "it has no parts" must be able to undo them.
+    expect(resolveEtymologyOutcome(observed, { componentsAction: 'confirm_atomic' })).toEqual({
+      kind: 'etymology',
+      components: [],
+      atomic: true,
+    });
   });
 
   it('preserves component ORDER as a distinct claim', () => {

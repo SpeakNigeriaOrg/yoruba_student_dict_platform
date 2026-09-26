@@ -476,6 +476,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   /** Per proposed part (by position), the Wiktionary etymology the reviewer picked for it. Wins
    * over the spelling-based match: that one only knows the spelling, and là is five words. */
   const [chosenParts, setChosenParts] = useState<Record<number, ChosenPart>>({});
+  /** The reviewer removed the last part from the list - so "no parts" is what they are saying. */
+  const [emptiedByEdit, setEmptiedByEdit] = useState(false);
   /** Closed by default on an already-settled word - see decidedAndSettled below. Opened
    * deliberately, the same pattern as showCustomComponents, so reconsidering is always one
    * click away rather than gone. */
@@ -492,6 +494,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setAnswerRecorded(false);
     setSelectedCandidateWordIds({});
     setChosenParts({});
+    setEmptiedByEdit(false);
     setShowReconsider(false);
     getEtymologyReview(wordId)
       .then((result) => {
@@ -594,6 +597,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
 
   function addDraftComponent(componentWordId: string, label: DraftComponentLabel) {
     setAnswerRecorded(false);
+    setEmptiedByEdit(false);
     setDraftComponents((prev) => (prev.includes(componentWordId) ? prev : [...prev, componentWordId]));
     setDraftLabels((prev) => ({ ...prev, [componentWordId]: label }));
   }
@@ -645,6 +649,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   function removeManualComponent(index: number) {
     const removedWordId = draftComponents[index];
     setAnswerRecorded(false);
+    if (draftComponents.length === 1) setEmptiedByEdit(true);
     setDraftComponents((prev) => prev.filter((_, i) => i !== index));
     // Only clear the "already added" mark on the search result once no other occurrence of this
     // word remains in the draft - removing one copy of a reduplicated word does not mean the word
@@ -1101,6 +1106,22 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
                 : `${pendingPhraseWordCount} of these words are not in the dictionary yet and have been requested.`}{' '}
               You can still save — the links complete when a curator adds them.
             </p>
+          ) : null}
+          {/* Emptying the list is an answer too - "it has no parts" - and the one needed to undo parts
+              recorded by mistake (on Add Word, say). The save button used to live only inside the
+              tray below, which vanished with the last part, so removing every part left nothing to
+              press. A phrase is made of words by definition, so it cannot be saved empty. */}
+          {draftComponents.length === 0 && emptiedByEdit ? (
+            <div className="selection-tray" aria-label="Selected parts tray">
+              <strong>No parts selected</strong>
+              {isPhrase ? (
+                <p className="field-note">A phrase is made of words, so it needs at least one. Add its words below.</p>
+              ) : (
+                <button type="button" className="btn btn-primary" onClick={confirmAtomic} disabled={answerRecorded}>
+                  {answerRecorded ? 'Answer recorded ✓' : 'Save: it has no parts'}
+                </button>
+              )}
+            </div>
           ) : null}
           {draftComponents.length === 0 ? null : (
             <div className="selection-tray" aria-label="Selected parts tray">

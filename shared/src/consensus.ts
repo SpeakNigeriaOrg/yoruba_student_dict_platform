@@ -225,18 +225,24 @@ export interface EtymologyOutcome {
   atomic: boolean;
 }
 
-/** Mirrors applyEtymologyDecision: only accept_proposed and custom replace the
- * component list; the other three leave whatever is on record untouched and
- * merely record that a review happened. */
+/** Mirrors applyEtymologyDecision: accept_proposed and custom replace the component list with
+ * the one given; confirm_atomic replaces it with NOTHING - "this word has no parts"; the other
+ * two (confirm_existing, reject_proposed) leave what is on record and record that a review
+ * happened.
+ *
+ * confirm_atomic used to leave the list too, so on a word WITH recorded parts it asserted
+ * {components: [those parts], atomic: true} - a contradiction - and confirming it kept the parts
+ * it denied. That was how "remove the etymology I added by mistake on Add Word" could not be said. */
 export function resolveEtymologyOutcome(
   observed: EtymologyObservedState,
   input: EtymologyContributionInput,
 ): EtymologyOutcome {
   const replaces = input.componentsAction === 'accept_proposed' || input.componentsAction === 'custom';
+  const atomic = input.componentsAction === 'confirm_atomic';
   return {
     kind: 'etymology',
-    components: replaces ? (input.components ?? []) : observed.components,
-    atomic: input.componentsAction === 'confirm_atomic',
+    components: atomic ? [] : replaces ? (input.components ?? []) : observed.components,
+    atomic,
   };
 }
 

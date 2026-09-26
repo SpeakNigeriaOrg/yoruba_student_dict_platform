@@ -70,9 +70,10 @@ export class PhraseNeedsComponentsError extends Error {
   }
 }
 
-// Only these two actions replace golden_record_components' content - the
-// other three (confirm_atomic/confirm_existing/reject_proposed) leave
-// whatever's currently there untouched and just record the review.
+// These two replace golden_record_components with the list given. confirm_atomic replaces it with
+// nothing (below) - "this word has no parts" - and confirm_existing / reject_proposed leave what is
+// there and just record the review. confirm_atomic used to leave it too, so it could not remove
+// parts recorded by mistake; see resolveEtymologyOutcome.
 const CONTENT_CHANGING_ACTIONS = new Set<ComponentsAction>(['accept_proposed', 'custom']);
 
 export async function applyEtymologyDecision(
@@ -121,7 +122,9 @@ export async function applyEtymologyDecisionInTransaction(
   // that is the state `ẹ jọ̀ọ́` is in today.
   const resultingComponents = CONTENT_CHANGING_ACTIONS.has(input.componentsAction)
     ? (input.components ?? [])
-    : observedComponents;
+    : input.componentsAction === 'confirm_atomic'
+      ? []
+      : observedComponents;
   if (isPhrase && (input.componentsAction === 'confirm_atomic' || resultingComponents.length === 0)) {
     throw new PhraseNeedsComponentsError(wordId);
   }
@@ -137,6 +140,13 @@ export async function applyEtymologyDecisionInTransaction(
         [wordId, position, componentWordId],
       );
     }
+    await client.query('update golden_record set updated_at = now(), updated_by = $1 where word_id = $2', [
+      decidedBy,
+      wordId,
+    ]);
+  } else if (input.componentsAction === 'confirm_atomic' && observedComponents.length > 0) {
+    // "It has no parts" said over a recorded list removes the list - the outcome says so too.
+    await client.query('delete from golden_record_components where word_id = $1', [wordId]);
     await client.query('update golden_record set updated_at = now(), updated_by = $1 where word_id = $2', [
       decidedBy,
       wordId,

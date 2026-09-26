@@ -424,6 +424,27 @@ describe('EtymologyReview', () => {
     expect(savedBody.components).toEqual(['meji_word']);
   });
 
+  it('removing every part leaves a way to save "it has no parts" - the Add Word mistake', async () => {
+    // Reported: parts recorded by mistake on Add Word, removed here, and nothing left to press -
+    // the save button lived inside the tray that vanished with the last part.
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve({ ok: true, json: async () => (init?.method === 'POST' ? { contributionId: 'c1' } : etymologyConfirmedFixture) }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<EtymologyReview wordId="fixturegenconfirmed_compound_word" isCurator={true} />);
+    await waitFor(() => screen.getByText('fixturegenconfirmed_compoundspelling'));
+    await openCuratorTools(user);
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await user.click(screen.getByRole('button', { name: 'Save: it has no parts' }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[0] === '/api/contributions');
+      expect(JSON.parse(post![1].body as string)).toMatchObject({ axis: 'etymology', componentsAction: 'confirm_atomic' });
+    });
+  });
+
   it('removing a draft component removes its chip', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyConfirmedFixture }));
     const user = userEvent.setup();
