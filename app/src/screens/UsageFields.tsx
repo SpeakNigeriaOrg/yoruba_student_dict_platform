@@ -15,8 +15,9 @@
 
 import {
   USAGE_LABELS,
-  acceptsOnlyInDerivedTerms,
   canonicalUsageLabels,
+  fixedOnlyInDerivedTerms,
+  resolveOnlyInDerivedTerms,
 } from '@yoruba-student-dict-platform/shared';
 import type { ApplyEntryDecisionInput, EntryReviewResult } from '../api.js';
 import { PartOfSpeechField } from './PartOfSpeechField.js';
@@ -45,7 +46,7 @@ export function usageActions(
   const posChanged = draft.pos !== '' && draft.pos !== (onRecord.pos ?? '');
   const labels = canonicalUsageLabels(draft.usageLabels);
   const labelsChanged = labels.join('|') !== canonicalUsageLabels(onRecord.usageLabels).join('|');
-  const flag = draft.onlyInDerivedTerms && acceptsOnlyInDerivedTerms(draft.pos || onRecord.pos);
+  const flag = resolveOnlyInDerivedTerms(draft.pos || onRecord.pos, draft.onlyInDerivedTerms);
   const flagChanged = flag !== onRecord.onlyInDerivedTerms;
   return {
     ...(posChanged ? { posAction: 'set' as const, pos: draft.pos } : { posAction: 'confirm' as const }),
@@ -98,7 +99,18 @@ export function UsageCheckboxes({
       </fieldset>
       <p className="field-note">Leave all unticked for a word in ordinary use today.</p>
 
-      {acceptsOnlyInDerivedTerms(pos) ? (
+      {/* One field for every entry that is not a standalone word (partsOfSpeech.ts). An affix always
+          is one, so the box shows ticked and locked rather than disappearing - the answer is still
+          visible, it just is not the reviewer's to give. A letter is neither, so it is not shown. */}
+      {fixedOnlyInDerivedTerms(pos) === false ? null : fixedOnlyInDerivedTerms(pos) === true ? (
+        <div className="usage-fieldset">
+          <label className="field-inline">
+            <input type="checkbox" checked disabled readOnly />
+            <span>Not a standalone word</span>
+          </label>
+          <p className="field-note">An affix is never a standalone word, so this is always ticked for one.</p>
+        </div>
+      ) : (
         <div className="usage-fieldset">
           <label className="field-inline">
             <input
@@ -106,7 +118,7 @@ export function UsageCheckboxes({
               checked={onlyInDerivedTerms}
               onChange={(e) => onChange({ usageLabels, onlyInDerivedTerms: e.target.checked })}
             />
-            <span>No longer used as a separate word - survives only inside other words</span>
+            <span>Not a standalone word - survives only inside other words</span>
           </label>
           <p className="field-note">
             For a word (verb, noun, particle...) that no longer appears as a separate word in sentences, only inside
@@ -123,7 +135,7 @@ export function UsageCheckboxes({
             </p>
           ) : null}
         </div>
-      ) : null}
+      )}
     </>
   );
 }
@@ -138,10 +150,12 @@ export function UsageFields({
   usage: EntryReviewResult['usage'];
 }) {
   function setPos(pos: string) {
-    // Switching to an affix or a character clears the flag rather than hiding a tick nobody can
-    // see - the server would drop it anyway (resolveEntryOutcome), and a hidden true is a claim
-    // the reviewer can no longer see they are making.
-    onChange({ ...draft, pos, onlyInDerivedTerms: acceptsOnlyInDerivedTerms(pos || null) && draft.onlyInDerivedTerms });
+    // A part of speech that decides the flag sets it (an affix: on; a letter: off). Leaving one of
+    // those for an ordinary word clears it, rather than carrying over a tick the reviewer never
+    // made - the lock set it, not them.
+    const fixed = fixedOnlyInDerivedTerms(pos || null);
+    const wasFixed = fixedOnlyInDerivedTerms(draft.pos || null) !== null;
+    onChange({ ...draft, pos, onlyInDerivedTerms: fixed ?? (wasFixed ? false : draft.onlyInDerivedTerms) });
   }
 
   return (

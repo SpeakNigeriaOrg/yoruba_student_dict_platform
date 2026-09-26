@@ -133,6 +133,7 @@ import {
   planLevels,
   recordingMatchesGoldenSql,
   selectSyllableAudio,
+  standaloneEntrySql,
   toneOf,
 } from '../shared/dist/index.js';
 import {
@@ -455,8 +456,16 @@ async function main() {
   }
 
   console.log('[1/6] Loading golden_record...');
+  // Standalone entries only. An affix (ì-, oní-) or a word that survives only inside others (lá
+  // "to be big") is not a word this game can teach on its own, so it is left out of vocab.json and
+  // everything built from it - its audio and images stay in the database for whatever uses them
+  // next. One shared rule decides it: shared/src/partsOfSpeech.ts's isStandaloneEntry.
   const wordsResult = await pool.query(
-    'select word_id, display_text, syllables, definition, entry_type from golden_record order by word_id',
+    `select g.word_id, g.display_text, g.syllables, g.definition, g.entry_type
+       from golden_record g
+       left join upstream_citations c on c.word_id = g.word_id
+      where ${standaloneEntrySql('g', 'c')}
+      order by g.word_id`,
   );
   const vocab = {};
   for (const row of wordsResult.rows) {
@@ -601,6 +610,7 @@ async function main() {
   for (const [speaker, wordMap] of wordAudioBySpeaker) {
     verifiedWordAudioKey.set(speaker, new Map());
     for (const [wordId, buf] of wordMap) {
+      if (!vocab[wordId]) continue; // not a standalone entry - see the golden_record query
       const key = `words/${speaker}/${wordId}.wav`;
       expectedKeys.add(key);
       if (!wantsWord(wordId, speaker)) continue;

@@ -1453,7 +1453,7 @@ describe('AddWord - usage labels and "survives only inside other words" (0029)',
     expect(body).not.toHaveProperty('onlyInDerivedTerms');
   });
 
-  it('hides the flag for a cited affix, whose pos comes from Wiktionary', async () => {
+  it('shows the flag ticked and locked for a cited affix, whose pos comes from Wiktionary', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetch({
@@ -1470,7 +1470,8 @@ describe('AddWord - usage labels and "survives only inside other words" (0029)',
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
     expect(screen.getByRole('group', { name: 'Usage labels' })).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: /survives only inside other words/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Not a standalone word' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Not a standalone word' })).toBeDisabled();
   });
 
   it('drops a tick made before the part of speech was changed to a suffix', async () => {

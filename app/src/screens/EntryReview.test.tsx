@@ -615,16 +615,28 @@ describe('part of speech and usage (0029)', () => {
     expect(screen.getByRole('checkbox', { name: /survives only inside other words/ })).toBeInTheDocument();
   });
 
-  it('hides the flag for an affix, and choosing one clears a tick already made', async () => {
+  it('shows "not a standalone word" ticked and locked for an affix, and sends it', async () => {
+    // One field for every non-standalone entry (0030): an affix always is one.
     const user = userEvent.setup();
     const fetchMock = await loaded(entryFixture);
 
-    await user.click(screen.getByRole('checkbox', { name: /survives only inside other words/ }));
     await user.selectOptions(screen.getByLabelText('Part of speech'), 'suffix');
-    expect(screen.queryByRole('checkbox', { name: /survives only inside other words/ })).not.toBeInTheDocument();
+    const locked = screen.getByRole('checkbox', { name: 'Not a standalone word' });
+    expect(locked).toBeChecked();
+    expect(locked).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Record my answer' }));
-    await waitFor(() => expect(postedBody(fetchMock)).toMatchObject({ posAction: 'set', pos: 'suffix', onlyInDerivedTermsAction: 'confirm' }));
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({ posAction: 'set', pos: 'suffix', onlyInDerivedTermsAction: 'set', onlyInDerivedTerms: true }),
+    );
+  });
+
+  it('clears the lock-set tick when moving from an affix back to an ordinary word', async () => {
+    const user = userEvent.setup();
+    await loaded(entryFixture);
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'prefix');
+    await user.selectOptions(screen.getByLabelText('Part of speech'), 'verb');
+    expect(screen.getByRole('checkbox', { name: /survives only inside other words/ })).not.toBeChecked();
   });
 
   it('offers only labels Wiktionary defines', async () => {

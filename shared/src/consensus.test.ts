@@ -3,6 +3,7 @@ import {
   AGREEMENT_THRESHOLD,
   extendLegacyEntryFingerprint,
   fingerprintOutcome,
+  setDerivedOnlyInEntryFingerprint,
   renameComponentInFingerprint,
   resolveEntryOutcome,
   resolveEtymologyOutcome,
@@ -277,7 +278,7 @@ describe('part of speech and usage (0029)', () => {
     expect(fingerprintOutcome(a)).toBe(fingerprintOutcome(b));
   });
 
-  it('forces the flag off for a part of speech it cannot apply to, so those votes agree', () => {
+  it('forces the flag on for an affix - never standalone - so those votes agree', () => {
     const ticked = resolveEntryOutcome(LA, {
       posAction: 'set',
       pos: 'suffix',
@@ -285,8 +286,13 @@ describe('part of speech and usage (0029)', () => {
       onlyInDerivedTerms: true,
     });
     const unticked = resolveEntryOutcome(LA, { posAction: 'set', pos: 'suffix' });
-    expect(ticked.onlyInDerivedTerms).toBe(false);
+    expect(ticked.onlyInDerivedTerms).toBe(true);
     expect(fingerprintOutcome(ticked)).toBe(fingerprintOutcome(unticked));
+  });
+
+  it('forces it off for a letter', () => {
+    const out = resolveEntryOutcome(LA, { posAction: 'set', pos: 'character', onlyInDerivedTermsAction: 'set', onlyInDerivedTerms: true });
+    expect(out.onlyInDerivedTerms).toBe(false);
   });
 
   it('leaves the flag available to a particle - a particle can fossilize too', () => {
@@ -295,9 +301,16 @@ describe('part of speech and usage (0029)', () => {
     expect(out.onlyInDerivedTerms).toBe(true);
   });
 
-  it('clears a flag already on record when a vote makes the word an affix', () => {
-    const out = resolveEntryOutcome({ ...LA, onlyInDerivedTerms: true }, { posAction: 'set', pos: 'prefix' });
-    expect(out.onlyInDerivedTerms).toBe(false);
+  it('turns the flag on when a vote makes the word an affix', () => {
+    const out = resolveEntryOutcome(LA, { posAction: 'set', pos: 'prefix' });
+    expect(out.onlyInDerivedTerms).toBe(true);
+  });
+
+  it('rewrites only the flag field of a stored fingerprint (the 0030 repair)', () => {
+    const before = fingerprintOutcome(entryOutcome({ pos: 'prefix', usageLabels: [], onlyInDerivedTerms: false }));
+    const after = fingerprintOutcome(entryOutcome({ pos: 'prefix', usageLabels: [], onlyInDerivedTerms: true }));
+    expect(setDerivedOnlyInEntryFingerprint(before, true)).toBe(after);
+    expect(setDerivedOnlyInEntryFingerprint('etymology\u001fatomic\u001f', true)).toBeNull();
   });
 
   it('distinguishes claims that differ only in pos, labels or the flag', () => {

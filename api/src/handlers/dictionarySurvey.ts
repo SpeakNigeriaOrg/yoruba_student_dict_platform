@@ -35,6 +35,7 @@ import type { Queryable } from '../db.js';
 import {
   citationState,
   gameBlockers,
+  isStandaloneEntry,
   wiktionaryBlockers,
   type CitationState,
   type GameBlocker,
@@ -154,13 +155,14 @@ export async function loadDictionarySurvey(client: Queryable): Promise<SurveyWor
     pos: string | null;
     english_gloss: string | null;
     etymid_label: string | null;
+    only_in_derived_terms: boolean;
     entry_id: string | null;
     exempt_reason: string | null;
     pin_pos: string | null;
     pin_glosses: string[] | null;
   }>(
     `select g.word_id, g.display_text, g.syllables, g.definition, g.entry_type,
-            g.pos, g.english_gloss, g.etymid_label,
+            g.pos, g.english_gloss, g.etymid_label, g.only_in_derived_terms,
             c.entry_id, c.exempt_reason,
             c.pin ->> 'pos' as pin_pos,
             case when jsonb_typeof(c.pin -> 'glosses') = 'array'
@@ -257,6 +259,7 @@ export async function loadDictionarySurvey(client: Queryable): Promise<SurveyWor
         divergedSpeakerCount: status.divergedSpeakerCount,
         fullyCoveredSpeakerCount,
         imageCount,
+        standalone: isStandaloneEntry(pos, row.only_in_derived_terms),
       }),
       wiktionaryBlockers: wiktionaryBlockers({ cited, exemptReason: row.exempt_reason, pos, glosses }),
     };
@@ -282,6 +285,7 @@ export function summariseDictionary(words: SurveyWord[]): DictionaryOverview {
       only_stale_recordings: 0,
       no_speaker_covers_syllables: 0,
       no_image: 0,
+      not_standalone: 0,
     },
     wiktionaryReady: 0,
     wiktionaryBlockers: { no_citation_row: 0, no_part_of_speech: 0, no_english_gloss: 0 },

@@ -69,7 +69,10 @@ export type GameBlocker =
   /** No speaker has recorded every one of this word's syllables. */
   | 'no_speaker_covers_syllables'
   /** No image at all. */
-  | 'no_image';
+  | 'no_image'
+  /** Not a standalone word - an affix, or a word that survives only inside others. The game
+   * export leaves these out whatever their audio and images (see partsOfSpeech.ts). */
+  | 'not_standalone';
 
 export function describeGameBlocker(blocker: GameBlocker): string {
   switch (blocker) {
@@ -81,6 +84,8 @@ export function describeGameBlocker(blocker: GameBlocker): string {
       return 'no single speaker has recorded all of its syllables, so no level can use it';
     case 'no_image':
       return 'no image, and a word is never shown with a placeholder standing in for one';
+    case 'not_standalone':
+      return 'not a standalone word (an affix, or a word that survives only inside others), so the game leaves it out';
   }
 }
 
@@ -92,9 +97,14 @@ export interface GameReadinessInput {
   /** Speakers who have recorded every one of this word's current syllables. */
   fullyCoveredSpeakerCount: number;
   imageCount: number;
+  /** isStandaloneEntry. Optional so older callers read as standalone. */
+  standalone?: boolean;
 }
 
 export function gameBlockers(input: GameReadinessInput): GameBlocker[] {
+  // Reported alone: recording or illustrating it would not get it into the game, so listing
+  // those as the work to do would send someone to do work that changes nothing.
+  if (input.standalone === false) return ['not_standalone'];
   const blockers: GameBlocker[] = [];
   if (input.matchingSpeakerCount === 0) {
     // Told apart deliberately. "Nobody recorded it" is work to schedule; "the recordings

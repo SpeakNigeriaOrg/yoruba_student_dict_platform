@@ -109,7 +109,7 @@ describe('at creation', () => {
     expect(vote.rows[0].resolved_value).toMatchObject({ pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true });
   });
 
-  it('refuses the flag on a word whose CITED etymology is a suffix, and creates nothing', async () => {
+  it('marks a word whose CITED etymology is a suffix as not standalone, unasked', async () => {
     const entryId = `${ENTRY_NS}suffix`;
     await insertTestKaikkiSense(pool, {
       entryId,
@@ -121,10 +121,26 @@ describe('at creation', () => {
       glosses: ['a test suffix'],
     });
     const wordId = `${NS}ni_suffix`;
+    await createWord(pool, { wordId, displayText: 'ni', syllables: ['ni'], citation: { entryId } }, curator);
+    expect((await record(wordId)).only_in_derived_terms).toBe(true);
+  });
+
+  it('creates an off-path prefix, flag set in the same insert', async () => {
+    const wordId = `${NS}a-_agent`;
+    await createWord(
+      pool,
+      { wordId, displayText: 'a-', syllables: ['a'], citation: { exemptReason: 'no Wiktionary entry' }, pos: 'prefix' },
+      curator,
+    );
+    expect(await record(wordId)).toMatchObject({ pos: 'prefix', only_in_derived_terms: true });
+  });
+
+  it('refuses "not standalone" on a letter, and creates nothing', async () => {
+    const wordId = `${NS}a_letter`;
     await expect(
       createWord(
         pool,
-        { wordId, displayText: 'ni', syllables: ['ni'], citation: { entryId }, onlyInDerivedTerms: true },
+        { wordId, displayText: 'a', syllables: ['a'], citation: { exemptReason: 'letter' }, pos: 'character', onlyInDerivedTerms: true },
         curator,
       ),
     ).rejects.toBeInstanceOf(InvalidEntryUsageError);
@@ -181,11 +197,10 @@ describe('a direct decision', () => {
     expect((await record(wordId)).pos).toBe('interjection');
   });
 
-  it('clears the flag when a decision makes the word an affix', async () => {
+  it('sets the flag when a decision makes the word an affix - never standalone', async () => {
     const wordId = await word({ pos: 'verb' });
-    await applyEntryDecision(pool, wordId, LA_FIX, curator);
     await applyEntryDecision(pool, wordId, { ...KEEP, posAction: 'set', pos: 'suffix' }, curator);
-    expect(await record(wordId)).toMatchObject({ pos: 'suffix', only_in_derived_terms: false });
+    expect(await record(wordId)).toMatchObject({ pos: 'suffix', only_in_derived_terms: true });
   });
 
   it("the stored decision fingerprint is what the row now holds, so later votes don't read as dissent", async () => {
@@ -293,5 +308,54 @@ describe('backfillEntryUsageFields', () => {
 
     const again = await planEntryUsageBackfill(pool);
     expect(again.planned.filter((p) => p.wordId === wordId)).toEqual([]);
+  });
+
+  it('turns the flag on in 0029-era votes and decisions on an affix (the 0030 repair)', async () => {
+    const wordId = await word({ pos: 'verb' });
+    const toPrefix = { ...KEEP, posAction: 'set', pos: 'prefix' } as const;
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: toPrefix }, ada);
+    await applyEntryDecision(pool, wordId, toPrefix, curator);
+
+    // Rewind both to how 0029 stored them: an affix with the flag off.
+    const vote = await pool.query<{ contribution_id: string; value_fingerprint: string; resolved_value: Record<string, unknown> }>(
+      'select contribution_id, value_fingerprint, resolved_value from contributions where word_id = $1 and submitted_by = $2',
+      [wordId, ada],
+    );
+    const { contribution_id: id, value_fingerprint: currentVote, resolved_value: outcome } = vote.rows[0];
+    const oldVote = { ...outcome, onlyInDerivedTerms: false };
+    await pool.query('update contributions set value_fingerprint = $1, resolved_value = $2 where contribution_id = $3', [
+      fingerprintOutcome(oldVote as never),
+      oldVote,
+      id,
+    ]);
+    const decision = await pool.query<{ value_fingerprint: string }>(
+      "select value_fingerprint from word_decisions where word_id = $1 and axis = 'entry'",
+      [wordId],
+    );
+    const currentDecision = decision.rows[0].value_fingerprint;
+    await pool.query("update word_decisions set value_fingerprint = $1 where word_id = $2 and axis = 'entry'", [
+      currentDecision.replace(/derived-only$/, 'free'),
+      wordId,
+    ]);
+
+    const plan = await planEntryUsageBackfill(pool);
+    const mine = { planned: plan.planned.filter((p) => p.wordId === wordId) };
+    expect(mine.planned.map((p) => [p.kind, p.repair]).sort()).toEqual([
+      ['contribution', 'affix_flag'],
+      ['decision', 'affix_flag'],
+    ]);
+    expect((await applyEntryUsageBackfill(pool, mine)).written).toBe(2);
+
+    const after = await pool.query<{ value_fingerprint: string }>(
+      'select value_fingerprint from contributions where contribution_id = $1',
+      [id],
+    );
+    expect(after.rows[0].value_fingerprint).toBe(currentVote);
+    const afterDecision = await pool.query<{ value_fingerprint: string }>(
+      "select value_fingerprint from word_decisions where word_id = $1 and axis = 'entry'",
+      [wordId],
+    );
+    expect(afterDecision.rows[0].value_fingerprint).toBe(currentDecision);
+    expect((await planEntryUsageBackfill(pool)).planned.filter((p) => p.wordId === wordId)).toEqual([]);
   });
 });

@@ -1,8 +1,10 @@
 // backfillEntryUsageFields.mjs
 //
-// Completes every entry-axis vote and decision stored before migration 0029 with the part of
-// speech, usage labels and only-in-derived-terms flag that migration added to the claim, so an
-// older vote and a new one confirming the same word agree instead of reading as a conflict.
+// Brings every stored entry-axis vote and decision up to the current claim layout, so an older
+// vote and a new one confirming the same word agree instead of reading as a conflict:
+//   extend      - rows from before 0029 gain part of speech, usage labels and the flag
+//   affix_flag  - rows asserting an affix under 0029 get the flag turned on, as 0030 requires
+// Run after migrating (0029 and 0030) and deploying.
 //
 // WHAT IT TOUCHES: contributions.resolved_value / value_fingerprint and
 // word_decisions.value_fingerprint, for entry-axis rows whose fingerprint predates 0029. Nothing
@@ -33,9 +35,11 @@ const pool = new pg.Pool({ connectionString });
 
 try {
   const plan = await planEntryUsageBackfill(pool);
-  console.log(`${plan.planned.length} pre-0029 entry fingerprints to complete`);
-  console.log(`  contributions: ${plan.planned.filter((p) => p.kind === 'contribution').length}`);
-  console.log(`  decisions:     ${plan.planned.filter((p) => p.kind === 'decision').length}`);
+  const n = (repair, kind) => plan.planned.filter((p) => p.repair === repair && p.kind === kind).length;
+  console.log(`${plan.planned.length} entry fingerprints to bring up to date`);
+  console.log(`  extend (pre-0029):   ${n('extend', 'contribution')} contributions, ${n('extend', 'decision')} decisions`);
+  console.log(`  affix flag (0030):   ${n('affix_flag', 'contribution')} contributions, ${n('affix_flag', 'decision')} decisions`);
+  for (const p of plan.planned.filter((q) => q.repair === 'affix_flag')) console.log(`    ${p.kind} on ${p.wordId} (${p.pos})`);
 
   if (!apply) {
     console.log('\nDry run. Re-run with --apply to write.');

@@ -38,7 +38,7 @@
 // text contributions: callers resolve ONCE, at submit time, against the state
 // the contributor actually saw, and store the result.
 
-import { acceptsOnlyInDerivedTerms } from './partsOfSpeech.js';
+import { resolveOnlyInDerivedTerms } from './partsOfSpeech.js';
 import { syllabifyWord } from './syllabify.js';
 import { canonicalUsageLabels } from './usageLabels.js';
 import { FIELD_SEP, LIST_SEP, NULL_MARKER, normalizeGloss, normalizeText } from './textFingerprint.js';
@@ -184,14 +184,13 @@ export function resolveEntryOutcome(observed: EntryObservedState, input: EntryCo
   const usageLabels = canonicalUsageLabels(
     input.usageLabelsAction === 'set' ? (input.usageLabels ?? []) : (observed.usageLabels ?? []),
   );
-  // Forced false where the part of speech rules it out (see partsOfSpeech.ts), so "suffix, box
-  // ticked" and "suffix, box unticked" are the same claim - as they are in what applying either
-  // one writes.
-  const onlyInDerivedTerms =
-    acceptsOnlyInDerivedTerms(pos) &&
-    (input.onlyInDerivedTermsAction === 'set'
-      ? input.onlyInDerivedTerms === true
-      : observed.onlyInDerivedTerms === true);
+  // Forced by the part of speech where it decides (an affix is never standalone, a letter never
+  // "inside other words" - see partsOfSpeech.ts), so "suffix, box ticked" and "suffix, box
+  // unticked" are the same claim - as they are in what applying either one writes.
+  const onlyInDerivedTerms = resolveOnlyInDerivedTerms(
+    pos,
+    input.onlyInDerivedTermsAction === 'set' ? input.onlyInDerivedTerms === true : observed.onlyInDerivedTerms === true,
+  );
 
   return { kind: 'entry', displayText, syllables, definitionText, citedEntryId, pos, usageLabels, onlyInDerivedTerms };
 }
@@ -339,15 +338,40 @@ const PRE_USAGE_ENTRY_FIELDS = 5;
  * reason: a word_decisions row stores only the fingerprint, not the outcome it was taken from, so
  * there is nothing to recompute FROM - and re-deriving a contribution's would rewrite fields the
  * backfill was never asked to touch. Appending is exact because pos was not editable before 0029:
- * whatever the word resolves to now is what every earlier vote saw, with no labels and the flag
- * off, which is precisely what these three fields would have said.
+ * whatever the word resolves to now is what every earlier vote saw, with no labels, and the flag
+ * its part of speech implies (on for an affix, since 0030; off otherwise) - precisely what these
+ * three fields would have said.
  *
  * Returns null for anything that is not a pre-0029 entry fingerprint, including one already
  * extended, so running the backfill twice changes nothing. */
 export function extendLegacyEntryFingerprint(fingerprint: string, pos: string | null): string | null {
   const fields = fingerprint.split(FIELD_SEP);
   if (fields[0] !== 'entry' || fields.length !== PRE_USAGE_ENTRY_FIELDS) return null;
-  return [fingerprint, ...usageFields({ kind: 'entry', displayText: '', syllables: [], definitionText: null, citedEntryId: null, pos, usageLabels: [], onlyInDerivedTerms: false })].join(FIELD_SEP);
+  return [
+    fingerprint,
+    ...usageFields({
+      kind: 'entry',
+      displayText: '',
+      syllables: [],
+      definitionText: null,
+      citedEntryId: null,
+      pos,
+      usageLabels: [],
+      onlyInDerivedTerms: resolveOnlyInDerivedTerms(pos, false),
+    }),
+  ].join(FIELD_SEP);
+}
+
+/** Sets the only-in-derived-terms field of a stored 0029-layout entry fingerprint, leaving every
+ * other field byte-identical - for 0030, which turned the flag ON for every affix. A word_decisions
+ * row stores only its fingerprint, so there is no outcome to recompute from (see
+ * extendLegacyEntryFingerprint). Returns null for anything that is not a 0029-layout entry
+ * fingerprint. */
+export function setDerivedOnlyInEntryFingerprint(fingerprint: string, onlyInDerivedTerms: boolean): string | null {
+  const fields = fingerprint.split(FIELD_SEP);
+  if (fields[0] !== 'entry' || fields.length !== PRE_USAGE_ENTRY_FIELDS + 3) return null;
+  fields[fields.length - 1] = onlyInDerivedTerms ? 'derived-only' : 'free';
+  return fields.join(FIELD_SEP);
 }
 
 /** Which fields two claims about one word can differ on. */

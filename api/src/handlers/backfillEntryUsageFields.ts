@@ -1,71 +1,102 @@
 // handlers/backfillEntryUsageFields.ts
 //
-// Completes every entry-axis vote and decision stored before 0029 with the three fields that
-// migration added to the claim: part of speech, usage labels, only-in-derived-terms. One-off; see
-// scripts/backfillEntryUsageFields.mjs.
+// Brings every stored entry-axis vote and decision up to the current claim layout. Two repairs,
+// both one-off, both idempotent; see scripts/backfillEntryUsageFields.mjs.
 //
-// WHY IT IS NEEDED. fingerprintOutcome now ends with those three fields, so a vote cast today
-// confirming "noun" and a vote cast last month confirming the same word differ in fingerprint -
-// the old one has no pos at all. Unrepaired, every word with an older vote reads as contested the
-// moment someone votes again, and every decided word as dissented.
+// 1. EXTEND (after 0029). fingerprintOutcome ends with part of speech, usage labels and the
+//    only-in-derived-terms flag, so a vote cast before 0029 - which has no pos at all - differs
+//    from a new vote confirming the same word. Unrepaired, every word with an older vote reads as
+//    contested the moment someone votes again, and every decided word as dissented. Exact, not a
+//    guess: before 0029 nothing could change a word's pos, so what it resolves to now is what every
+//    earlier voter saw, with no labels and the flag its part of speech implies.
 //
-// WHY IT IS EXACT, NOT A GUESS. Before 0029 nothing could change a word's pos after it was created,
-// so whatever the word resolves to now (override, else pin) is what every earlier voter saw, with
-// no labels and the flag off. See extendLegacyEntryFingerprint.
+// 2. AFFIX FLAG (after 0030). 0030 turned the flag ON for every affix - it is never a standalone
+//    word - where 0029 had forced it off. A vote that asserted an affix pos under 0029 therefore
+//    says flag=off, and a new vote on the same word says on. Only the flag changes: it is set on
+//    the vote's own stored outcome (the pos IT asserted) and recomputed from that; a decision, which
+//    stores only its fingerprint, has just that one field rewritten (setDerivedOnlyInEntryFingerprint).
 //
-// WHAT IT WRITES, AND ONLY THIS: contributions.resolved_value (the three keys added) and
-// value_fingerprint (extended), and word_decisions.value_fingerprint (extended). It adds no votes,
-// supersedes none, and never writes golden_record - so unlike backfillAuthoringVotes it is
-// attributed to nobody: it completes what people already said rather than saying anything new.
+// WHAT IT WRITES, AND ONLY THIS: contributions.resolved_value / value_fingerprint and
+// word_decisions.value_fingerprint. It adds no votes, supersedes none, and never writes
+// golden_record - so it is attributed to nobody: it completes what people already said.
 //
-// Idempotent. A row already carrying the new fields is not planned, so an interrupted run is
+// Idempotent. A row already in the current layout is not planned, so an interrupted run is
 // finished by running it again.
 
 import type pg from 'pg';
-import { extendLegacyEntryFingerprint } from '@yoruba-student-dict-platform/shared';
+import {
+  extendLegacyEntryFingerprint,
+  fingerprintOutcome,
+  isAffixPartOfSpeech,
+  resolveOnlyInDerivedTerms,
+  setDerivedOnlyInEntryFingerprint,
+  type EntryOutcome,
+} from '@yoruba-student-dict-platform/shared';
 import { withTransaction, type Queryable } from '../db.js';
 
 export interface UsageBackfillItem {
   kind: 'contribution' | 'decision';
+  repair: 'extend' | 'affix_flag';
   /** contribution_id, or the word_id of a word_decisions row. */
   id: string;
   wordId: string;
+  /** For 'extend', the word's resolved pos; for 'affix_flag', the pos the row asserts. */
   pos: string | null;
   fingerprint: string;
+  newFingerprint: string;
 }
 
 export interface UsageBackfillPlan {
   planned: UsageBackfillItem[];
 }
 
-/** Finds every pre-0029 entry fingerprint, touching nothing. */
+/** Finds every row either repair applies to, touching nothing. */
 export async function planEntryUsageBackfill(client: Queryable): Promise<UsageBackfillPlan> {
   const rows = await client.query<{
     kind: 'contribution' | 'decision';
     id: string;
     word_id: string;
-    pos: string | null;
+    word_pos: string | null;
     fingerprint: string;
+    resolved_value: EntryOutcome | null;
   }>(
     `select 'contribution' as kind, n.contribution_id::text as id, n.word_id, n.value_fingerprint as fingerprint,
-            coalesce(g.pos, c.pin ->> 'pos') as pos
+            coalesce(g.pos, c.pin ->> 'pos') as word_pos, n.resolved_value
        from contributions n
        join golden_record g on g.word_id = n.word_id
        left join upstream_citations c on c.word_id = n.word_id
       where n.axis = 'entry' and n.value_fingerprint is not null
      union all
-     select 'decision', d.word_id, d.word_id, d.value_fingerprint, coalesce(g.pos, c.pin ->> 'pos')
+     select 'decision', d.word_id, d.word_id, d.value_fingerprint, coalesce(g.pos, c.pin ->> 'pos'), null
        from word_decisions d
        join golden_record g on g.word_id = d.word_id
        left join upstream_citations c on c.word_id = d.word_id
       where d.axis = 'entry' and d.value_fingerprint is not null
       order by 1, 2`,
   );
-  // Filtered here rather than in SQL: "is this a pre-0029 fingerprint" is a question about the
-  // field layout, and only consensus.ts knows that.
-  const planned = rows.rows
-    .filter((r) => extendLegacyEntryFingerprint(r.fingerprint, r.pos) !== null)
-    .map((r) => ({ kind: r.kind, id: r.id, wordId: r.word_id, pos: r.pos, fingerprint: r.fingerprint }));
+
+  // Decided here rather than in SQL: which layout a fingerprint has is a question only consensus.ts
+  // can answer.
+  const planned: UsageBackfillItem[] = [];
+  for (const r of rows.rows) {
+    const base = { kind: r.kind, id: r.id, wordId: r.word_id, fingerprint: r.fingerprint };
+    const extended = extendLegacyEntryFingerprint(r.fingerprint, r.word_pos);
+    if (extended !== null) {
+      planned.push({ ...base, repair: 'extend', pos: r.word_pos, newFingerprint: extended });
+      continue;
+    }
+    if (r.kind === 'contribution') {
+      const o = r.resolved_value;
+      if (!o || o.pos === undefined || !isAffixPartOfSpeech(o.pos) || o.onlyInDerivedTerms === true) continue;
+      const fixed = fingerprintOutcome({ ...o, onlyInDerivedTerms: true });
+      if (fixed !== r.fingerprint) planned.push({ ...base, repair: 'affix_flag', pos: o.pos, newFingerprint: fixed });
+    } else if (isAffixPartOfSpeech(r.word_pos)) {
+      const fixed = setDerivedOnlyInEntryFingerprint(r.fingerprint, true);
+      if (fixed !== null && fixed !== r.fingerprint) {
+        planned.push({ ...base, repair: 'affix_flag', pos: r.word_pos, newFingerprint: fixed });
+      }
+    }
+  }
   return { planned };
 }
 
@@ -89,22 +120,24 @@ export async function applyEntryUsageBackfill(
 
   for (const item of batch) {
     try {
-      const extended = extendLegacyEntryFingerprint(item.fingerprint, item.pos) as string;
+      // What the stored outcome gains: the three fields for 'extend', just the flag for 'affix_flag'.
+      const patch =
+        item.repair === 'extend'
+          ? { pos: item.pos, usageLabels: [], onlyInDerivedTerms: resolveOnlyInDerivedTerms(item.pos, false) }
+          : { onlyInDerivedTerms: true };
       // eslint-disable-next-line no-await-in-loop
       const updated = await withTransaction(pool, (client) =>
         item.kind === 'contribution'
           ? client.query(
               `update contributions
-                  set value_fingerprint = $1,
-                      resolved_value = resolved_value || jsonb_build_object(
-                        'pos', $2::text, 'usageLabels', '[]'::jsonb, 'onlyInDerivedTerms', false)
+                  set value_fingerprint = $1, resolved_value = resolved_value || $2::jsonb
                 where contribution_id = $3::uuid and value_fingerprint = $4`,
-              [extended, item.pos, item.id, item.fingerprint],
+              [item.newFingerprint, JSON.stringify(patch), item.id, item.fingerprint],
             )
           : client.query(
               `update word_decisions set value_fingerprint = $1
                 where word_id = $2 and axis = 'entry' and value_fingerprint = $3`,
-              [extended, item.id, item.fingerprint],
+              [item.newFingerprint, item.id, item.fingerprint],
             ),
       );
       // Zero rows means the fingerprint moved since planning - someone voted again - which is not

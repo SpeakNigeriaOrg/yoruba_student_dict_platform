@@ -89,6 +89,7 @@ export const GAME_BLOCKER_LABEL: Record<GameBlocker, string> = {
   no_matching_recording: 'not recorded',
   only_stale_recordings: 'recordings stale',
   no_speaker_covers_syllables: 'syllables incomplete',
+  not_standalone: 'not a standalone word',
   no_image: 'no image',
 };
 

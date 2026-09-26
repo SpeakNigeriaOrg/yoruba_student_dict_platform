@@ -30,8 +30,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict-platform/shared';
 import {
-  acceptsOnlyInDerivedTerms,
   checkPhraseSpelling,
+  fixedOnlyInDerivedTerms,
   describePhraseSpelling,
   isMultiWord,
   orthographyInsensitiveForm,
@@ -409,7 +409,9 @@ function WordTab({
         // it out (an affix, a letter) - the box is hidden then, so a tick made earlier is not
         // something the curator can still see they are sending.
         ...(usageLabels.length > 0 ? { usageLabels } : {}),
-        ...(onlyInDerivedTerms && acceptsOnlyInDerivedTerms(effectivePos) ? { onlyInDerivedTerms: true } : {}),
+        // Only the reviewer's own answer is sent: for an affix the server sets it (never standalone),
+        // and for a letter it cannot apply.
+        ...(onlyInDerivedTerms && fixedOnlyInDerivedTerms(effectivePos) === null ? { onlyInDerivedTerms: true } : {}),
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
       const syllablesOut = offPath ? composedSyllables : syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
@@ -1176,7 +1178,7 @@ function PhraseTab({
           ? {}
           : { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null }),
         ...(draft.usageLabels.length > 0 ? { usageLabels: draft.usageLabels } : {}),
-        ...(draft.onlyInDerivedTerms && acceptsOnlyInDerivedTerms(adopted ? adopted.pos : pos || null)
+        ...(draft.onlyInDerivedTerms && fixedOnlyInDerivedTerms(adopted ? adopted.pos : pos || null) === null
           ? { onlyInDerivedTerms: true }
           : {}),
       });

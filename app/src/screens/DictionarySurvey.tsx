@@ -61,7 +61,7 @@ const LENSES: Lens[] = [
   { key: 'game:blocked', label: 'Blocked from the game', test: (w) => w.gameBlockers.length > 0 },
   { key: 'wik:ready', label: 'Ready for Wiktionary', test: (w) => w.wiktionaryBlockers.length === 0 },
   { key: 'wik:blocked', label: 'Blocked from Wiktionary', test: (w) => w.wiktionaryBlockers.length > 0 },
-  ...(['no_matching_recording', 'only_stale_recordings', 'no_speaker_covers_syllables', 'no_image'] as const).map(
+  ...(['no_matching_recording', 'only_stale_recordings', 'no_speaker_covers_syllables', 'no_image', 'not_standalone'] as const).map(
     (b) => ({ key: `gameblocker:${b}`, label: GAME_BLOCKER_LABEL[b], test: (w: SurveyWord) => w.gameBlockers.includes(b) }),
   ),
   ...(['no_citation_row', 'no_part_of_speech', 'no_english_gloss'] as const).map((b) => ({

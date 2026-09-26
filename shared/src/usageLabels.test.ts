@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalUsageLabels, isKnownUsageLabel, renderLabelTemplate, USAGE_LABELS } from './usageLabels.js';
-import { acceptsOnlyInDerivedTerms, isKnownPartOfSpeech } from './partsOfSpeech.js';
+import {
+  fixedOnlyInDerivedTerms,
+  isKnownPartOfSpeech,
+  isStandaloneEntry,
+  resolveOnlyInDerivedTerms,
+  standaloneEntrySql,
+} from './partsOfSpeech.js';
 
 describe('usage labels', () => {
   it('holds only labels Wiktionary defines - no ad hoc text passed off as a label', () => {
@@ -22,19 +28,31 @@ describe('usage labels', () => {
   });
 });
 
-describe('acceptsOnlyInDerivedTerms', () => {
-  it('rules out affixes and characters, which never were separate words', () => {
-    for (const pos of ['prefix', 'interfix', 'suffix', 'character']) {
+describe('not a standalone word - one field for affixes and fossilized words alike', () => {
+  it('is always on for an affix: it never was a separate word', () => {
+    for (const pos of ['prefix', 'interfix', 'suffix']) {
       expect(isKnownPartOfSpeech(pos)).toBe(true);
-      expect(acceptsOnlyInDerivedTerms(pos)).toBe(false);
+      expect(fixedOnlyInDerivedTerms(pos)).toBe(true);
+      expect(resolveOnlyInDerivedTerms(pos, false)).toBe(true);
+      expect(isStandaloneEntry(pos, false)).toBe(false);
     }
   });
 
-  it('allows words of every other class, particles included', () => {
-    for (const pos of ['verb', 'noun', 'particle', 'pron']) expect(acceptsOnlyInDerivedTerms(pos)).toBe(true);
+  it('is always off for a letter, which is not a piece of a word', () => {
+    expect(resolveOnlyInDerivedTerms('character', true)).toBe(false);
   });
 
-  it('allows it when the part of speech is unknown', () => {
-    expect(acceptsOnlyInDerivedTerms(null)).toBe(true);
+  it("is the reviewer's call for any other word, particles included - lá is a verb that fossilized", () => {
+    for (const pos of ['verb', 'noun', 'particle', 'pron', null]) {
+      expect(fixedOnlyInDerivedTerms(pos)).toBeNull();
+      expect(isStandaloneEntry(pos, true)).toBe(false);
+      expect(isStandaloneEntry(pos, false)).toBe(true);
+    }
+  });
+
+  it('has a SQL form that also catches an affix known only from its pin', () => {
+    expect(standaloneEntrySql('g', 'c')).toBe(
+      "not (g.only_in_derived_terms or coalesce(g.pos, c.pin ->> 'pos') in ('prefix', 'interfix', 'suffix'))",
+    );
   });
 });

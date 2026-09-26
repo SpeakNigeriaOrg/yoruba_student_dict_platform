@@ -96,6 +96,7 @@ import {
   describePhraseSpelling,
   describeWiktionaryBlocker,
   etymidLabelFromWordId,
+  isAffixPartOfSpeech,
   recordingMatchesGoldenSql,
   renderLabelTemplate,
   wiktionaryBlockers,
@@ -313,6 +314,9 @@ export function buildDraft(entry, components, examples, audio, derivedTerms = []
   const pos = entry.pos ?? pin?.pos ?? null;
   const usageLabels = entry.usage_labels ?? [];
   const onlyInDerivedTerms = entry.only_in_derived_terms === true;
+  // Since 0030 every affix carries the flag too, but its Prefix/Suffix heading already says it is
+  // not a standalone word - a usage note restating that is noise upstream would strip.
+  const isAffix = isAffixPartOfSpeech(pos);
   const glosses = entry.english_gloss ? [entry.english_gloss] : (pin?.glosses ?? []);
   const etymid = entry.etymid_label ?? etymidLabelFromWordId(entry.word_id, entry.display_text);
 
@@ -340,7 +344,7 @@ export function buildDraft(entry, components, examples, audio, derivedTerms = []
   if (usageLabels.some((l) => l === 'obsolete' || l === 'archaic')) {
     notes.push('labelled obsolete or archaic: add an attesting source - one use or mention suffices for Yoruba');
   }
-  if (onlyInDerivedTerms && derivedTerms.length === 0) {
+  if (onlyInDerivedTerms && !isAffix && derivedTerms.length === 0) {
     notes.push('marked as surviving only inside other words, but no entry here lists it as a component, so the usage note has no examples');
   }
 
@@ -460,7 +464,7 @@ export function buildDraft(entry, components, examples, audio, derivedTerms = []
   }
 
   // Both sections sit one level below the part-of-speech heading, where upstream puts them.
-  if (onlyInDerivedTerms) {
+  if (onlyInDerivedTerms && !isAffix) {
     const shown = derivedTerms.slice(0, USAGE_NOTE_EXAMPLES).map((t) => `{{l|yo|${wikiArg(t)}}}`);
     const list = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
     lines.push('');
@@ -477,7 +481,8 @@ export function buildDraft(entry, components, examples, audio, derivedTerms = []
   // vowels, the standard form with a dash should be the lemmatized one, with the alternative
   // forms linking to it" - so `aárùn-ún` implies `aárùnún` and `aárùn` as alt-form pages.
   // golden_record has no alternative-forms field, so this is named rather than emitted.
-  if (entry.display_text.includes('-')) {
+  // Not for an affix, whose hyphen marks where it attaches, not an elongated nasal.
+  if (entry.display_text.includes('-') && !isAffix) {
     notes.push(
       'hyphenated lemma: if the hyphen marks an elongated nasal, the unhyphenated spellings need ' +
         'alt-form pages linking here, and nothing records those yet',

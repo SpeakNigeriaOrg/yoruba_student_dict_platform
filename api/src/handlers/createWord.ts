@@ -25,6 +25,7 @@ import { assertWordIdShape } from './wordIdShape.js';
 import { writeCitationInTransaction, type UpstreamCitationInput } from './upstreamCitations.js';
 import { assertComponentsExist, ComponentsNotFoundError, writeComponents } from './components.js';
 import { recordAuthoringVote } from './authoringVote.js';
+import { isAffixPartOfSpeech } from '@yoruba-student-dict-platform/shared';
 import { writeCreationUsageInTransaction, type CreationUsage } from '../entryUsage.js';
 
 /** CreationUsage: usage labels and "survives only inside other words" (0029). Optional; absent
@@ -100,8 +101,10 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
 
   try {
     await client.query(
-      `insert into golden_record (word_id, display_text, syllables, definition, pos, english_gloss, etymid_label, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      // only_in_derived_terms is set here, not left to writeCreationUsageInTransaction: an affix
+      // pos with the flag off breaks 0030's check at the insert itself.
+      `insert into golden_record (word_id, display_text, syllables, definition, pos, english_gloss, etymid_label, updated_by, only_in_derived_terms)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         input.wordId,
         input.displayText,
@@ -111,6 +114,7 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
         input.englishGloss ?? null,
         input.etymidLabel ?? null,
         createdBy,
+        isAffixPartOfSpeech(input.pos),
       ],
     );
   } catch (err) {

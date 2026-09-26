@@ -104,6 +104,7 @@ export async function backfillEntryUsageFieldsFunction(
       planned: plan.planned.length,
       plannedContributions: plan.planned.filter((p) => p.kind === 'contribution').length,
       plannedDecisions: plan.planned.filter((p) => p.kind === 'decision').length,
+      plannedAffixFlag: plan.planned.filter((p) => p.repair === 'affix_flag').length,
     };
     if (body?.apply !== true) return { status: 200, jsonBody: { applied: false, ...counts } };
 

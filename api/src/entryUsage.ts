@@ -8,8 +8,8 @@
 // describes: a stored fingerprint no later vote can ever equal.
 
 import {
-  acceptsOnlyInDerivedTerms,
   canonicalUsageLabels,
+  fixedOnlyInDerivedTerms,
   isKnownPartOfSpeech,
   isKnownUsageLabel,
   type EntryOutcome,
@@ -103,35 +103,31 @@ export function parseCreationUsage(body: Record<string, unknown>): CreationUsage
 }
 
 /** Writes CreationUsage onto a row created in this transaction. Must run AFTER the citation is
- * written: the flag is checked against the RESOLVED pos, and for a cited word that is the pin's.
+ * written: the flag depends on the RESOLVED pos, and for a cited word that is the pin's.
  *
- * A flag on an affix or a character is refused, not silently cleared. The form hides the box for
- * those, so reaching here means a client that did not - and quietly storing something other than
- * what was sent would be exactly the kind of mismatch the author could never see. */
+ * An affix gets the flag whether or not it was sent - it is never a standalone word (0030), and
+ * nobody should have to tick a box to say so. A flag sent for a letter is refused, not silently
+ * dropped: the form hides the box for one, so reaching here means a client that did not. */
 export async function writeCreationUsageInTransaction(
   client: Queryable,
   wordId: string,
   usage: CreationUsage,
 ): Promise<void> {
-  const labels = usage.usageLabels ?? [];
-  const flag = usage.onlyInDerivedTerms === true;
-  if (labels.length === 0 && !flag) return;
-
-  if (flag) {
-    const r = await client.query<{ resolved_pos: string | null }>(
-      `select coalesce(g.pos, c.pin ->> 'pos') as resolved_pos
-       from golden_record g
-       left join upstream_citations c on c.word_id = g.word_id
-       where g.word_id = $1`,
-      [wordId],
-    );
-    const pos = r.rows[0]?.resolved_pos ?? null;
-    if (!acceptsOnlyInDerivedTerms(pos)) {
-      throw new InvalidEntryUsageError(
-        `'survives only inside other words' does not apply to a ${pos} - an affix or a letter never was a separate word`,
-      );
-    }
+  const r = await client.query<{ resolved_pos: string | null }>(
+    `select coalesce(g.pos, c.pin ->> 'pos') as resolved_pos
+     from golden_record g
+     left join upstream_citations c on c.word_id = g.word_id
+     where g.word_id = $1`,
+    [wordId],
+  );
+  const pos = r.rows[0]?.resolved_pos ?? null;
+  const fixed = fixedOnlyInDerivedTerms(pos);
+  if (fixed === false && usage.onlyInDerivedTerms === true) {
+    throw new InvalidEntryUsageError(`'not a standalone word' does not apply to a ${pos} - a letter is not a piece of a word`);
   }
+  const labels = usage.usageLabels ?? [];
+  const flag = fixed ?? usage.onlyInDerivedTerms === true;
+  if (labels.length === 0 && !flag) return;
   await client.query('update golden_record set usage_labels = $1, only_in_derived_terms = $2 where word_id = $3', [
     labels,
     flag,
