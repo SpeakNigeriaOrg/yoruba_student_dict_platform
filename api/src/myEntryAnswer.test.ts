@@ -165,3 +165,33 @@ describe('the word as the volunteer has said it is', () => {
     expect(all.some((u) => u.divergesFromGolden)).toBe(true);
   });
 });
+
+describe('the etymology answer as the volunteer gave it', () => {
+  it("comes back on the etymology review - requested parts named from the request - and is Ada's alone", async () => {
+    const wordId = await word();
+    const part = await word(); // a word we hold
+    const requestedId = `${NS}requested_prefix`;
+    // A part Ada requested from Wiktionary: no golden_record row yet, only the pending request.
+    await pool.query(
+      `insert into contributions (word_id, axis, proposed_value, submitted_by)
+       values (null, 'new_entry', $1, $2)`,
+      [{ proposedWordId: requestedId, displayText: 'ì-', definition: 'nominalizing prefix', syllables: ['ì'], type: 'word' }, ada],
+    );
+    await pool.query(
+      `insert into contributions (word_id, axis, proposed_value, resolved_value, value_fingerprint, submitted_by)
+       values ($1, 'etymology', $2, $3, 'fp-ety', $4)`,
+      [wordId, { componentsAction: 'custom' }, { kind: 'etymology', components: [requestedId, part], atomic: false }, ada],
+    );
+
+    const mine = (await getEtymologyReview(pool, wordId, ada)).myEtymologyAnswer;
+    expect(mine).toEqual({
+      atomic: false,
+      components: [
+        { wordId: requestedId, displayText: 'ì-', definition: 'nominalizing prefix', pending: true },
+        { wordId: part, displayText: 'owo', definition: 'hand', pending: false },
+      ],
+      differsFromRecord: true,
+    });
+    expect((await getEtymologyReview(pool, wordId, ben)).myEtymologyAnswer).toBeNull();
+  });
+});

@@ -59,6 +59,15 @@ export interface ProposalItemWithNearMatches extends ComponentsProposalItem {
   wiktionaryCandidates: WiktionaryPartCandidate[];
 }
 
+export interface MyEtymologyAnswer {
+  /** true: they said it has no parts. */
+  atomic: boolean;
+  /** In order. `pending` marks a part they requested that a curator has not added yet. */
+  components: { wordId: string; displayText: string; definition: string | null; pending: boolean }[];
+  /** Whether it says something other than the record - what the screen's marker is for. */
+  differsFromRecord: boolean;
+}
+
 export interface WiktionaryPartCandidate {
   entryId: string;
   form: string;
@@ -85,6 +94,9 @@ export interface EtymologyReviewResult {
    * of displayText / definition above. See myEntryAnswer.ts. The Kaikki lookup and component
    * proposal still key on the record's spelling: they are about which etymology the word is. */
   myProposedEntry: MyEntryAnswer | null;
+  /** This caller's own active answer on THIS axis - what they said the word is made of. Null when
+   * they have not answered. See loadMyEtymologyAnswer. */
+  myEtymologyAnswer: MyEtymologyAnswer | null;
   componentsProposal: ProposalItemWithNearMatches[];
   components: string[];
   /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
@@ -136,6 +148,59 @@ async function loadSpellingConfirmedOverrides(client: Queryable): Promise<Diagno
     overrides[row.word_id] = { action: row.action as 'keep_ours' | 'adopt_kaikki' | 'select_candidate' };
   }
   return overrides;
+}
+
+/** The caller's own active etymology answer, so coming back to this tab shows what they said.
+ *
+ * An answer is one vote; the record changes only when a curator confirms. So after saving, the
+ * screen used to reload the record - which their vote had not changed - and their answer looked
+ * lost, exactly the defect myEntryAnswer.ts fixed for the entry axis. Read from resolved_value (the
+ * outcome frozen at submission). A part they requested from Wiktionary has no golden_record row
+ * until a curator approves it, so its name comes from the pending request. */
+export async function loadMyEtymologyAnswer(
+  client: Queryable,
+  wordId: string,
+  userId: string,
+  recordComponents: string[],
+): Promise<MyEtymologyAnswer | null> {
+  const { rows } = await client.query<{ resolved_value: { components?: string[]; atomic?: boolean } | null }>(
+    `select resolved_value from contributions
+      where word_id = $1 and submitted_by = $2 and axis = 'etymology' and status = 'active'
+      order by submitted_at desc limit 1`,
+    [wordId, userId],
+  );
+  const v = rows[0]?.resolved_value;
+  if (!v) return null;
+  const ids = v.components ?? [];
+  const [held, requested] = await Promise.all([
+    client.query<{ word_id: string; display_text: string; definition: string | null }>(
+      'select word_id, display_text, definition from golden_record where word_id = any($1)',
+      [ids],
+    ),
+    client.query<{ word_id: string; display_text: string; definition: string | null }>(
+      `select distinct on (proposed_value ->> 'proposedWordId') proposed_value ->> 'proposedWordId' as word_id,
+              proposed_value ->> 'displayText' as display_text, proposed_value ->> 'definition' as definition
+         from contributions
+        where axis = 'new_entry' and proposed_value ->> 'proposedWordId' = any($1)
+        order by proposed_value ->> 'proposedWordId', submitted_at desc`,
+      [ids],
+    ),
+  ]);
+  const heldById = new Map(held.rows.map((r) => [r.word_id, r]));
+  const requestedById = new Map(requested.rows.map((r) => [r.word_id, r]));
+  const components = ids.map((id) => {
+    const h = heldById.get(id);
+    if (h) return { wordId: id, displayText: h.display_text, definition: h.definition, pending: false };
+    const r = requestedById.get(id);
+    return { wordId: id, displayText: r?.display_text ?? id, definition: r?.definition ?? null, pending: true };
+  });
+  // "No parts" arrives two ways - confirm_atomic, or rejecting a proposal on a word with nothing
+  // recorded (an empty list) - and both say the same thing about the word.
+  const atomic = v.atomic === true || ids.length === 0;
+  const differsFromRecord =
+    atomic !== (recordComponents.length === 0) ||
+    (!atomic && (ids.length !== recordComponents.length || ids.some((id, i) => id !== recordComponents[i])));
+  return { atomic, components, differsFromRecord };
 }
 
 /** The Wiktionary etymologies named as candidates for a proposal's parts, with whichever of our
@@ -217,6 +282,12 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     entryType: entry.type === 'phrase' ? 'phrase' : null,
     axisDecided,
     myProposedEntry,
+    myEtymologyAnswer: await loadMyEtymologyAnswer(
+      client,
+      wordId,
+      userId,
+      fields.components.length === 1 && fields.components[0] === wordId ? [] : fields.components,
+    ),
     etymologyText: diagnosis.matchedEtymologyText ?? null,
     // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
     // usedAsComponentOf stop here.

@@ -1278,6 +1278,47 @@ describe('an already-settled word does not re-open the whole review on every vis
   });
 });
 
+describe('coming back to the tab shows your own answer, not the unchanged record', () => {
+  // The reported defect: save an answer, go to another tab, come back - and the screen showed the
+  // record again (which one vote does not change), so the answer looked lost.
+  const WITH_ANSWER = {
+    ...etymologyFixture,
+    myEtymologyAnswer: {
+      atomic: false,
+      components: [
+        { wordId: 'i-_nominalizing', displayText: 'ì-', definition: 'nominalizing prefix', pending: true },
+        { wordId: 'la_cut', displayText: 'là', definition: 'to cut', pending: false },
+      ],
+      differsFromRecord: true,
+    },
+  };
+
+  it('shows what they said, with requested parts marked, in place of the record', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => WITH_ANSWER }));
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    const mine = await screen.findByLabelText('Your answer');
+    expect(mine).toHaveTextContent('ì- — nominalizing prefix (requested; a curator will add it)');
+    expect(mine).toHaveTextContent('là — to cut');
+    expect(screen.getByLabelText('Your change')).toHaveTextContent('Your answer (the record has');
+    expect(screen.queryByLabelText('Components on record')).not.toBeInTheDocument();
+  });
+
+  it('says so for a "no parts" answer, without claiming a difference when the record agrees', async () => {
+    const atomic = { ...etymologyFixture, componentsOnRecord: [], myEtymologyAnswer: { atomic: true, components: [], differsFromRecord: false } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => atomic }));
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    expect(await screen.findByLabelText('Your answer')).toHaveTextContent('It has no parts.');
+    expect(screen.getByLabelText('Your change')).toHaveTextContent('✎ Your answer. You can change it below.');
+  });
+
+  it('shows no answer box to someone who has not answered', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...etymologyFixture, myEtymologyAnswer: null }) }));
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+    expect(screen.queryByLabelText('Your answer')).not.toBeInTheDocument();
+  });
+});
+
 describe("choosing a part from Wiktionary's own candidates", () => {
   // ìlà: Wiktionary says ì- + là, and names which là - "to cut, to divide". là is five words
   // upstream; the reviewer picks the right one from the proposal, no retyping.

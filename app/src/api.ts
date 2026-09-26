@@ -411,6 +411,12 @@ export interface EtymologyReviewResult {
   entryType: 'phrase' | null;
   /** See MyEntryAnswer - shown in place of displayText / definition above. */
   myProposedEntry: MyEntryAnswer | null;
+  /** Mirrors getEtymologyReview.ts's MyEtymologyAnswer: this caller's own active answer here. */
+  myEtymologyAnswer?: {
+    atomic: boolean;
+    components: { wordId: string; displayText: string; definition: string | null; pending: boolean }[];
+    differsFromRecord: boolean;
+  } | null;
   /** possibleMatchWords: see getEtymologyReview.ts's ProposalItemWithNearMatches. */
   componentsProposal: (ComponentsProposalItem & {
     possibleMatchWords?: { wordId: string; displayText: string; definition: string | null }[];

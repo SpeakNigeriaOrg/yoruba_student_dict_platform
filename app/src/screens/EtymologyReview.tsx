@@ -501,10 +501,18 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         // `[wordId]` test that used to live here is gone from the client entirely - it was stated
         // in two places and is now stated in one. Seeding the labels too, so a list loaded from the
         // record shows its words instead of falling back to printing word_ids.
-        setDraftComponents(result.componentsOnRecord.map((c) => c.wordId));
-        setDraftLabels(
-          Object.fromEntries(result.componentsOnRecord.map((c) => [c.wordId, { displayText: c.displayText, pending: false }])),
-        );
+        //
+        // Seeded from the reviewer's OWN answer when they have one: they said what the word is made
+        // of, and coming back to this tab must show that, not the record their vote has not changed
+        // yet (see getEtymologyReview.ts's loadMyEtymologyAnswer). The save button starts as
+        // "recorded" and re-arms on the first edit.
+        const mine = result.myEtymologyAnswer;
+        const seed = mine
+          ? mine.components.map((c) => ({ wordId: c.wordId, displayText: c.displayText, pending: c.pending }))
+          : result.componentsOnRecord.map((c) => ({ wordId: c.wordId, displayText: c.displayText, pending: false }));
+        setDraftComponents(seed.map((c) => c.wordId));
+        setDraftLabels(Object.fromEntries(seed.map((c) => [c.wordId, { displayText: c.displayText, pending: c.pending }])));
+        if (mine) setAnswerRecorded(true);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -535,6 +543,8 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       await submitEtymologyContribution(wordId, input);
       setAnswerRecorded(true);
       setStatus(`Recorded as your answer: ${successMessage}`);
+      // So "What you said it is made of" appears straight away, not only after leaving the tab.
+      await refreshAfterAddingComponent();
       onDecided?.();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -682,6 +692,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
    * collapses it now, so this is a plain "is there one?" rather than the two-clause test that used
    * to be repeated here and in the loader. */
   const onRecord = review?.componentsOnRecord ?? [];
+  const myAnswer = review?.myEtymologyAnswer ?? null;
   const hasRealExistingComponents = onRecord.length > 0;
   /** Wiktionary's breakdown, in word_ids, where every part resolves to a word we hold. Null when it
    * proposes nothing comparable - either no proposal, or one naming parts we do not have, which is
@@ -791,7 +802,34 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           "Wiktionary suggests no breakdown for this word", and reasonably concluded nothing had
           saved. The list was on screen nowhere unless you clicked "It does have parts" - i.e. you
           had to claim the word has parts to discover it was already recorded as having them. */}
-      {hasRealExistingComponents ? (
+      {/* Their own answer, when they have one, stands where the record would: this is the word as
+          they said it is. One quiet line names it as theirs, and what the record says when that
+          differs - the same treatment the entry axis gives a corrected spelling. */}
+      {myAnswer ? (
+        <div aria-label="Your answer">
+          <h3>{isPhrase ? 'The words of this phrase, as you gave them' : 'What you said it is made of'}</h3>
+          {myAnswer.atomic ? (
+            <p>It has no parts.</p>
+          ) : (
+            <ul aria-label="Your components" className="plain-list">
+              {myAnswer.components.map((c, i) => (
+                <li key={`${i}-${c.wordId}`}>
+                  <strong>{c.displayText}</strong>
+                  {c.definition ? ` — ${c.definition}` : ''}
+                  {c.pending ? <span className="field-note"> (requested; a curator will add it)</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="field-note your-change" aria-label="Your change">
+            ✎ Your answer
+            {myAnswer.differsFromRecord
+              ? ` (the record has ${onRecord.length > 0 ? onRecord.map((c) => c.displayText).join(' + ') : 'no parts'})`
+              : ''}
+            . You can change it below.
+          </p>
+        </div>
+      ) : hasRealExistingComponents ? (
         <div aria-label="Components on record">
           <h3>{isPhrase ? 'The words of this phrase, as recorded' : 'What we have on record'}</h3>
           <ul aria-label="Recorded components" className="plain-list">
