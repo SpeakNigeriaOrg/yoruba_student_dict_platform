@@ -62,7 +62,11 @@ const SENSE_COLUMNS = `s.entry_id, s.pos, s.etymology_number, s.etymology_text, 
        s.canonical_inference_method, s.canonical_confidence,
        s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
        coalesce(
-         (select json_agg(json_build_object('form', c.form, 'provenance', c.provenance) order by c.position)
+         -- gloss / entryIds only when present (0031), so a candidate without them reads exactly as
+         -- it did before - the parity-tested shape is unchanged.
+         (select json_agg(jsonb_strip_nulls(jsonb_build_object(
+                   'form', c.form, 'provenance', c.provenance,
+                   'gloss', c.gloss, 'entryIds', c.candidate_entry_ids)) order by c.position)
           from kaikki_component_candidates c where c.sense_id = s.sense_id),
          '[]'::json
        ) as component_candidates,

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveAltOfTargets,
   deriveComponentCandidateForms,
+  deriveComponentCandidates,
   deriveDerivedFormTexts,
   deriveGlosses,
   deriveIndexKeys,
@@ -140,14 +141,30 @@ describe('deriveComponentCandidateForms', () => {
     expect(deriveComponentCandidateForms(entry)).toEqual([]);
   });
 
-  it('excludes bound morphemes (leading/trailing hyphen)', () => {
+  it('KEEPS bound morphemes - affixes are dictionary entries now (0030/0031)', () => {
+    // Dropping à- turned `à- + kan` into a one-part "breakdown" that misdescribed the word.
     const entry = makeEntry({
       etymologyMorphemes: [
         { form: 'à-', gloss: 'nominalizing prefix', bound: true, resolved: false, entryIds: [] },
         { form: 'kan', gloss: null, bound: false, resolved: true, entryIds: ['x'] },
       ],
     });
-    expect(deriveComponentCandidateForms(entry)).toEqual(['kan']);
+    expect(deriveComponentCandidateForms(entry)).toEqual(['à-', 'kan']);
+    expect(deriveComponentCandidates(entry)).toEqual([
+      { form: 'à-', provenance: 'etymology_template', gloss: 'nominalizing prefix', entryIds: null },
+      { form: 'kan', provenance: 'etymology_template', gloss: null, entryIds: ['x'] },
+    ]);
+  });
+
+  it("points an affix part at Wiktionary's own entry for that affix - real data: ìlà is ì- + là", () => {
+    const senses = deriveSenses(Object.values(realEntries));
+    const ila = senses.find((s) => s.entryId === 'en-ila-yo-noun-YgHrTczJ');
+    const prefix = ila?.componentCandidates.find((c) => c.form === 'ì-');
+    expect(prefix?.gloss).toBe('nominalizing prefix');
+    expect(prefix?.entryIds?.length).toBeGreaterThan(0);
+    const target = senses.find((s) => s.entryId === prefix!.entryIds![0]);
+    expect(target?.pos).toBe('prefix');
+    expect(ila?.componentCandidates.map((c) => c.form)).toEqual(['ì-', 'là']);
   });
 
   it('dedupes repeated forms, preserving first-seen order', () => {
@@ -276,8 +293,9 @@ describe('deriveSense / deriveSenses on the real corpus', () => {
   it("regression: 'dodò' (dodo) ends up with di/odò as etymology_template component candidates", () => {
     const sense = deriveSense(realEntries['en-dodo-yo-verb-TzbxtbnG']);
     expect(sense.componentCandidates).toEqual([
-      { form: 'di', provenance: 'etymology_template' },
-      { form: 'odò', provenance: 'etymology_template' },
+      // With the template's gloss for each part and kaikki-yoruba's candidate entries (0031).
+      { form: 'di', provenance: 'etymology_template', gloss: 'to become', entryIds: ['en-di-yo-verb-z1VevidF', 'en-di-yo-verb-UZXa~C2e'] },
+      { form: 'odò', provenance: 'etymology_template', gloss: 'river', entryIds: ['en-odo-yo-noun-X1qO2PE5', 'en-odo-yo-noun-a7h4tkl1'] },
     ]);
   });
 });

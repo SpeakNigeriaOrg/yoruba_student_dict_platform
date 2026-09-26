@@ -105,8 +105,9 @@ describe('synthesizeComponentReciprocals', () => {
 
     const dodo = senses.find((s) => s.entryId === 'en-dodo-yo-verb-TzbxtbnG');
     expect(dodo?.componentCandidates).toEqual([
-      { form: 'di', provenance: 'etymology_template' },
-      { form: 'odò', provenance: 'etymology_template' },
+      // With the template's gloss for each part and kaikki-yoruba's candidate entries (0031).
+      { form: 'di', provenance: 'etymology_template', gloss: 'to become', entryIds: ['en-di-yo-verb-z1VevidF', 'en-di-yo-verb-UZXa~C2e'] },
+      { form: 'odò', provenance: 'etymology_template', gloss: 'river', entryIds: ['en-odo-yo-noun-X1qO2PE5', 'en-odo-yo-noun-a7h4tkl1'] },
     ]);
   });
 });

@@ -1277,3 +1277,99 @@ describe('an already-settled word does not re-open the whole review on every vis
     expect(screen.queryByRole('button', { name: "Compare against Wiktionary's proposal" })).not.toBeInTheDocument();
   });
 });
+
+describe("choosing a part from Wiktionary's own candidates", () => {
+  // ìlà: Wiktionary says ì- + là, and names which là - "to cut, to divide". là is five words
+  // upstream; the reviewer picks the right one from the proposal, no retyping.
+  const ILA = {
+    ...etymologyFixture,
+    components: [],
+    componentsProposal: [
+      {
+        kaikkiForm: 'ì-',
+        wordId: null,
+        ambiguous: false,
+        possibleMatches: [],
+        possibleMatchWords: [],
+        previewGlosses: [],
+        wiktionaryGloss: 'nominalizing prefix',
+        wiktionaryCandidates: [
+          { entryId: 'en-i-yo-prefix', form: 'ì-', pos: 'prefix', etymologyNumber: null, glosses: ['nominalizing prefix'], held: null },
+        ],
+      },
+      {
+        kaikkiForm: 'là',
+        wordId: null,
+        ambiguous: false,
+        possibleMatches: [],
+        possibleMatchWords: [],
+        previewGlosses: ['to cut', 'to dream'],
+        wiktionaryGloss: 'to cut, to divide',
+        wiktionaryCandidates: [
+          { entryId: 'en-la-cut', form: 'là', pos: 'verb', etymologyNumber: '7', glosses: ['to cut, to divide'], held: { wordId: 'la_cut', displayText: 'là' } },
+          { entryId: 'en-la-rich', form: 'là', pos: 'verb', etymologyNumber: '3', glosses: ['to be wealthy'], held: null },
+        ],
+      },
+    ],
+  };
+
+  function mock() {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/component-requests')) {
+        const { entryId } = JSON.parse(init!.body as string);
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            entryId === 'en-la-cut'
+              ? { wordId: 'la_cut', outcome: 'resolved', displayText: 'là' }
+              : { wordId: 'i-_nominalizing', outcome: 'requested', displayText: 'ì-' },
+        });
+      }
+      if (init?.method === 'POST') return Promise.resolve({ ok: true, json: async () => ({ contributionId: 'c1' }) });
+      return Promise.resolve({ ok: true, json: async () => ILA });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+  const contributionBody = (fetchMock: ReturnType<typeof vi.fn>) =>
+    JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).includes('/contributions'))![1].body as string);
+
+  it('lists every Wiktionary etymology of a part, with the sense the etymology names marked', async () => {
+    mock();
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Wiktionary candidates for là'));
+    const la = screen.getByLabelText('Wiktionary candidates for là');
+    expect(la).toHaveTextContent("Wiktionary's etymology means: to cut, to divide");
+    expect(la).toHaveTextContent('to cut, to divide');
+    expect(la).toHaveTextContent('best match');
+    expect(la).toHaveTextContent('to be wealthy');
+    // The merged one-parenthesis preview is gone when there is a list to pick from.
+    expect(screen.queryByText(/\(to cut; to dream\)/)).not.toBeInTheDocument();
+  });
+
+  it('records the parts we have - là - while ì- is not yet in the dictionary', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mock();
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Wiktionary candidates for là'));
+
+    await user.click(screen.getByRole('button', { name: 'Use là: to cut, to divide' }));
+    await user.click(await screen.findByRole('button', { name: /Accept the parts we have \(là\)/ }));
+    await waitFor(() => expect(contributionBody(fetchMock)).toMatchObject({ componentsAction: 'custom', components: ['la_cut'] }));
+  });
+
+  it('requests a missing part in one tap, then accepts the whole breakdown', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mock();
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Wiktionary candidates for ì-'));
+
+    await user.click(screen.getByRole('button', { name: 'Use ì-: nominalizing prefix' }));
+    await user.click(screen.getByRole('button', { name: 'Use là: to cut, to divide' }));
+    expect(await screen.findByText(/requested; a curator will add it/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Accept proposed components' }));
+    await waitFor(() =>
+      expect(contributionBody(fetchMock)).toMatchObject({ componentsAction: 'accept_proposed', components: ['i-_nominalizing', 'la_cut'] }),
+    );
+  });
+});

@@ -84,12 +84,49 @@ export function deriveAltOfTargets(entry: CanonicalEntry): string[] {
  * build_lexicon, only becomes list[dict] inside
  * synthesize_component_relationships). */
 export function deriveComponentCandidateForms(entry: CanonicalEntry): string[] {
-  const candidates: string[] = [];
+  return deriveComponentCandidates(entry).map((c) => c.form);
+}
+
+/** The parts themselves, with what Wiktionary says about each (0031): the template's gloss for it
+ * - which sense of the spelling the etymology means - and kaikki-yoruba's candidate entries.
+ *
+ * Bound morphemes (ì-, oní-, -kí-) are KEPT. They used to be dropped here, on the ground that an
+ * affix is not a dictionary word; since 0030 affixes are dictionary entries, and dropping them
+ * turned `ì- + là` into a one-part "breakdown" that misdescribed the word. kaikki-yoruba never looks
+ * bound forms up, so their entryIds are filled in afterwards by resolveAffixCandidates. */
+export function deriveComponentCandidates(entry: CanonicalEntry): ComponentCandidate[] {
+  const candidates: ComponentCandidate[] = [];
   for (const m of entry.etymologyMorphemes) {
-    if (m.bound || !m.form) continue;
-    if (!candidates.includes(m.form)) candidates.push(m.form);
+    if (!m.form || candidates.some((c) => c.form === m.form)) continue;
+    candidates.push({
+      form: m.form,
+      provenance: 'etymology_template',
+      gloss: m.gloss ?? null,
+      entryIds: m.entryIds.length > 0 ? m.entryIds : null,
+    });
   }
   return candidates;
+}
+
+/** Points each affix part at Wiktionary's own entry for that affix, matched by exact spelling
+ * against entries whose pos is prefix / interfix / suffix. Mutates in place; runs once all senses
+ * are derived, since the affix entries are senses too. */
+export function resolveAffixCandidates(senses: DerivedKaikkiSense[]): void {
+  const affixEntries = new Map<string, string[]>();
+  for (const s of senses) {
+    const form = s.canonicalForm.value;
+    if (!s.pos || !['prefix', 'interfix', 'suffix'].includes(s.pos) || !s.entryId || !form) continue;
+    const ids = affixEntries.get(form) ?? [];
+    ids.push(s.entryId);
+    affixEntries.set(form, ids);
+  }
+  for (const s of senses) {
+    for (const c of s.componentCandidates) {
+      if (c.entryIds || !c.form.includes('-')) continue;
+      const ids = affixEntries.get(c.form);
+      if (ids) c.entryIds = ids;
+    }
+  }
 }
 
 /** Spellings of other words that kaikki-yoruba's own etymology-driven
@@ -161,9 +198,7 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     // a fact about Yoruba rather than about our splitting. Trimmed, and an empty string becomes
     // null so "no transcription" has one representation.
     ipa: entry.ipa?.[0]?.ipa?.trim() || null,
-    componentCandidates: deriveComponentCandidateForms(entry).map(
-      (form): ComponentCandidate => ({ form, provenance: 'etymology_template' }),
-    ),
+    componentCandidates: deriveComponentCandidates(entry),
     usedInCandidates: deriveUsedInCandidateForms(entry).map(
       (form): ComponentCandidate => ({ form, provenance: 'synthesized_from_etymology' }),
     ),
@@ -173,5 +208,7 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
 }
 
 export function deriveSenses(entries: CanonicalEntry[]): DerivedKaikkiSense[] {
-  return entries.map(deriveSense);
+  const senses = entries.map(deriveSense);
+  resolveAffixCandidates(senses);
+  return senses;
 }

@@ -26,6 +26,11 @@ export interface CanonicalFormInfo {
 export interface ComponentCandidate {
   form: string;
   provenance: string;
+  /** The gloss the etymology template gives this part - which sense of the spelling it means
+   * (0031). Absent for reciprocal candidates and older data. */
+  gloss?: string | null;
+  /** Wiktionary entries this part may be, best first (0031). Absent when none. */
+  entryIds?: string[] | null;
 }
 
 export interface KaikkiSense {

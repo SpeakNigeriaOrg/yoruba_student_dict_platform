@@ -414,6 +414,17 @@ export interface EtymologyReviewResult {
   /** possibleMatchWords: see getEtymologyReview.ts's ProposalItemWithNearMatches. */
   componentsProposal: (ComponentsProposalItem & {
     possibleMatchWords?: { wordId: string; displayText: string; definition: string | null }[];
+    /** Which sense of the spelling Wiktionary's etymology means, when it says. */
+    wiktionaryGloss?: string | null;
+    /** Every Wiktionary etymology this part may be, best first - see getEtymologyReview.ts. */
+    wiktionaryCandidates?: {
+      entryId: string;
+      form: string;
+      pos: string;
+      etymologyNumber: string | null;
+      glosses: string[];
+      held: { wordId: string; displayText: string } | null;
+    }[];
   })[];
   components: string[];
   /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
@@ -703,7 +714,8 @@ export type GameBlocker =
   | 'no_matching_recording'
   | 'only_stale_recordings'
   | 'no_speaker_covers_syllables'
-  | 'no_image';
+  | 'no_image'
+  | 'not_standalone';
 export type WiktionaryBlocker = 'no_citation_row' | 'no_part_of_speech' | 'no_english_gloss';
 
 export interface SurveyWord {

@@ -49,6 +49,24 @@ import { loadMyEntryAnswer, type MyEntryAnswer } from '../myEntryAnswer.js';
  * whose output is pinned field-for-field to the Python engine's by the parity tests. */
 export interface ProposalItemWithNearMatches extends ComponentsProposalItem {
   possibleMatchWords: { wordId: string; displayText: string; definition: string | null }[];
+  /** The gloss Wiktionary's etymology template gives this part - which sense of the spelling it
+   * means (`t2=to cut, to divide` for là in ìlà). Null when the template gives none. */
+  wiktionaryGloss: string | null;
+  /** Every Wiktionary etymology this part may be, best first (0031) - so a reviewer can pick the
+   * right one from the proposal itself, rather than retyping the spelling into a search. Each says
+   * whether we already hold a word citing it. The first is kaikki-yoruba's best match for the
+   * template's gloss. */
+  wiktionaryCandidates: WiktionaryPartCandidate[];
+}
+
+export interface WiktionaryPartCandidate {
+  entryId: string;
+  form: string;
+  pos: string;
+  etymologyNumber: string | null;
+  glosses: string[];
+  /** Our word citing this etymology, when we hold one. */
+  held: { wordId: string; displayText: string } | null;
 }
 
 export interface EtymologyReviewResult {
@@ -120,6 +138,42 @@ async function loadSpellingConfirmedOverrides(client: Queryable): Promise<Diagno
   return overrides;
 }
 
+/** The Wiktionary etymologies named as candidates for a proposal's parts, with whichever of our
+ * words cites each. One round trip for all of them. */
+async function loadPartCandidates(client: Queryable, entryIds: string[]): Promise<Map<string, WiktionaryPartCandidate>> {
+  const out = new Map<string, WiktionaryPartCandidate>();
+  if (entryIds.length === 0) return out;
+  const { rows } = await client.query<{
+    entry_id: string;
+    canonical_value: string;
+    pos: string | null;
+    etymology_number: string | null;
+    glosses: string[] | null;
+    held_word_id: string | null;
+    held_display_text: string | null;
+  }>(
+    `select distinct on (s.entry_id) s.entry_id, s.canonical_value, s.pos, s.etymology_number, s.glosses,
+            g.word_id as held_word_id, g.display_text as held_display_text
+       from kaikki_senses s
+       left join upstream_citations c on c.entry_id = s.entry_id
+       left join golden_record g on g.word_id = c.word_id
+      where s.entry_id = any($1)
+      order by s.entry_id, g.word_id`,
+    [[...new Set(entryIds)]],
+  );
+  for (const r of rows) {
+    out.set(r.entry_id, {
+      entryId: r.entry_id,
+      form: r.canonical_value,
+      pos: r.pos ?? 'unknown',
+      etymologyNumber: r.etymology_number,
+      glosses: r.glosses ?? [],
+      held: r.held_word_id ? { wordId: r.held_word_id, displayText: r.held_display_text ?? r.held_word_id } : null,
+    });
+  }
+  return out;
+}
+
 export async function getEtymologyReview(client: Queryable, wordId: string, userId: string): Promise<EtymologyReviewResult> {
   const vocab = await loadVocab(client);
   const entry = vocab[wordId];
@@ -138,6 +192,11 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
   const diagnosis = diagnoseEntry(wordId, entry, lexicon);
   const index = buildVocabSpellingIndex(vocab);
   const componentOwners = buildComponentOwnersIndex(vocab);
+
+  const partCandidates = await loadPartCandidates(
+    client,
+    (diagnosis.matchedComponentCandidates ?? []).flatMap((c) => c.entryIds ?? []),
+  );
 
   const fields = componentsAxisFields(
     wordId,
@@ -161,14 +220,22 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     etymologyText: diagnosis.matchedEtymologyText ?? null,
     // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
     // usedAsComponentOf stop here.
-    componentsProposal: fields.componentsProposal.map((item) => ({
-      ...item,
-      possibleMatchWords: item.possibleMatches.map((id) => ({
-        wordId: id,
-        displayText: vocab[id]?.displayText ?? id,
-        definition: vocab[id]?.definition ?? null,
-      })),
-    })),
+    componentsProposal: fields.componentsProposal.map((item, i) => {
+      // One proposal item per matched candidate, in order (componentsAxisFields maps them 1:1).
+      const candidate = diagnosis.matchedComponentCandidates?.[i];
+      return {
+        ...item,
+        possibleMatchWords: item.possibleMatches.map((id) => ({
+          wordId: id,
+          displayText: vocab[id]?.displayText ?? id,
+          definition: vocab[id]?.definition ?? null,
+        })),
+        wiktionaryGloss: candidate?.gloss ?? null,
+        wiktionaryCandidates: (candidate?.entryIds ?? [])
+          .map((id) => partCandidates.get(id))
+          .filter((c): c is WiktionaryPartCandidate => c !== undefined),
+      };
+    }),
     components: fields.components,
     // The self-reference is not a component; see the field's own note. vocab is already loaded, so
     // resolving each id to its spelling costs nothing extra.

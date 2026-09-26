@@ -315,16 +315,49 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
   );
 }
 
+/** What a reviewer picked for one proposed part: a word we hold, or one just requested. */
+export interface ChosenPart {
+  wordId: string;
+  displayText: string;
+  pending: boolean;
+}
+
 function ProposalItemRow({
   item,
   onAdded,
   isCurator,
+  chosen,
+  onChoose,
 }: {
   item: EtymologyReviewResult['componentsProposal'][number];
   onAdded: (wordId: string) => void;
   isCurator: boolean;
+  chosen?: ChosenPart;
+  onChoose: (part: ChosenPart) => void;
 }) {
-  const notInVocabYet = !item.wordId && !item.ambiguous && item.possibleMatches.length === 0;
+  const candidates = item.wiktionaryCandidates ?? [];
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // With Wiktionary's own candidates to pick from, the old "add it from the picker below" route is
+  // not needed - the candidate list IS the route.
+  const notInVocabYet = !item.wordId && !item.ambiguous && item.possibleMatches.length === 0 && candidates.length === 0;
+
+  /** One tap: requestComponent resolves to the word we hold for that etymology, or queues a
+   * request for it (see api/src/handlers/resolveOrRequestComponent.ts) - either way the part is
+   * settled on this screen and the answer can be submitted now. */
+  async function choose(entryId: string) {
+    setBusy(entryId);
+    setError(null);
+    try {
+      const r = await requestComponent(entryId);
+      onChoose({ wordId: r.wordId, displayText: r.displayText, pending: r.outcome !== 'resolved' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <li>
       <strong>{item.kaikkiForm}</strong>
@@ -353,7 +386,10 @@ function ProposalItemRow({
       ) : (
         <span> — not in the dictionary yet</span>
       )}
-      {item.previewGlosses.length > 0 ? (
+      {/* The merged preview of every sense of the spelling is replaced by the candidate list below
+          when there is one - one parenthesis of "to dream; to lick; to cut" was the reader's only
+          clue to which là was meant. */}
+      {candidates.length > 0 ? null : item.previewGlosses.length > 0 ? (
         <span> ({item.previewGlosses.join('; ')})</span>
       ) : item.resolvedDefinition ? (
         // The matched word's own definition, not a Kaikki gloss - see resolvedDefinition's own
@@ -367,6 +403,43 @@ function ProposalItemRow({
           form - the same shape of defect as the /api/contributions route-ordering
           403: a member-facing control wired to a curator-only endpoint. A
           volunteer is told what to do instead. */}
+      {chosen ? (
+        <p className="field-note" aria-label="Chosen part">
+          Using <strong>{chosen.displayText}</strong>
+          {chosen.pending ? ' - requested; a curator will add it' : ''}.
+        </p>
+      ) : null}
+      {candidates.length > 0 ? (
+        <div aria-label={`Wiktionary candidates for ${item.kaikkiForm}`}>
+          {item.wiktionaryGloss ? (
+            <p className="field-note">
+              Wiktionary&apos;s etymology means: <em>{item.wiktionaryGloss}</em>
+            </p>
+          ) : null}
+          <ul className="plain-list">
+            {candidates.map((c, i) => (
+              <li key={c.entryId}>
+                <strong>{c.form}</strong> ({c.pos}
+                {c.etymologyNumber ? `, etymology ${c.etymologyNumber}` : ''}) - {c.glosses.join('; ') || '(no gloss)'}
+                {i === 0 && item.wiktionaryGloss && candidates.length > 1 ? (
+                  <span className="badge decided"> best match</span>
+                ) : null}
+                {c.held ? <span className="field-note"> - in the dictionary</span> : null}{' '}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy !== null}
+                  onClick={() => choose(c.entryId)}
+                  aria-label={`Use ${c.form}: ${c.glosses[0] ?? c.pos}`}
+                >
+                  {busy === c.entryId ? 'Working...' : c.held ? 'Use this' : 'Use this (request it)'}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {error ? <p role="alert">{error}</p> : null}
+        </div>
+      ) : null}
       {notInVocabYet ? (
         isCurator ? (
           <div className="btn-row">
@@ -400,6 +473,9 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const [claimsHasParts, setClaimsHasParts] = useState(false);
   const [answerRecorded, setAnswerRecorded] = useState(false);
   const [selectedCandidateWordIds, setSelectedCandidateWordIds] = useState<Record<string, string>>({});
+  /** Per proposed part (by position), the Wiktionary etymology the reviewer picked for it. Wins
+   * over the spelling-based match: that one only knows the spelling, and là is five words. */
+  const [chosenParts, setChosenParts] = useState<Record<number, ChosenPart>>({});
   /** Closed by default on an already-settled word - see decidedAndSettled below. Opened
    * deliberately, the same pattern as showCustomComponents, so reconsidering is always one
    * click away rather than gone. */
@@ -415,6 +491,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setClaimsHasParts(false);
     setAnswerRecorded(false);
     setSelectedCandidateWordIds({});
+    setChosenParts({});
     setShowReconsider(false);
     getEtymologyReview(wordId)
       .then((result) => {
@@ -466,12 +543,24 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
 
   async function acceptProposedComponents() {
     if (!review) return;
-    const resolvedIds = review.componentsProposal.map((p) => p.wordId).filter((id): id is string => id !== null);
+    const resolvedIds = partIds.filter((id): id is string => id !== null);
     if (resolvedIds.length !== review.componentsProposal.length) {
       setStatus("Can't accept yet - some proposed components don't resolve to a confirmed word_id.");
       return;
     }
     await submit({ componentsAction: 'accept_proposed', components: resolvedIds, note: note || undefined }, 'Accepted proposed components.');
+  }
+
+  /** A partial etymology: the parts that resolve, in order, leaving out the ones we hold no word for
+   * yet. ìlà → là is worth recording while ì- is still missing. Recorded as 'custom' because it is
+   * not Wiktionary's breakdown as proposed - it is the part of it that can be said today. */
+  async function acceptResolvedParts() {
+    const ids = partIds.filter((id): id is string => id !== null);
+    if (ids.length === 0) return;
+    await submit(
+      { componentsAction: 'custom', components: ids, note: note || undefined },
+      `Recorded the parts we have: ${ids.map((id) => partLabel(id)).join(' + ')}`,
+    );
   }
 
   async function confirmAtomic() {
@@ -623,8 +712,18 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
    * accept yet" - the accept path submits word_ids, and one of them did not exist. Offering an
    * answer that cannot be given is the same defect as the enabled-with-nothing-to-accept button
    * this file already fixed once, so the unresolvable case gets the picker instead. */
-  const unresolvedProposalForms = (review?.componentsProposal ?? []).filter((p) => !p.wordId).map((p) => p.kaikkiForm);
+  /** Each proposed part's word_id: the reviewer's pick when they made one, else the spelling match. */
+  const partIds = (review?.componentsProposal ?? []).map((p, i) => chosenParts[i]?.wordId ?? p.wordId);
+  const partLabel = (id: string) =>
+    Object.values(chosenParts).find((c) => c.wordId === id)?.displayText ??
+    review?.componentsProposal.find((p) => p.wordId === id)?.kaikkiForm ??
+    id;
+  const unresolvedProposalForms = (review?.componentsProposal ?? [])
+    .filter((_, i) => !partIds[i])
+    .map((p) => p.kaikkiForm);
   const proposalFullyResolves = hasProposal && unresolvedProposalForms.length === 0;
+  /** Some parts resolve and some do not - the partial etymology case (ìlà: là yes, ì- not yet). */
+  const someProposalPartsResolve = hasProposal && !proposalFullyResolves && partIds.some((id) => id !== null);
   /** Drafted words that a curator still has to approve. Reported, never blocking. */
   const pendingPhraseWordCount = draftComponents.filter((id) => draftLabels[id]?.pending).length;
   /** Nothing left to re-litigate on a first look: a curator already decided this axis, what they
@@ -736,7 +835,17 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
           ) : (
             <ul aria-label="Proposed components">
               {review.componentsProposal.map((item, i) => (
-                <ProposalItemRow key={i} item={item} onAdded={refreshAfterAddingComponent} isCurator={isCurator} />
+                <ProposalItemRow
+                  key={i}
+                  item={item}
+                  onAdded={refreshAfterAddingComponent}
+                  isCurator={isCurator}
+                  chosen={chosenParts[i]}
+                  onChoose={(part) => {
+                    setAnswerRecorded(false);
+                    setChosenParts((prev) => ({ ...prev, [i]: part }));
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -853,10 +962,9 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               (more than one existing word spelled that way) IS in the dictionary; which one is
               meant is what's unresolved. Points back at the per-item reason instead of re-asserting
               a specific one that may not apply. */}
-          {unresolvedProposalForms.length === 1 ? 'One part of this breakdown' : 'Some parts of this breakdown'} (
-          <strong>{unresolvedProposalForms.join(', ')}</strong>) {unresolvedProposalForms.length === 1 ? "isn't" : "aren't"}{' '}
-          resolved to one specific word (see above), so the breakdown can't be accepted as it stands. Build the list
-          below - you can add a missing part straight from Wiktionary.
+          <strong>{unresolvedProposalForms.join(', ')}</strong> {unresolvedProposalForms.length === 1 ? "isn't" : "aren't"} settled
+          yet. Pick {unresolvedProposalForms.length === 1 ? 'it' : 'them'} from Wiktionary above
+          {someProposalPartsResolve ? ', record the parts we have,' : ''} or build the list yourself.
         </p>
       ) : null}
       <div className="btn-row">
@@ -873,8 +981,17 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
             {label('Accept proposed components')}
           </button>
         ) : null}
+        {someProposalPartsResolve ? (
+          <button type="button" className="btn btn-primary" onClick={acceptResolvedParts}>
+            Accept the parts we have ({partIds.filter((id): id is string => id !== null).map(partLabel).join(' + ')})
+          </button>
+        ) : null}
         {hasProposal && !proposalFullyResolves && !claimsHasParts ? (
-          <button type="button" className="btn btn-primary" onClick={openPickerFromProposal}>
+          <button
+            type="button"
+            className={`btn ${someProposalPartsResolve ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={openPickerFromProposal}
+          >
             Build the list of parts
           </button>
         ) : null}

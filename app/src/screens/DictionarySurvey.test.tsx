@@ -61,7 +61,7 @@ function overviewFor(words: SurveyWord[]) {
     wordsWithNoImage: 0,
     wordsWithExamples: 0,
     gameReady: 0,
-    gameBlockers: { no_matching_recording: 0, only_stale_recordings: 0, no_speaker_covers_syllables: 0, no_image: 0 },
+    gameBlockers: { no_matching_recording: 0, only_stale_recordings: 0, no_speaker_covers_syllables: 0, no_image: 0, not_standalone: 0 },
     wiktionaryReady: 0,
     wiktionaryBlockers: { no_citation_row: 0, no_part_of_speech: 0, no_english_gloss: 0 },
   };

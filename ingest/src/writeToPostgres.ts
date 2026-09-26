@@ -97,22 +97,37 @@ async function insertSenseKeys(client: Queryable, senses: DerivedKaikkiSense[], 
 }
 
 async function insertComponentCandidates(client: Queryable, senses: DerivedKaikkiSense[], senseIds: string[]): Promise<void> {
-  const rows: Array<{ senseId: string; position: number; form: string; provenance: string }> = [];
+  const rows: Array<{
+    senseId: string;
+    position: number;
+    form: string;
+    provenance: string;
+    gloss: string | null;
+    entryIds: string[] | null;
+  }> = [];
   senses.forEach((sense, i) => {
     sense.componentCandidates.forEach((c, position) => {
-      rows.push({ senseId: senseIds[i], position, form: c.form, provenance: c.provenance });
+      rows.push({
+        senseId: senseIds[i],
+        position,
+        form: c.form,
+        provenance: c.provenance,
+        gloss: c.gloss ?? null,
+        entryIds: c.entryIds && c.entryIds.length > 0 ? c.entryIds : null,
+      });
     });
   });
   for (const batch of chunk(rows, FLAT_BATCH_SIZE)) {
     const placeholders: string[] = [];
     const values: unknown[] = [];
     batch.forEach((row, i) => {
-      const base = i * 4;
-      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
-      values.push(row.senseId, row.position, row.form, row.provenance);
+      const base = i * 6;
+      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`);
+      values.push(row.senseId, row.position, row.form, row.provenance, row.gloss, row.entryIds);
     });
     await client.query(
-      `insert into kaikki_component_candidates (sense_id, position, form, provenance) values ${placeholders.join(', ')}`,
+      `insert into kaikki_component_candidates (sense_id, position, form, provenance, gloss, candidate_entry_ids)
+       values ${placeholders.join(', ')}`,
       values,
     );
   }

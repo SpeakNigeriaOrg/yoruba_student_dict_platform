@@ -93,6 +93,10 @@ export type CanonicalEntries = Record<string, CanonicalEntry>;
 export interface ComponentCandidate {
   form: string;
   provenance: 'etymology_template' | 'derived_reciprocal' | 'synthesized_from_etymology';
+  /** The etymology template's gloss for this part - which sense it means (0031). */
+  gloss?: string | null;
+  /** Wiktionary entries this part may be, best first (0031). */
+  entryIds?: string[] | null;
 }
 
 /** This project's own derivation over one canonical entry - mirrors
