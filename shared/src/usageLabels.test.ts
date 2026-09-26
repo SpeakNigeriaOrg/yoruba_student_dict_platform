@@ -52,7 +52,7 @@ describe('not a standalone word - one field for affixes and fossilized words ali
 
   it('has a SQL form that also catches an affix known only from its pin', () => {
     expect(standaloneEntrySql('g', 'c')).toBe(
-      "not (g.only_in_derived_terms or coalesce(g.pos, c.pin ->> 'pos') in ('prefix', 'interfix', 'suffix'))",
+      "not (g.only_in_derived_terms or coalesce(g.pos, c.pin ->> 'pos', '') in ('prefix', 'interfix', 'suffix'))",
     );
   });
 });

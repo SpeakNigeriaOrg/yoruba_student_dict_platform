@@ -108,7 +108,11 @@ export function isStandaloneEntry(pos: string | null | undefined, onlyInDerivedT
 
 /** isStandaloneEntry as SQL, for scripts that query golden_record `g` left-joined to
  * upstream_citations `c`. Checks the part of speech as well as the flag, so a cited affix whose
- * pos comes only from its pin is excluded even if its row predates 0030. */
+ * pos comes only from its pin is excluded even if its row predates 0030.
+ *
+ * The trailing `, ''` is load-bearing: an entry with no pos anywhere made `null in (...)` null,
+ * which made the whole expression null, which a WHERE treats as false - silently dropping every
+ * uncited word with no part of speech (14 in production when this was caught). */
 export function standaloneEntrySql(golden = 'g', citations = 'c'): string {
-  return `not (${golden}.only_in_derived_terms or coalesce(${golden}.pos, ${citations}.pin ->> 'pos') in ('prefix', 'interfix', 'suffix'))`;
+  return `not (${golden}.only_in_derived_terms or coalesce(${golden}.pos, ${citations}.pin ->> 'pos', '') in ('prefix', 'interfix', 'suffix'))`;
 }
