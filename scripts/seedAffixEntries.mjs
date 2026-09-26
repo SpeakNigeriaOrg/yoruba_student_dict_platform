@@ -10,6 +10,7 @@
 // Usage:
 //   node scripts/seedAffixEntries.mjs --by admin@speaknigeria.org            # dry run: prints the list
 //   node scripts/seedAffixEntries.mjs --by admin@speaknigeria.org --apply
+//   ... --skip "oni-,ị̀-"     leave these spellings out (e.g. a likely typo, or a form with no gloss)
 //
 // Requires DATABASE_URL, and `npm run build:api` to have been run.
 
@@ -20,6 +21,13 @@ const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const byIndex = args.indexOf('--by');
 const byEmail = byIndex !== -1 ? args[byIndex + 1] : null;
+const skipIndex = args.indexOf('--skip');
+const skip = new Set(
+  (skipIndex !== -1 ? args[skipIndex + 1] ?? '' : '')
+    .split(',')
+    .map((s) => s.trim().normalize('NFC'))
+    .filter(Boolean),
+);
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -39,7 +47,9 @@ try {
     console.error(`No user with email ${byEmail}.`);
     process.exit(1);
   }
-  const plan = await planAffixSeed(pool);
+  const fullPlan = await planAffixSeed(pool);
+  const excluded = fullPlan.planned.filter((i) => skip.has(i.displayText.normalize('NFC')));
+  const plan = { ...fullPlan, planned: fullPlan.planned.filter((i) => !skip.has(i.displayText.normalize('NFC'))) };
 
   const row = (i) =>
     `  ${i.displayText.padEnd(8)} ${i.pos.padEnd(9)} ${String(i.uses).padStart(4)} uses  ${i.wordId.padEnd(52)} ${i.gloss ?? '(NO GLOSS - needs a curator)'}`;
@@ -50,6 +60,10 @@ try {
   for (const i of cited) console.log(row(i));
   console.log(`\nNo Wiktionary entry - exempt (${exempt.length}):`);
   for (const i of exempt) console.log(row(i));
+  if (excluded.length > 0) {
+    console.log(`\nLeft out by --skip (${excluded.length}):`);
+    for (const i of excluded) console.log(row(i));
+  }
   if (plan.skipped.length > 0) {
     console.log(`\nSkipped (${plan.skipped.length}):`);
     for (const s of plan.skipped) console.log(`  ${s.displayText.padEnd(8)} ${s.reason} (${s.existingWordId})`);
