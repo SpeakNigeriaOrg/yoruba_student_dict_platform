@@ -28,8 +28,8 @@
 // What is deliberately NOT a phrase
 // ---------------------------------------------------------------------------
 // 143 entries are hyphenated with no whitespace, and they are overwhelmingly bound affixes - `ì-`,
-// `-kí-`, `oní-` - which are morphemes rather than words and should not become entries at all, let
-// alone phrases. A hyphenated compound like `ilé-ìwé` is a single orthographic word by Yoruba
+// `-kí-`, `oní-` - which are morphemes rather than words: dictionary entries since 0030, but never
+// phrases. A hyphenated compound like `ilé-ìwé` is a single orthographic word by Yoruba
 // convention. Neither is caught, and that is the intent: this function asks "did a human write this as
 // separate words", not "is this morphologically complex". The etymology axis answers the second
 // question, and answers it far better.

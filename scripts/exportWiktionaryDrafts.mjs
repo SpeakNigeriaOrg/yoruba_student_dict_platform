@@ -50,7 +50,8 @@
 //   usage notes    golden_record.only_in_derived_terms (0029): "no longer used as a
 //                  separate word; survives in derived terms such as ...". Deliberately
 //                  NOT {{only used in}}, which asserts the COMPLETE list of words a term
-//                  occurs in - a claim nobody can make.
+//                  occurs in - a claim nobody can make. Skipped for an affix (0030), whose
+//                  Prefix/Suffix heading already says it is not a standalone word.
 //   derived terms  the reverse of golden_record_components: every entry that names this
 //                  one as a part. An open list by nature, as the section is upstream.
 //   {{etymid}}     golden_record.etymid_label, else derived from the word_id hint,

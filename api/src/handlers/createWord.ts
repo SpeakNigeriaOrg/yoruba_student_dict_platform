@@ -28,8 +28,8 @@ import { recordAuthoringVote } from './authoringVote.js';
 import { isAffixPartOfSpeech } from '@yoruba-student-dict-platform/shared';
 import { writeCreationUsageInTransaction, type CreationUsage } from '../entryUsage.js';
 
-/** CreationUsage: usage labels and "survives only inside other words" (0029). Optional; absent
- * means no labels and the flag off. */
+/** CreationUsage: usage labels and "not a standalone word" (0029/0030). Optional; absent means no
+ * labels and the flag off - except for an affix, which always gets the flag. */
 export interface CreateWordInput extends CreationUsage {
   wordId: string;
   displayText: string;

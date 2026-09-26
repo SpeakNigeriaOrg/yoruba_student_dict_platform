@@ -147,7 +147,7 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
               {[
                 dossier.pos ?? pinPos(dossier.pin) ?? '(none)',
                 ...(dossier.usageLabels ?? []),
-                ...(dossier.onlyInDerivedTerms ? ['survives only inside other words'] : []),
+                ...(dossier.onlyInDerivedTerms ? ['not a standalone word'] : []),
               ].join(' · ')}
             </dd>
             <dt>Extended definition</dt>

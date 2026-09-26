@@ -217,7 +217,7 @@ function WordTab({
    * the person adding it knows the answer, rather than a reconstruction job later. */
   const [pos, setPos] = useState('');
   const [englishGloss, setEnglishGloss] = useState('');
-  /** Usage labels and "survives only inside other words" (0029). Asked on BOTH branches, unlike pos:
+  /** Usage labels and "not a standalone word" (0029/0030). Asked on BOTH branches, unlike pos:
    * a cited word's pin says what part of speech upstream files it under, but nothing about whether
    * it is obsolete - that is ours to say, and saying it here saves a correction vote later. */
   const [usageLabels, setUsageLabels] = useState<string[]>([]);
@@ -360,7 +360,7 @@ function WordTab({
 
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
   /** The part of speech this word will resolve to: the one typed here off-path, else the cited
-   * etymology's own. What decides whether "survives only inside other words" can apply. */
+   * etymology's own. What decides whether "not a standalone word" is fixed (an affix) or asked. */
   const effectivePos = offPath ? pos || null : (selected?.pos ?? null);
   const citable = offPath ? Boolean(exemptReason.trim()) : Boolean(selected?.entryId);
 

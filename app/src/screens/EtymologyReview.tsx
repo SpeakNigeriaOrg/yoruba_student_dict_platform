@@ -701,11 +701,10 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     (proposalIds.length !== onRecord.length || proposalIds.some((id, i) => id !== onRecord[i].wordId));
   /** Any proposal is offered, including a one-part one.
    *
-   * A one-part proposal (`ìlà → là`, `ọba → ba`) is usually a PARTIAL etymology: Wiktionary says
-   * `ì- + là`, and ingest drops the prefix because a bound morpheme is not a dictionary word. This
-   * screen used to refuse those ("a word is not made of one word"), which threw away exactly the
-   * link worth recording - ìlà comes from là - and discouraged recording partial etymologies at
-   * all. Wiktionary's prose, shown below, carries the rest. */
+   * This screen used to refuse a one-part proposal ("a word is not made of one word"). Those were
+   * mostly `ì- + là` with the prefix stripped at ingest; since 0031 ingest keeps affixes, so ìlà
+   * proposes both parts. A one-part proposal can still happen, and a partial etymology is still
+   * worth recording - see acceptResolvedParts. */
   const hasProposal = (review?.componentsProposal.length ?? 0) > 0;
   /** Parts Wiktionary names that we hold no word for. `abo adìyẹ` is the live example: `adìyẹ`
    * was not in the dictionary, so "Accept proposed components" could only ever answer "Can't

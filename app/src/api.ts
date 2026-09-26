@@ -539,7 +539,7 @@ export interface ApplyEntryDecisionInput {
    * which identifies nothing when several etymologies share it), this is what
    * actually gets cited. */
   senseEntryId?: string;
-  /** Part of speech, usage labels, and "survives only inside other words" (0029). Absent or
+  /** Part of speech, usage labels, and "not a standalone word" (0029/0030). Absent or
    * 'confirm' asserts what is on record; 'set' asserts the value alongside. */
   posAction?: 'confirm' | 'set';
   pos?: string;
@@ -596,7 +596,7 @@ export type UpstreamCitationInput = { entryId: string } | { exemptReason: string
  * the locally composed phrase. A cited entry leaves them absent, and the generator reads
  * pin.pos / pin.glosses instead. */
 export interface PublicationFields {
-  /** Usage labels and "survives only inside other words" (0029) - unlike the three overrides
+  /** Usage labels and "not a standalone word" (0029/0030) - unlike the three overrides
    * here, sent for a cited entry too: no pin carries them. Absent means none. */
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;

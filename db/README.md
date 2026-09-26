@@ -82,6 +82,35 @@ is the statement — it just isn't needed for the legacy data:
 update speakers set user_id = '<new-user-id>' where user_id = '<old-user-id>';
 ```
 
+## After 0029-0031: usage labels, "not a standalone word", and affixes as entries
+
+These three change what an entry-axis vote asserts and what the Wiktionary tables hold, so each has
+a follow-up. In production they ran in this order (2026-09-22 to 2026-09-26):
+
+1. **Migrate, then deploy.** The code reads the new columns, so the migration goes first; the
+   columns are additive with defaults, so the code already deployed keeps working in between.
+2. **`node scripts/backfillEntryUsageFields.mjs` (dry run), then `--apply`.** One script, two
+   repairs, both idempotent. *extend* (after 0029): votes and decisions stored before 0029 gain the
+   part of speech, usage labels and flag that fingerprints now end with - exact, because pos was not
+   editable before 0029. *affix_flag* (after 0030): votes that asserted an affix under 0029, when the
+   flag was forced off, get it turned on. Unrepaired, an old vote and a new one confirming the same
+   word read as contested. Also exposed as `POST /api/maintenance/entry-usage-fields`.
+3. **Re-ingest (0031).** `kaikki_component_candidates` gains each part's template gloss and candidate
+   entries, and bound morphemes (`ì-`, `oní-`) are kept as parts; none of that exists until ingest
+   runs again. `ingest/`'s runner pulls the LATEST kaikki-yoruba release by default, which also brings
+   in upstream edits - to add only the new detail, re-ingest the release production already holds,
+   found by matching `kaikki_ingestion_runs.content_hash` against each release's `metadata.json`
+   (`node dist/run.js path/to/entries.json path/to/metadata.json`). Production used `build-9`.
+4. **`node scripts/seedAffixEntries.mjs --by <email>` (dry run), then `--apply`.** Creates every affix
+   Wiktionary has an entry for (cited) and every affix used as an etymology part without one
+   (exempt, glossed with the gloss its etymology templates most often give it). `--skip "a-,b-"`
+   leaves spellings out; production skipped `oni-` (a toneless one-off, almost certainly `oní-`) and
+   `ị̀-` (one use, no gloss). Idempotent: forms and entries already in the dictionary are skipped.
+
+`golden_record.only_in_derived_terms` is now the one "not a standalone word" field: always true for
+an affix, always false for a character, otherwise the reviewer's call (0030,
+`shared/src/partsOfSpeech.ts`). The game export leaves out every entry that is not standalone.
+
 ## After 0019: the app asks, and nobody has been asked yet
 
 `0019_contribution_grants.sql` adds `contribution_grants`, the `grant_release_state` function, and

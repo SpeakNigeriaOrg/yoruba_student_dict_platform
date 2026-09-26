@@ -24,13 +24,24 @@ this project's own curriculum vocab words (e.g. `ibùsùn` "bed", `Agẹmọ`)
 were missing genuine multi-word component structure before this; both now
 resolve correctly.
 
+**Affixes are kept, with what Wiktionary says about each part (0031).**
+`deriveComponentCandidates` no longer drops bound morphemes: `ìlà` proposes `ì- + là` rather than
+a one-part "breakdown" that misdescribed it, now that affixes are dictionary entries (0030). Each
+part also carries the gloss the etymology template gives it (which sense it means - `t2=to cut, to
+divide` for `là`) and kaikki-yoruba's candidate entry ids, stored in
+`kaikki_component_candidates.gloss` / `candidate_entry_ids`; the etymology screen lists those
+candidates for a reviewer to pick from. kaikki-yoruba never looks bound forms up, so
+`resolveAffixCandidates` points each affix part at Wiktionary's own affix entry by exact spelling.
+
 ## Pipeline
 
 ```
 kaikki-yoruba's entries.json
   -> deriveSenses.ts               (per-entry: standardForms, glosses,
-                                     componentCandidates (forward-only),
-                                     altOfTargets, index keys)
+                                     componentCandidates (forward-only, affixes
+                                     included, each with gloss + entry ids),
+                                     altOfTargets, index keys; then affix parts
+                                     are pointed at Wiktionary's affix entries)
   -> synthesizeComponentReciprocals.ts  (cross-entry: adds the reverse
                                      "part -> compound" direction Kaikki's
                                      etymology templates never give)

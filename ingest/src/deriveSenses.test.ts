@@ -119,7 +119,7 @@ describe('deriveComponentCandidateForms', () => {
   // Which template names count, and per-morpheme bound/free filtering, now
   // live upstream in kaikki-yoruba's own extractEtymologyMorphemes (see its
   // normalizer.test.mjs) - this function's only remaining job is reading
-  // that pre-filtered list and excluding bound morphemes.
+  // that pre-filtered list. Bound morphemes are kept since 0031.
   it('extracts free (non-bound) morpheme forms, preserving order', () => {
     const entry = makeEntry({
       etymologyMorphemes: [

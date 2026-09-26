@@ -567,6 +567,36 @@ writing anything, and **warn rather than drop** - our spelling and definition ar
 human-validated and stay publishable when Wiktionary copy-edits a gloss. Pass
 `--strict-upstream` to make drift a hard stop instead.
 
+## A volunteer works with the word as they said it is
+
+An answer on the entry axis is one vote, and `golden_record` changes only when a curator confirms
+it. That is the platform's bookkeeping, not the volunteer's: someone who corrected a spelling has
+told us what the word is, and every screen they then work on for that word shows it their way.
+`src/myEntryAnswer.ts` loads the caller's active entry answer - spelling, syllables, definition,
+part of speech and usage - whenever it differs from the record (NFC-compared), and it is served as
+`myProposedEntry` on the entry and etymology reviews and folded into `GET /assignments/me`. The app
+shows it as the word, with a one-line "you changed this word's spelling (was ...)" marker.
+
+What follows from that, and what does not:
+
+- An example is stamped with the spelling its author was shown (`submitExample.ts`), as a recording
+  already is - so it does not go stale at the moment their correction is adopted.
+- The per-user audio status and a volunteer's own recording badges compare against their word
+  (`reviewShared.ts`, `listUtterances.ts`), so recording their own correction is not a mismatch.
+- The record itself, every publish rule, and the curator all-speakers recordings view still compare
+  against `golden_record`: a recording of an unconfirmed spelling does not publish.
+
+## Part of speech and usage are part of the entry claim
+
+Since 0029 an entry vote also asserts the part of speech (resolved: the 0018 override, else the pin),
+usage labels (a closed list of labels Wiktionary defines - `shared/src/usageLabels.ts`) and "not a
+standalone word" (`only_in_derived_terms`). `src/entryUsage.ts` reads and writes them for all three
+paths - submitting, a direct decision, confirming a consensus - and writes pos as whatever override
+makes the record resolve to what was voted, after any re-citation in the same decision. Since 0030
+the flag is fixed by the part of speech where that decides it (an affix: always; a letter: never),
+and the game export leaves out every entry that is not standalone. See `db/README.md`'s "After
+0029-0031" for the backfill and seeding that went with them.
+
 ## Structure
 
 - `src/db.ts` - a lazily-created `pg.Pool` per Functions host instance, plus

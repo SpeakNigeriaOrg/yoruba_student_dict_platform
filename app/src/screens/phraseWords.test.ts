@@ -66,8 +66,8 @@ describe('splitPhrase', () => {
   });
 
   it('gives a bound affix an empty trailing piece rather than losing its hyphen', () => {
-    // `oní-` and `-kí-` are morphemes rather than words and should not become entries, but the
-    // splitter must not mangle one if it meets it.
+    // `oní-` and `-kí-` are affixes - entries since 0030, never phrases - and the splitter must
+    // not mangle one when it meets it.
     const { words } = splitPhrase('oní-');
     expect(words.map((w) => w.core)).toEqual(['oní', '']);
     expect(words[1].syllables).toBeNull();

@@ -25,7 +25,7 @@ describe('usage in the claim views', () => {
   it('shows a claim\'s part of speech, labels and flag on one line', () => {
     render(<OutcomeSummary outcome={{ ...base, pos: 'verb', usageLabels: ['obsolete'], onlyInDerivedTerms: true }} />);
     expect(screen.getByLabelText('Part of speech and usage')).toHaveTextContent(
-      'verb · obsolete · survives only inside other words',
+      'verb · obsolete · not a standalone word',
     );
   });
 

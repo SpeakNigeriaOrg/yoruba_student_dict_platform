@@ -157,7 +157,8 @@ export interface EntryOutcome {
  *   - the cited etymology changes only when the contributor names a different
  *     one; otherwise they are asserting the one already on record.
  *   - pos, usage labels and the only-in-derived-terms flag change only on 'set'.
- *     The flag is forced false for a part of speech it cannot apply to.
+ *     The flag is forced where the part of speech decides it: on for an affix,
+ *     off for a letter (resolveOnlyInDerivedTerms, 0030).
  */
 export function resolveEntryOutcome(observed: EntryObservedState, input: EntryContributionInput): EntryOutcome {
   const respelled = input.action === 'respell' && input.newDisplayText;

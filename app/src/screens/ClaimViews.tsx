@@ -87,8 +87,8 @@ function ComponentList({ components, labels }: { components: string[]; labels: R
   );
 }
 
-/** Part of speech, usage labels and the only-in-derived-terms flag (0029), on one line:
- * "verb · obsolete · survives only inside other words".
+/** Part of speech, usage labels and the not-a-standalone-word flag (0029/0030), on one line:
+ * "verb · obsolete · not a standalone word".
  *
  * Renders nothing for a claim that predates those fields and has not been backfilled - it
  * asserted nothing about them, and "(no part of speech)" would put words in its mouth. */
@@ -105,7 +105,7 @@ export function UsageLine({
   const parts = [
     pos ?? 'no part of speech',
     ...(usageLabels ?? []),
-    ...(onlyInDerivedTerms ? ['survives only inside other words'] : []),
+    ...(onlyInDerivedTerms ? ['not a standalone word'] : []),
   ];
   return (
     <div className="field-note" aria-label="Part of speech and usage">
@@ -167,7 +167,7 @@ const FIELD_LABELS: Record<ClaimField, string> = {
   etymology: 'which etymology it cites',
   partOfSpeech: 'the part of speech',
   usageLabels: 'the usage labels',
-  onlyInDerivedTerms: 'whether it survives only inside other words',
+  onlyInDerivedTerms: 'whether it is a standalone word',
   components: 'the components',
 };
 

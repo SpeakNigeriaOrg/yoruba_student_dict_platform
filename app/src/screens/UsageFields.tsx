@@ -1,12 +1,12 @@
 // UsageFields.tsx
 //
-// The part of speech, usage labels and "survives only inside other words" questions on the entry
-// review (0029). Controlled: EntryReview owns the state and turns it into the confirm/set actions
-// it submits, the same way it already does for the definition.
+// The part of speech, usage labels and "not a standalone word" questions on the entry review
+// (0029/0030). Controlled: EntryReview owns the state and turns it into the confirm/set actions it
+// submits, the same way it already does for the definition.
 //
 // UsageCheckboxes (the labels and the flag, without the part of speech) is also rendered by
-// AddWord, so a word can be created already saying it is obsolete and survives only inside other
-// words - rather than created bare and corrected by a second vote straight afterwards.
+// AddWord, so a word can be created already saying it is obsolete and not a standalone word -
+// rather than created bare and corrected by a second vote straight afterwards.
 //
 // Why these three sit together: the case that prompted them is lá "to be big", which had been
 // filed as a particle only because there was nowhere to say what is actually true of it - that it
@@ -57,9 +57,10 @@ export function usageActions(
   };
 }
 
-/** The usage-label checkboxes and the "survives only inside other words" box, for whatever part of
- * speech the caller has. The flag box is hidden when that pos rules it out; callers must also drop
- * a tick made before the pos changed (usageActions does, and AddWord does at submit). */
+/** The usage-label checkboxes and the "not a standalone word" box, for whatever part of speech the
+ * caller has. The box is the reviewer's to tick for an ordinary word, shown ticked and locked for an
+ * affix (always not standalone), and absent for a letter (never) - see partsOfSpeech.ts. What is
+ * submitted is resolved the same way (usageActions; AddWord sends only an ordinary word's tick). */
 export function UsageCheckboxes({
   usageLabels,
   onlyInDerivedTerms,
@@ -108,7 +109,11 @@ export function UsageCheckboxes({
             <input type="checkbox" checked disabled readOnly />
             <span>Not a standalone word</span>
           </label>
-          <p className="field-note">An affix is never a standalone word, so this is always ticked for one.</p>
+          <p className="field-note">
+            An affix (prefix, interfix or suffix) is never a standalone word, so this is always ticked for one. Entries
+            that are not standalone words are left out of the game.
+          </p>
+          <DerivedTermsNote derivedTerms={derivedTerms} flagged />
         </div>
       ) : (
         <div className="usage-fieldset">
@@ -122,22 +127,34 @@ export function UsageCheckboxes({
           </label>
           <p className="field-note">
             For a word (verb, noun, particle...) that no longer appears as a separate word in sentences, only inside
-            other words. Not for words that simply cannot stand alone as a whole sentence, such as kò or ń. If it never
-            was a word, only something attached to other words, choose Prefix or Suffix instead.
+            other words - like lá &quot;to be big&quot;, in ńlá. Not for words that simply cannot stand alone as a
+            whole sentence, such as kò or ń. Something that never was a word, only attached to other words, is an
+            affix: set the part of speech to Prefix, Interfix or Suffix and this is ticked for you. Entries that are
+            not standalone words are left out of the game.
           </p>
-          {derivedTerms === undefined ? null : derivedTerms.length > 0 ? (
-            <p className="field-note" aria-label="Derived terms">
-              Words in this dictionary built from it: {derivedTerms.map((d) => d.displayText).join(', ')}
-            </p>
-          ) : onlyInDerivedTerms ? (
-            <p className="field-note" aria-label="Derived terms">
-              No word in this dictionary lists this one as a part yet, so there is nothing to show as an example.
-            </p>
-          ) : null}
+          <DerivedTermsNote derivedTerms={derivedTerms} flagged={onlyInDerivedTerms} />
         </div>
       )}
     </>
   );
+}
+
+/** The words this dictionary builds from the entry - its evidence for being a part of other words.
+ * Shown for affixes too (ì- → ìlà, ìjà...), where it is most of what there is to say. */
+function DerivedTermsNote({ derivedTerms, flagged }: { derivedTerms?: { displayText: string }[]; flagged: boolean }) {
+  if (derivedTerms === undefined) return null;
+  if (derivedTerms.length > 0) {
+    return (
+      <p className="field-note" aria-label="Derived terms">
+        Words in this dictionary built from it: {derivedTerms.map((d) => d.displayText).join(', ')}
+      </p>
+    );
+  }
+  return flagged ? (
+    <p className="field-note" aria-label="Derived terms">
+      No word in this dictionary lists this one as a part yet, so there is nothing to show as an example.
+    </p>
+  ) : null;
 }
 
 export function UsageFields({
