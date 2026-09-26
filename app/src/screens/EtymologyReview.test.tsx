@@ -561,7 +561,7 @@ describe('EtymologyReview', () => {
       await waitFor(() => screen.getByText(spelling));
 
       const note = screen.getByLabelText('Kaikki etymology note');
-      expect(note).toHaveTextContent('Wiktionary also describes where this word comes from');
+      expect(note).toHaveTextContent("Wiktionary's etymology:");
       expect(note).toHaveTextContent('Clipping of an older form.');
       expect(note.className).not.toContain('warning-banner');
       cleanup();
@@ -684,37 +684,58 @@ describe('EtymologyReview', () => {
   });
 
   // -------------------------------------------------------------------------
-  // A single root is not a decomposition
+  // A one-part proposal is a partial etymology worth recording
   // -------------------------------------------------------------------------
 
-  it('offers nothing to accept when Wiktionary derives the word from one root', async () => {
-    // 9 of the 21 words with any proposal have exactly one candidate (`ọba → ba`, `ẹwà → wà`).
-    // Accepting one would assert a word is composed of ONE word.
+  it('offers a one-part proposal for acceptance - ìlà comes from là, even with ì- left out', async () => {
+    // Wiktionary says ì- + là; ingest drops the bound prefix, so only là arrives. Refusing it
+    // ("a word is not made of one word") threw away the one link worth keeping.
     const fixture = {
       ...etymologyFixture,
       components: [],
       componentsProposal: [
-        { kaikkiForm: 'ba', wordId: 'ba_word', ambiguous: false, possibleMatches: [], previewGlosses: ['to hide'] },
+        { kaikkiForm: 'là', wordId: 'la_cut', ambiguous: false, possibleMatches: [], possibleMatchWords: [], previewGlosses: ['to cut'] },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => fixture });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
+    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
+
+    expect(screen.queryByLabelText('Single root note')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Accept proposed components' }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
+      expect(JSON.parse((post![1] as RequestInit).body as string)).toMatchObject({
+        componentsAction: 'accept_proposed',
+        components: ['la_cut'],
+      });
+    });
+  });
+
+  it('names the word we hold under the same letters when only the tones differ', async () => {
+    const fixture = {
+      ...etymologyFixture,
+      components: [],
+      componentsProposal: [
+        {
+          kaikkiForm: 'là',
+          wordId: null,
+          ambiguous: false,
+          possibleMatches: ['la_be_big'],
+          possibleMatchWords: [{ wordId: 'la_be_big', displayText: 'lá', definition: 'to be big' }],
+          previewGlosses: [],
+        },
       ],
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
-    render(<EtymologyReview wordId="oba_king" isCurator={false} />);
+    render(<EtymologyReview wordId="ila_line" isCurator={false} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.queryByRole('button', { name: /Accept proposed components/ })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Single root note')).toHaveTextContent('not a breakdown into parts');
-    // The honest answers remain available.
-    expect(screen.getByRole('button', { name: 'It has no parts' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'It does have parts' })).toBeInTheDocument();
-  });
-
-  it('still offers accept when there are two or more parts', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => etymologyFixture }));
-    render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={false} />);
-    await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
-
-    expect(screen.getByRole('button', { name: 'Accept proposed components' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Single root note')).not.toBeInTheDocument();
+    const list = screen.getByRole('list', { name: 'Proposed components' });
+    expect(list).toHaveTextContent('là — not in the dictionary; we have lá (to be big)');
+    expect(list).not.toHaveTextContent('may or may not be the same word');
   });
 
   // -------------------------------------------------------------------------

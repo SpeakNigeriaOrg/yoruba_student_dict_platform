@@ -43,6 +43,14 @@ import { loadMyEntryAnswer, type MyEntryAnswer } from '../myEntryAnswer.js';
 /** Deliberately NOT `extends ComponentsAxisFieldsResult`: that type carries the reverse-direction
  * fields, and spreading it is how they reached this response in the first place. Listing what the
  * screen actually uses means a field added there cannot silently arrive here. */
+/** A proposal item plus the words behind its possibleMatches - the ones we hold under the same
+ * letters with different tone marks - so the screen can name them ("we have lá, to be big")
+ * instead of gesturing at an unnamed near-miss. Added here rather than in shared's resolver,
+ * whose output is pinned field-for-field to the Python engine's by the parity tests. */
+export interface ProposalItemWithNearMatches extends ComponentsProposalItem {
+  possibleMatchWords: { wordId: string; displayText: string; definition: string | null }[];
+}
+
 export interface EtymologyReviewResult {
   wordId: string;
   displayText: string;
@@ -59,7 +67,7 @@ export interface EtymologyReviewResult {
    * of displayText / definition above. See myEntryAnswer.ts. The Kaikki lookup and component
    * proposal still key on the record's spelling: they are about which etymology the word is. */
   myProposedEntry: MyEntryAnswer | null;
-  componentsProposal: ComponentsProposalItem[];
+  componentsProposal: ProposalItemWithNearMatches[];
   components: string[];
   /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
    * collapsed to an empty list.
@@ -153,7 +161,14 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     etymologyText: diagnosis.matchedEtymologyText ?? null,
     // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
     // usedAsComponentOf stop here.
-    componentsProposal: fields.componentsProposal,
+    componentsProposal: fields.componentsProposal.map((item) => ({
+      ...item,
+      possibleMatchWords: item.possibleMatches.map((id) => ({
+        wordId: id,
+        displayText: vocab[id]?.displayText ?? id,
+        definition: vocab[id]?.definition ?? null,
+      })),
+    })),
     components: fields.components,
     // The self-reference is not a component; see the field's own note. vocab is already loaded, so
     // resolving each id to its spelling costs nothing extra.

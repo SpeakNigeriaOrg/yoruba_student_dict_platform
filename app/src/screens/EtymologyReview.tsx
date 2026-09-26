@@ -16,7 +16,7 @@
 // whatever the automatic proposal suggested.
 
 import { useEffect, useState } from 'react';
-import type { ComponentsProposalItem, KaikkiSearchResult } from '@yoruba-student-dict-platform/shared';
+import type { KaikkiSearchResult } from '@yoruba-student-dict-platform/shared';
 import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import {
   createWord,
@@ -320,7 +320,7 @@ function ProposalItemRow({
   onAdded,
   isCurator,
 }: {
-  item: ComponentsProposalItem;
+  item: EtymologyReviewResult['componentsProposal'][number];
   onAdded: (wordId: string) => void;
   isCurator: boolean;
 }) {
@@ -336,7 +336,20 @@ function ProposalItemRow({
       ) : item.ambiguous ? (
         <span> — more than one word in the dictionary is spelled this way, so which one is meant is unclear</span>
       ) : item.possibleMatches.length > 0 ? (
-        <span> — the dictionary has this spelling with different tone marks, which may or may not be the same word</span>
+        // Our dictionary holds this spelling only with other tone marks. Named, because an unnamed
+        // near-miss ("the dictionary has this spelling with different tone marks...") read as a
+        // claim about Wiktionary and gave nothing to check it against.
+        <span>
+          {' '}
+          — not in the dictionary; we have{' '}
+          {(item.possibleMatchWords ?? []).map((w, i) => (
+            <span key={w.wordId}>
+              {i > 0 ? ', ' : ''}
+              <strong>{w.displayText}</strong>
+              {w.definition ? ` (${w.definition})` : ''}
+            </span>
+          ))}
+        </span>
       ) : (
         <span> — not in the dictionary yet</span>
       )}
@@ -597,17 +610,14 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     hasRealExistingComponents &&
     proposalIds !== null &&
     (proposalIds.length !== onRecord.length || proposalIds.some((id, i) => id !== onRecord[i].wordId));
-  /** A one-part "breakdown" is not a breakdown.
+  /** Any proposal is offered, including a one-part one.
    *
-   * 9 of the 21 words in the dictionary that have any proposal at all have exactly one candidate -
-   * `ọba → ba`, `ẹwà → wà`, `ọgbọ́n → gbọ́n`. Accepting one asserts that a word is composed of ONE
-   * word, which is a morphological derivation (a prefix on a verb root), not a decomposition into
-   * dictionary entries. Wiktionary's own prose says that better, and it is already on screen below.
-   *
-   * So it is not offered as a breakdown to accept - the same rule this screen already applies to
-   * "accept" with nothing to accept and "reject" with nothing to reject. */
-  const hasProposal = (review?.componentsProposal.length ?? 0) > 1;
-  const singleRootProposal = review?.componentsProposal.length === 1 ? review.componentsProposal[0] : null;
+   * A one-part proposal (`ìlà → là`, `ọba → ba`) is usually a PARTIAL etymology: Wiktionary says
+   * `ì- + là`, and ingest drops the prefix because a bound morpheme is not a dictionary word. This
+   * screen used to refuse those ("a word is not made of one word"), which threw away exactly the
+   * link worth recording - ìlà comes from là - and discouraged recording partial etymologies at
+   * all. Wiktionary's prose, shown below, carries the rest. */
+  const hasProposal = (review?.componentsProposal.length ?? 0) > 0;
   /** Parts Wiktionary names that we hold no word for. `abo adìyẹ` is the live example: `adìyẹ`
    * was not in the dictionary, so "Accept proposed components" could only ever answer "Can't
    * accept yet" - the accept path submits word_ids, and one of them did not exist. Offering an
@@ -747,20 +757,12 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               </p>
             </div>
           ) : null}
-          {/* Shown, but not as something to accept - see hasProposal. */}
-          {singleRootProposal ? (
-            <p className="field-note" aria-label="Single root note">
-              Wiktionary derives this word from <strong>{singleRootProposal.kaikkiForm}</strong> alone. That is where it
-              comes from historically, not a breakdown into parts — a word is not made <em>of</em> one word — so there is
-              nothing to accept here. If it really does break into two or more words, say so below.
-            </p>
-          ) : null}
         </>
       )}
 
       {review.etymologyText && !isPhrase && !(decidedAndSettled && !showReconsider) ? (
         <div aria-label="Kaikki etymology note">
-          <p>Wiktionary also describes where this word comes from, in prose:</p>
+          <p>Wiktionary&apos;s etymology:</p>
           <p><em>{review.etymologyText}</em></p>
         </div>
       ) : null}

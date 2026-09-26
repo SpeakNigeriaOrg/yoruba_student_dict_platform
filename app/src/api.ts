@@ -411,7 +411,10 @@ export interface EtymologyReviewResult {
   entryType: 'phrase' | null;
   /** See MyEntryAnswer - shown in place of displayText / definition above. */
   myProposedEntry: MyEntryAnswer | null;
-  componentsProposal: ComponentsProposalItem[];
+  /** possibleMatchWords: see getEtymologyReview.ts's ProposalItemWithNearMatches. */
+  componentsProposal: (ComponentsProposalItem & {
+    possibleMatchWords?: { wordId: string; displayText: string; definition: string | null }[];
+  })[];
   components: string[];
   /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
    * exists so the screen shows words rather than word_ids, and tests "do we hold a breakdown?"
