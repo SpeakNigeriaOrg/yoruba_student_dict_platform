@@ -1319,3 +1319,44 @@ describe("the reviewer's own answer is the word they work with", () => {
     expect(screen.queryByLabelText('Your change')).not.toBeInTheDocument();
   });
 });
+
+describe('the extended definition can be corrected on the entry', () => {
+  // Reported: a typo fixed in the student definition stayed in the extended definition, which
+  // could not be edited anywhere after the word was created - not even by a curator.
+  const UNCITED_WITH_GLOSS = { ...entryUncitedFixture, usage: { ...entryUncitedFixture.usage, englishGloss: 'drum' } };
+
+  it('offers it for a word with no Wiktionary entry, and it follows the student definition', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch(UNCITED_WITH_GLOSS);
+    render(<EntryReview wordId="w" isCurator={false} />);
+    await waitFor(() => expect(screen.getByLabelText('Extended definition')).toHaveValue('drum'));
+
+    await user.clear(screen.getByLabelText('Student definition'));
+    await user.type(screen.getByLabelText('Student definition'), 'a talking drum');
+    expect(screen.getByLabelText('Extended definition')).toHaveValue('a talking drum');
+
+    await user.click(screen.getByRole('button', { name: 'Record my answer' }));
+    await waitFor(() =>
+      expect(postedBody(fetchMock)).toMatchObject({ englishGlossAction: 'set', englishGloss: 'a talking drum' }),
+    );
+  });
+
+  it('stops following once written separately, and offers the way back', async () => {
+    const user = userEvent.setup();
+    mockFetch(UNCITED_WITH_GLOSS);
+    render(<EntryReview wordId="w" isCurator={false} />);
+    await waitFor(() => screen.getByLabelText('Extended definition'));
+
+    await user.clear(screen.getByLabelText('Extended definition'));
+    await user.type(screen.getByLabelText('Extended definition'), 'membranophone');
+    await user.type(screen.getByLabelText('Student definition'), 's');
+    expect(screen.getByLabelText('Extended definition')).toHaveValue('membranophone');
+    await user.click(screen.getByRole('button', { name: 'Use the student definition' }));
+    expect(screen.getByLabelText('Extended definition')).toHaveValue('drums');
+  });
+
+  it('is not offered for a cited word with none of its own - Wiktionary\'s glosses stand', async () => {
+    await loaded(entryFixture);
+    expect(screen.queryByLabelText('Extended definition')).not.toBeInTheDocument();
+  });
+});

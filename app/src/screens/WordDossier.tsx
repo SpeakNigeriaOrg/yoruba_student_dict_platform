@@ -598,6 +598,7 @@ function DecideSection({ wordId, components }: { wordId: string; components: str
               definition={g.currentDefinition}
               citedEntryId={g.currentCitedEntryId}
               usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
+              englishGloss={g.currentEnglishGloss}
               components={components}
               labels={g.labels}
             />

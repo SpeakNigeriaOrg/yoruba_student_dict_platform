@@ -33,6 +33,7 @@ export interface MyEntryAnswer {
   pos?: string | null;
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  englishGloss?: string | null;
   /** The record's own values, for the marker's "on record: ..." - never for display as the word. */
   recordDisplayText: string;
   recordDefinition: string | null;
@@ -45,6 +46,7 @@ interface StoredOutcome {
   pos?: string | null;
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  englishGloss?: string | null;
 }
 
 const nfc = (s: string) => s.normalize('NFC');
@@ -72,10 +74,11 @@ export async function loadMyEntryAnswers(
     resolved_pos: string | null;
     usage_labels: string[];
     only_in_derived_terms: boolean;
+    english_gloss: string | null;
   }>(
     `select distinct on (n.word_id) n.word_id, n.resolved_value,
             g.display_text, g.syllables, g.definition,
-            coalesce(g.pos, c.pin ->> 'pos') as resolved_pos, g.usage_labels, g.only_in_derived_terms
+            coalesce(g.pos, c.pin ->> 'pos') as resolved_pos, g.usage_labels, g.only_in_derived_terms, g.english_gloss
        from contributions n
        join golden_record g on g.word_id = n.word_id
        left join upstream_citations c on c.word_id = n.word_id
@@ -93,7 +96,8 @@ export async function loadMyEntryAnswers(
     const usageChanged =
       (o.pos !== undefined && o.pos !== r.resolved_pos) ||
       (o.usageLabels !== undefined && o.usageLabels.join('|') !== r.usage_labels.join('|')) ||
-      (o.onlyInDerivedTerms !== undefined && o.onlyInDerivedTerms !== r.only_in_derived_terms);
+      (o.onlyInDerivedTerms !== undefined && o.onlyInDerivedTerms !== r.only_in_derived_terms) ||
+      (o.englishGloss !== undefined && (o.englishGloss ?? null) !== r.english_gloss);
     if (!spellingChanged && !definitionChanged && !usageChanged) continue;
 
     out.set(r.word_id, {
@@ -105,6 +109,7 @@ export async function loadMyEntryAnswers(
       ...(o.pos !== undefined ? { pos: o.pos } : {}),
       ...(o.usageLabels !== undefined ? { usageLabels: o.usageLabels } : {}),
       ...(o.onlyInDerivedTerms !== undefined ? { onlyInDerivedTerms: o.onlyInDerivedTerms } : {}),
+      ...(o.englishGloss !== undefined ? { englishGloss: o.englishGloss } : {}),
       recordDisplayText: r.display_text,
       recordDefinition: r.definition,
     });

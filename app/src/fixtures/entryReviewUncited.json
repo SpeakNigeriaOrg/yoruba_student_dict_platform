@@ -43,6 +43,7 @@
     "pinPos": null,
     "usageLabels": [],
     "onlyInDerivedTerms": false,
-    "derivedTerms": []
+    "derivedTerms": [],
+    "englishGloss": null
   }
 }

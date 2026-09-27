@@ -476,6 +476,7 @@ export interface MyEntryAnswer {
   pos?: string | null;
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  englishGloss?: string | null;
   recordDisplayText: string;
   recordDefinition: string | null;
 }
@@ -513,6 +514,8 @@ export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSpl
     pinPos: string | null;
     usageLabels: string[];
     onlyInDerivedTerms: boolean;
+    /** Our extended definition, null when none (a cited word then reads its pin's glosses). */
+    englishGloss: string | null;
     /** Words that name this one as a component - not a complete list of where it occurs. */
     derivedTerms: { wordId: string; displayText: string }[];
   };
@@ -553,6 +556,9 @@ export interface ApplyEntryDecisionInput {
   usageLabels?: string[];
   onlyInDerivedTermsAction?: 'confirm' | 'set';
   onlyInDerivedTerms?: boolean;
+  /** The extended definition (english_gloss): 'set' with blank means none of our own. */
+  englishGlossAction?: 'confirm' | 'set';
+  englishGloss?: string | null;
   note?: string;
 }
 
@@ -1196,6 +1202,7 @@ export interface ConsensusGroup {
   currentPos: string | null;
   currentUsageLabels: string[];
   currentOnlyInDerivedTerms: boolean;
+  currentEnglishGloss?: string | null;
   axis: 'entry' | 'etymology';
   decidedAt: string | null;
   decidedByEmail: string | null;

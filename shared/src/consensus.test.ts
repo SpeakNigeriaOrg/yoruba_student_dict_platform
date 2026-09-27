@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGREEMENT_THRESHOLD,
+  differingFields,
   extendLegacyEntryFingerprint,
+  fingerprintIdentity,
   fingerprintOutcome,
   setDerivedOnlyInEntryFingerprint,
   renameComponentInFingerprint,
@@ -180,6 +182,7 @@ describe('resolveEntryOutcome', () => {
       pos: null,
       usageLabels: [],
       onlyInDerivedTerms: false,
+      englishGloss: null,
     });
   });
 
@@ -357,6 +360,31 @@ describe('part of speech and usage (0029)', () => {
     const backfilled = { ...entryOutcome({ displayText: 'lá', syllables: ['lá'], definitionText: 'to be big' }), pos: 'particle', usageLabels: [], onlyInDerivedTerms: false };
     const fresh = resolveEntryOutcome(LA, { action: 'keep_ours', definitionAction: 'confirm' });
     expect(fingerprintOutcome(backfilled)).toBe(fingerprintOutcome(fresh));
+  });
+});
+
+describe('the extended definition is part of the entry claim', () => {
+  const O: EntryObservedState = { ...OBSERVED, englishGloss: 'stomach, belly' };
+
+  it("'set' replaces it, 'confirm' keeps it, and blank means none of our own", () => {
+    expect(resolveEntryOutcome(O, { englishGlossAction: 'set', englishGloss: ' the stomach ' }).englishGloss).toBe('the stomach');
+    expect(resolveEntryOutcome(O, {}).englishGloss).toBe('stomach, belly');
+    expect(resolveEntryOutcome(O, { englishGlossAction: 'set', englishGloss: '   ' }).englishGloss).toBeNull();
+  });
+
+  it('is wording, like the student definition: a difference in it alone is not an identity conflict', () => {
+    const a = entryOutcome({ englishGloss: 'the stomach' });
+    const b = entryOutcome({ englishGloss: 'the belly' });
+    expect(fingerprintOutcome(a)).not.toBe(fingerprintOutcome(b));
+    expect(fingerprintIdentity(a)).toBe(fingerprintIdentity(b));
+    expect(differingFields([a, b])).toEqual(['englishGloss']);
+  });
+
+  it('extends a fingerprint stored before it joined the claim, exactly', () => {
+    const full = fingerprintOutcome(entryOutcome({ pos: 'noun', usageLabels: [], onlyInDerivedTerms: false, englishGloss: 'the stomach' }));
+    const stored = full.split('\u001f').slice(0, 8).join('\u001f');
+    expect(extendLegacyEntryFingerprint(stored, 'noun', 'the stomach')).toBe(full);
+    expect(extendLegacyEntryFingerprint(full, 'noun', 'the stomach')).toBeNull();
   });
 });
 

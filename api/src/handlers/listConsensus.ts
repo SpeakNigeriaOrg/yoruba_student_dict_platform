@@ -74,6 +74,8 @@ export interface ConsensusGroup {
   currentPos: string | null;
   currentUsageLabels: string[];
   currentOnlyInDerivedTerms: boolean;
+  /** The record's extended definition, null when none of our own. */
+  currentEnglishGloss: string | null;
   axis: DecisionAxis;
   /** Present only once a curator has decided. */
   decidedAt: string | null;
@@ -210,6 +212,7 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       currentPos: word.resolved_pos,
       currentUsageLabels: word.usage_labels,
       currentOnlyInDerivedTerms: word.only_in_derived_terms,
+      currentEnglishGloss: word.english_gloss,
       axis,
       decidedAt: decision?.decided_at ?? null,
       decidedByEmail: decision?.email ?? null,

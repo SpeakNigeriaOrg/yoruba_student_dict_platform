@@ -329,6 +329,8 @@ export async function applyEntryDecisionInTransaction(
     usageLabels: input.usageLabelsAction === 'set' ? input.usageLabels : undefined,
     onlyInDerivedTermsAction: input.onlyInDerivedTermsAction,
     onlyInDerivedTerms: input.onlyInDerivedTermsAction === 'set' ? input.onlyInDerivedTerms : undefined,
+    englishGlossAction: input.englishGlossAction,
+    englishGloss: input.englishGlossAction === 'set' ? input.englishGloss : undefined,
   };
   // Fingerprinted with the same function contributions use, so a later
   // contribution that disagrees with this decision can be detected by equality

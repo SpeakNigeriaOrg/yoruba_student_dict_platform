@@ -168,6 +168,11 @@ export function OutcomeSummary({
           - two claims that agree on every word and disagree on which word it is - invisible. */}
       <WiktionaryEntryLine entryId={outcome.citedEntryId} labels={labels} />
       <UsageLine pos={outcome.pos} usageLabels={outcome.usageLabels} onlyInDerivedTerms={outcome.onlyInDerivedTerms} />
+      {outcome.englishGloss ? (
+        <div className="field-note" aria-label="Extended definition">
+          Extended definition: {outcome.englishGloss}
+        </div>
+      ) : null}
     </span>
   );
 }
@@ -180,6 +185,7 @@ const FIELD_LABELS: Record<ClaimField, string> = {
   partOfSpeech: 'the part of speech',
   usageLabels: 'the usage labels',
   onlyInDerivedTerms: 'whether it is a standalone word',
+  englishGloss: 'the extended definition',
   components: 'the components',
 };
 
@@ -230,6 +236,7 @@ export function CurrentRecord({
   citedEntryId,
   components,
   usage,
+  englishGloss,
   labels = NO_LABELS,
 }: {
   axis: 'entry' | 'etymology';
@@ -239,6 +246,8 @@ export function CurrentRecord({
   citedEntryId: string | null;
   /** The record's resolved part of speech and usage (0029). Entry axis only. */
   usage?: { pos: string | null; usageLabels: string[]; onlyInDerivedTerms: boolean };
+  /** The record's extended definition (entry axis). */
+  englishGloss?: string | null;
   /** Only meaningful on the etymology axis, and only where the caller holds them. */
   components?: string[];
   labels?: ConsensusLabels;
@@ -265,6 +274,11 @@ export function CurrentRecord({
             {definition ?? <em>(no definition)</em>}
             <WiktionaryEntryLine entryId={citedEntryId} labels={labels} />
             {usage ? <UsageLine {...usage} /> : null}
+            {englishGloss ? (
+              <div className="field-note" aria-label="Extended definition">
+                Extended definition: {englishGloss}
+              </div>
+            ) : null}
           </>
         )}
       </div>

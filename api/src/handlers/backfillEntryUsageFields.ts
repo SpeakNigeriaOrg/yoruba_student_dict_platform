@@ -10,6 +10,9 @@
 //    guess: before 0029 nothing could change a word's pos, so what it resolves to now is what every
 //    earlier voter saw, with no labels and the flag its part of speech implies.
 //
+//    The same repair also appends the extended definition (english_gloss) to fingerprints stored
+//    before it joined the claim - exact for the same reason: it could only be set at creation.
+//
 // 2. AFFIX FLAG (after 0030). 0030 turned the flag ON for every affix - it is never a standalone
 //    word - where 0029 had forced it off. A vote that asserted an affix pos under 0029 therefore
 //    says flag=off, and a new vote on the same word says on. Only the flag changes: it is set on
@@ -44,6 +47,8 @@ export interface UsageBackfillItem {
   pos: string | null;
   fingerprint: string;
   newFingerprint: string;
+  /** What the stored outcome gains. */
+  patch: Record<string, unknown>;
 }
 
 export interface UsageBackfillPlan {
@@ -57,17 +62,18 @@ export async function planEntryUsageBackfill(client: Queryable): Promise<UsageBa
     id: string;
     word_id: string;
     word_pos: string | null;
+    word_gloss: string | null;
     fingerprint: string;
     resolved_value: EntryOutcome | null;
   }>(
     `select 'contribution' as kind, n.contribution_id::text as id, n.word_id, n.value_fingerprint as fingerprint,
-            coalesce(g.pos, c.pin ->> 'pos') as word_pos, n.resolved_value
+            coalesce(g.pos, c.pin ->> 'pos') as word_pos, g.english_gloss as word_gloss, n.resolved_value
        from contributions n
        join golden_record g on g.word_id = n.word_id
        left join upstream_citations c on c.word_id = n.word_id
       where n.axis = 'entry' and n.value_fingerprint is not null
      union all
-     select 'decision', d.word_id, d.word_id, d.value_fingerprint, coalesce(g.pos, c.pin ->> 'pos'), null
+     select 'decision', d.word_id, d.word_id, d.value_fingerprint, coalesce(g.pos, c.pin ->> 'pos'), g.english_gloss, null
        from word_decisions d
        join golden_record g on g.word_id = d.word_id
        left join upstream_citations c on c.word_id = d.word_id
@@ -80,20 +86,27 @@ export async function planEntryUsageBackfill(client: Queryable): Promise<UsageBa
   const planned: UsageBackfillItem[] = [];
   for (const r of rows.rows) {
     const base = { kind: r.kind, id: r.id, wordId: r.word_id, fingerprint: r.fingerprint };
-    const extended = extendLegacyEntryFingerprint(r.fingerprint, r.word_pos);
+    const extended = extendLegacyEntryFingerprint(r.fingerprint, r.word_pos, r.word_gloss);
     if (extended !== null) {
-      planned.push({ ...base, repair: 'extend', pos: r.word_pos, newFingerprint: extended });
+      // A pre-0029 row gains all four fields; a 0029-era row only the extended definition.
+      const preUsage = r.fingerprint.split(String.fromCharCode(0x1f)).length === 5;
+      const patch = preUsage
+        ? { pos: r.word_pos, usageLabels: [], onlyInDerivedTerms: resolveOnlyInDerivedTerms(r.word_pos, false), englishGloss: r.word_gloss }
+        : { englishGloss: r.word_gloss };
+      planned.push({ ...base, repair: 'extend', pos: r.word_pos, newFingerprint: extended, patch });
       continue;
     }
     if (r.kind === 'contribution') {
       const o = r.resolved_value;
       if (!o || o.pos === undefined || !isAffixPartOfSpeech(o.pos) || o.onlyInDerivedTerms === true) continue;
       const fixed = fingerprintOutcome({ ...o, onlyInDerivedTerms: true });
-      if (fixed !== r.fingerprint) planned.push({ ...base, repair: 'affix_flag', pos: o.pos, newFingerprint: fixed });
+      if (fixed !== r.fingerprint) {
+        planned.push({ ...base, repair: 'affix_flag', pos: o.pos, newFingerprint: fixed, patch: { onlyInDerivedTerms: true } });
+      }
     } else if (isAffixPartOfSpeech(r.word_pos)) {
       const fixed = setDerivedOnlyInEntryFingerprint(r.fingerprint, true);
       if (fixed !== null && fixed !== r.fingerprint) {
-        planned.push({ ...base, repair: 'affix_flag', pos: r.word_pos, newFingerprint: fixed });
+        planned.push({ ...base, repair: 'affix_flag', pos: r.word_pos, newFingerprint: fixed, patch: {} });
       }
     }
   }
@@ -120,11 +133,7 @@ export async function applyEntryUsageBackfill(
 
   for (const item of batch) {
     try {
-      // What the stored outcome gains: the three fields for 'extend', just the flag for 'affix_flag'.
-      const patch =
-        item.repair === 'extend'
-          ? { pos: item.pos, usageLabels: [], onlyInDerivedTerms: resolveOnlyInDerivedTerms(item.pos, false) }
-          : { onlyInDerivedTerms: true };
+      const patch = item.patch;
       // eslint-disable-next-line no-await-in-loop
       const updated = await withTransaction(pool, (client) =>
         item.kind === 'contribution'

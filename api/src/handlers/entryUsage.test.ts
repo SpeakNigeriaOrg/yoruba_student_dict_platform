@@ -334,7 +334,7 @@ describe('backfillEntryUsageFields', () => {
     );
     const currentDecision = decision.rows[0].value_fingerprint;
     await pool.query("update word_decisions set value_fingerprint = $1 where word_id = $2 and axis = 'entry'", [
-      currentDecision.replace(/derived-only$/, 'free'),
+      (() => { const x = currentDecision.split(String.fromCharCode(0x1f)); x[7] = 'free'; return x.join(String.fromCharCode(0x1f)); })(),
       wordId,
     ]);
 
@@ -357,5 +357,51 @@ describe('backfillEntryUsageFields', () => {
     );
     expect(afterDecision.rows[0].value_fingerprint).toBe(currentDecision);
     expect((await planEntryUsageBackfill(pool)).planned.filter((p) => p.wordId === wordId)).toEqual([]);
+  });
+});
+
+describe('the extended definition (english_gloss) in the entry claim', () => {
+  it('a decision can correct it - it used to be settable only at creation', async () => {
+    const wordId = await word({ pos: 'noun' });
+    await pool.query("update golden_record set english_gloss = 'the act of cookng' where word_id = $1", [wordId]);
+    await applyEntryDecision(pool, wordId, { ...KEEP, englishGlossAction: 'set', englishGloss: 'the act of cooking' }, curator);
+    const r = await pool.query<{ english_gloss: string | null }>('select english_gloss from golden_record where word_id = $1', [wordId]);
+    expect(r.rows[0].english_gloss).toBe('the act of cooking');
+  });
+
+  it('blank means none of our own, so a cited word falls back to its pin', async () => {
+    const wordId = await word({ pos: 'noun' });
+    await pool.query("update golden_record set english_gloss = 'x' where word_id = $1", [wordId]);
+    await applyEntryDecision(pool, wordId, { ...KEEP, englishGlossAction: 'set', englishGloss: '  ' }, curator);
+    const r = await pool.query<{ english_gloss: string | null }>('select english_gloss from golden_record where word_id = $1', [wordId]);
+    expect(r.rows[0].english_gloss).toBeNull();
+  });
+
+  it('the backfill appends it to a 0029-era vote, exactly', async () => {
+    const wordId = await word({ pos: 'noun' });
+    await pool.query("update golden_record set english_gloss = 'a pot' where word_id = $1", [wordId]);
+    await submitContribution(pool, { axis: 'entry', wordId, proposedValue: KEEP }, ada);
+    const stored = await pool.query<{ contribution_id: string; value_fingerprint: string; resolved_value: Record<string, unknown> }>(
+      "select contribution_id, value_fingerprint, resolved_value from contributions where word_id = $1 and axis = 'entry'",
+      [wordId],
+    );
+    const { contribution_id: id, value_fingerprint: current, resolved_value: outcome } = stored.rows[0];
+    // Rewind to how it was stored before the extended definition joined the claim: 8 fields.
+    const { englishGloss: _g, ...older } = outcome;
+    await pool.query('update contributions set value_fingerprint = $1, resolved_value = $2 where contribution_id = $3', [
+      current.split(String.fromCharCode(0x1f)).slice(0, 8).join(String.fromCharCode(0x1f)),
+      older,
+      id,
+    ]);
+    const plan = await planEntryUsageBackfill(pool);
+    const mine = { planned: plan.planned.filter((p) => p.wordId === wordId) };
+    expect(mine.planned.map((p) => p.repair)).toEqual(['extend']);
+    await applyEntryUsageBackfill(pool, mine);
+    const after = await pool.query<{ value_fingerprint: string; resolved_value: Record<string, unknown> }>(
+      'select value_fingerprint, resolved_value from contributions where contribution_id = $1',
+      [id],
+    );
+    expect(after.rows[0].value_fingerprint).toBe(current);
+    expect(after.rows[0].resolved_value).toMatchObject({ englishGloss: 'a pot' });
   });
 });

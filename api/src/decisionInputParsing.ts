@@ -53,6 +53,10 @@ export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionI
   if (b.onlyInDerivedTerms !== undefined && typeof b.onlyInDerivedTerms !== 'boolean') {
     throw new Error('onlyInDerivedTerms must be a boolean if provided');
   }
+  const englishGlossAction = setOrConfirm('englishGlossAction');
+  if (b.englishGloss !== undefined && b.englishGloss !== null && typeof b.englishGloss !== 'string') {
+    throw new Error('englishGloss must be text or null if provided');
+  }
   return {
     // Whether a pos or label is in the vocabulary is a business rule, checked by
     // validateEntryUsageInput on both the decision and the contribution path.
@@ -62,6 +66,8 @@ export function parseEntryInput(b: Record<string, unknown>): ApplyEntryDecisionI
     usageLabels: b.usageLabels as string[] | undefined,
     onlyInDerivedTermsAction,
     onlyInDerivedTerms: b.onlyInDerivedTerms as boolean | undefined,
+    englishGlossAction,
+    englishGloss: b.englishGloss as string | null | undefined,
     action,
     candidateForm: typeof b.candidateForm === 'string' ? b.candidateForm : undefined,
     newDisplayText: typeof b.newDisplayText === 'string' ? b.newDisplayText : undefined,

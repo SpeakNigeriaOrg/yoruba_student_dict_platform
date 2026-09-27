@@ -213,6 +213,11 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   const [definitionText, setDefinitionText] = useState('');
   const [definitionSourceForm, setDefinitionSourceForm] = useState<string | undefined>(undefined);
   const [note, setNote] = useState('');
+  /** The extended definition - the wording that would go to Wiktionary - and whether it is still
+   * following the student definition (as on Add Word: fixing a typo in one fixes both, until the
+   * two are deliberately made different). */
+  const [englishGloss, setEnglishGloss] = useState('');
+  const [glossFollows, setGlossFollows] = useState(true);
   /** Part of speech, usage labels and the only-in-derived-terms flag (0029), seeded from the record. */
   const [usageDraft, setUsageDraft] = useState<UsageDraft | null>(null);
   /** Curator-only escape hatch, collapsed by default. Re-linking or overriding
@@ -272,9 +277,13 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         } else if (splitPhrase(text).words.some((w) => w.syllables !== null)) {
           setPhraseText(text);
         }
-        setDefinitionText(
-          mine?.definitionChanged ? (mine.definition ?? '') : (result.definitionCurrent ?? result.definitionProposed ?? ''),
-        );
+        const definitionSeed = mine?.definitionChanged
+          ? (mine.definition ?? '')
+          : (result.definitionCurrent ?? result.definitionProposed ?? '');
+        setDefinitionText(definitionSeed);
+        const glossSeed = (mine?.englishGloss !== undefined ? mine.englishGloss : result.usage.englishGloss) ?? '';
+        setEnglishGloss(glossSeed);
+        setGlossFollows(glossSeed.trim() === '' || glossSeed.trim() === definitionSeed.trim());
         setDefinitionSourceForm(result.definitionSourceForm ?? undefined);
         setNote(result.note ?? '');
         const recordUsage = usageDraftFrom(result.usage);
@@ -341,6 +350,9 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         : { definitionAction: 'custom' as const, definitionText: definitionText.trim() }),
       ...(definitionSourceForm ? { definitionSourceForm } : {}),
       ...(usageDraft ? usageActions(usageDraft, review.usage) : {}),
+      ...(showGloss && englishGloss.trim() !== (review.usage.englishGloss ?? '').trim()
+        ? { englishGlossAction: 'set' as const, englishGloss: englishGloss.trim() || null }
+        : { englishGlossAction: 'confirm' as const }),
       ...(note ? { note } : {}),
     };
 
@@ -384,6 +396,9 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
   /** The word as this reviewer has said it is - their answer, else the record. */
   const shownDisplayText = review.myProposedEntry?.spellingChanged ? review.myProposedEntry.displayText : review.displayText;
   const proposed = syllables ? syllables.join('') : (phraseText?.trim() ?? shownDisplayText);
+  /** The extended definition is ours to write when there is no Wiktionary entry to read it from,
+   * or when we already hold one of our own - otherwise the pin's glosses stand. */
+  const showGloss = !review.citation?.entryId || review.usage.englishGloss !== null;
   // The specific kind of difference, not a bare "differs". classifyToneMatch already
   // separates a tone disagreement from a letters one, and that distinction is the
   // whole point of this screen - it was previously computed and thrown away.
@@ -599,13 +614,49 @@ export function EntryReview({ wordId, isCurator, onDecided, showAxisChips = true
         <textarea
           id="entry-definition-field"
           value={definitionText}
-          onChange={(e) => setDefinitionText(e.target.value)}
+          onChange={(e) => {
+            setDefinitionText(e.target.value);
+            if (showGloss && glossFollows) setEnglishGloss(e.target.value);
+          }}
         />
       </div>
       <p className="field-note">
         Plain wording a student will understand. Simplifying Wiktionary's wording is expected - it is a simplification,
         not a correction.
       </p>
+
+      {showGloss ? (
+        <div className="field">
+          <label htmlFor="entry-gloss-field">Extended definition</label>
+          <input
+            id="entry-gloss-field"
+            type="text"
+            value={englishGloss}
+            onChange={(e) => {
+              setEnglishGloss(e.target.value);
+              setGlossFollows(false);
+            }}
+          />
+          <p className="field-note">
+            Ordinary dictionary wording, for the entry we would send to Wiktionary. It follows the student definition
+            until you write something different here.
+          </p>
+          {!glossFollows && englishGloss.trim() !== definitionText.trim() ? (
+            <p className="field-note">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setEnglishGloss(definitionText);
+                  setGlossFollows(true);
+                }}
+              >
+                Use the student definition
+              </button>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {usageDraft ? <UsageFields draft={usageDraft} onChange={setUsageDraft} usage={review.usage} /> : null}
 

@@ -97,6 +97,7 @@ describe('submitContribution freezes the outcome', () => {
       pos: null,
       usageLabels: [],
       onlyInDerivedTerms: false,
+      englishGloss: null,
     });
     expect(row.rows[0].value_fingerprint).toBe(fingerprintOutcome(row.rows[0].resolved_value));
     expect(row.rows[0].status).toBe('active');

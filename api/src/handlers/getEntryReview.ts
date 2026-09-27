@@ -72,6 +72,8 @@ export interface EntryUsage {
   pinPos: string | null;
   usageLabels: string[];
   onlyInDerivedTerms: boolean;
+  /** Our extended definition (english_gloss), null when none - a cited word then reads its pin. */
+  englishGloss: string | null;
   /** Words that name this one as a component - the reverse golden_record_components links. Not
    * a complete list of where the word occurs, only the ones this dictionary has linked. */
   derivedTerms: { wordId: string; displayText: string }[];
@@ -173,6 +175,7 @@ export async function loadEntryUsage(client: Queryable, wordId: string): Promise
     pinPos: row.pin_pos,
     usageLabels: row.usage_labels,
     onlyInDerivedTerms: row.only_in_derived_terms,
+    englishGloss: row.english_gloss,
     derivedTerms: derived.rows.map((r) => ({ wordId: r.word_id, displayText: r.display_text })),
   };
 }

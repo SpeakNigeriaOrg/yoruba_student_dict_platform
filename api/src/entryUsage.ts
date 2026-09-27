@@ -20,20 +20,27 @@ import type { Queryable } from './db.js';
  *
  * pos is RESOLVED - the 0018 override, else the pin's - because that is what a reviewer is shown
  * and therefore what confirming it asserts. */
-export const ENTRY_USAGE_COLUMNS = `coalesce(g.pos, c.pin ->> 'pos') as resolved_pos, g.usage_labels, g.only_in_derived_terms`;
+export const ENTRY_USAGE_COLUMNS = `coalesce(g.pos, c.pin ->> 'pos') as resolved_pos, g.usage_labels, g.only_in_derived_terms, g.english_gloss`;
 
 export interface EntryUsageRow {
   resolved_pos: string | null;
   usage_labels: string[];
   only_in_derived_terms: boolean;
+  english_gloss: string | null;
 }
 
 export function usageObserved(row: EntryUsageRow): {
   pos: string | null;
   usageLabels: string[];
   onlyInDerivedTerms: boolean;
+  englishGloss: string | null;
 } {
-  return { pos: row.resolved_pos, usageLabels: row.usage_labels, onlyInDerivedTerms: row.only_in_derived_terms };
+  return {
+    pos: row.resolved_pos,
+    usageLabels: row.usage_labels,
+    onlyInDerivedTerms: row.only_in_derived_terms,
+    englishGloss: row.english_gloss,
+  };
 }
 
 export interface EntryUsageInput {
@@ -43,6 +50,10 @@ export interface EntryUsageInput {
   usageLabels?: string[];
   onlyInDerivedTermsAction?: 'confirm' | 'set';
   onlyInDerivedTerms?: boolean;
+  /** The extended definition (english_gloss) - the wording that would go to Wiktionary. It was
+   * settable only at creation, so a typo in it could not be fixed even by a curator. */
+  englishGlossAction?: 'confirm' | 'set';
+  englishGloss?: string | null;
 }
 
 export class InvalidEntryUsageError extends Error {
@@ -65,6 +76,9 @@ export function validateEntryUsageInput(input: EntryUsageInput): void {
   }
   if (input.onlyInDerivedTermsAction === 'set' && typeof input.onlyInDerivedTerms !== 'boolean') {
     throw new InvalidEntryUsageError("onlyInDerivedTermsAction 'set' needs onlyInDerivedTerms: true or false");
+  }
+  if (input.englishGlossAction === 'set' && input.englishGloss != null && typeof input.englishGloss !== 'string') {
+    throw new InvalidEntryUsageError("englishGlossAction 'set' needs englishGloss as text (blank for none)");
   }
 }
 
@@ -151,15 +165,23 @@ export async function writeEntryUsageInTransaction(
   outcome: EntryOutcome,
   decidedBy: string,
 ): Promise<void> {
-  if (outcome.pos === undefined && outcome.usageLabels === undefined && outcome.onlyInDerivedTerms === undefined) return;
+  if (
+    outcome.pos === undefined &&
+    outcome.usageLabels === undefined &&
+    outcome.onlyInDerivedTerms === undefined &&
+    outcome.englishGloss === undefined
+  ) {
+    return;
+  }
 
   const current = await client.query<{
     pos: string | null;
     pin_pos: string | null;
     usage_labels: string[];
     only_in_derived_terms: boolean;
+    english_gloss: string | null;
   }>(
-    `select g.pos, c.pin ->> 'pos' as pin_pos, g.usage_labels, g.only_in_derived_terms
+    `select g.pos, c.pin ->> 'pos' as pin_pos, g.usage_labels, g.only_in_derived_terms, g.english_gloss
      from golden_record g
      left join upstream_citations c on c.word_id = g.word_id
      where g.word_id = $1`,
@@ -174,15 +196,23 @@ export async function writeEntryUsageInTransaction(
     outcome.pos === undefined || outcome.pos === null ? row.pos : outcome.pos === row.pin_pos ? null : outcome.pos;
   const usageLabels = outcome.usageLabels ?? row.usage_labels;
   const onlyInDerivedTerms = outcome.onlyInDerivedTerms ?? row.only_in_derived_terms;
+  const englishGloss = outcome.englishGloss === undefined ? row.english_gloss : outcome.englishGloss;
 
   const labelsDiffer =
     usageLabels.length !== row.usage_labels.length || usageLabels.some((l, i) => l !== row.usage_labels[i]);
-  if (pos === row.pos && !labelsDiffer && onlyInDerivedTerms === row.only_in_derived_terms) return;
+  if (
+    pos === row.pos &&
+    !labelsDiffer &&
+    onlyInDerivedTerms === row.only_in_derived_terms &&
+    englishGloss === row.english_gloss
+  ) {
+    return;
+  }
 
   await client.query(
     `update golden_record
-     set pos = $1, usage_labels = $2, only_in_derived_terms = $3, updated_at = now(), updated_by = $4
-     where word_id = $5`,
-    [pos, usageLabels, onlyInDerivedTerms, decidedBy, wordId],
+     set pos = $1, usage_labels = $2, only_in_derived_terms = $3, english_gloss = $4, updated_at = now(), updated_by = $5
+     where word_id = $6`,
+    [pos, usageLabels, onlyInDerivedTerms, englishGloss, decidedBy, wordId],
   );
 }

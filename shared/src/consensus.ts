@@ -70,6 +70,9 @@ export interface EntryObservedState {
   /** golden_record.usage_labels and only_in_derived_terms (0029). */
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  /** golden_record.english_gloss - the extended definition, the wording that would go to Wiktionary
+   * (0018). Null means none of our own (a cited word reads its pin's glosses). */
+  englishGloss?: string | null;
 }
 
 /** The action-shaped submission. Mirrors ApplyEntryDecisionInput's content
@@ -96,6 +99,10 @@ export interface EntryContributionInput {
   usageLabels?: string[];
   onlyInDerivedTermsAction?: 'confirm' | 'set';
   onlyInDerivedTerms?: boolean;
+  /** 'set' names an extended definition (blank means none of our own); absent or 'confirm'
+   * asserts the one on record. */
+  englishGlossAction?: 'confirm' | 'set';
+  englishGloss?: string | null;
 }
 
 /** The asserted content state.
@@ -131,6 +138,9 @@ export interface EntryOutcome {
   pos?: string | null;
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  /** The extended definition. Optional in the type for the same reason as the three above -
+   * rows stored before it joined the claim; backfillEntryUsageFields fills it in. */
+  englishGloss?: string | null;
 }
 
 /** Resolves an entry submission into the content state it asserts.
@@ -193,7 +203,22 @@ export function resolveEntryOutcome(observed: EntryObservedState, input: EntryCo
     input.onlyInDerivedTermsAction === 'set' ? input.onlyInDerivedTerms === true : observed.onlyInDerivedTerms === true,
   );
 
-  return { kind: 'entry', displayText, syllables, definitionText, citedEntryId, pos, usageLabels, onlyInDerivedTerms };
+  // Blank means "none of our own" - stored as null, so a cited word falls back to its pin rather
+  // than publishing an empty sense line (publicationFields.ts's rule).
+  const englishGloss =
+    input.englishGlossAction === 'set' ? input.englishGloss?.trim() || null : (observed.englishGloss ?? null);
+
+  return {
+    kind: 'entry',
+    displayText,
+    syllables,
+    definitionText,
+    citedEntryId,
+    pos,
+    usageLabels,
+    onlyInDerivedTerms,
+    englishGloss,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +307,7 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
       // claim - "no etymology cited" - and must fingerprint identically.
       outcome.citedEntryId ?? NULL_MARKER,
       ...usageFields(outcome),
+      glossField(outcome),
     ].join(FIELD_SEP);
   }
   return [
@@ -335,9 +361,18 @@ export function renameComponentInFingerprint(fingerprint: string, from: string, 
   return ['etymology', fields[1], components.map((c) => (c === before ? after : c)).join(LIST_SEP)].join(FIELD_SEP);
 }
 
+/** The extended definition as a fingerprint field: normalized like the student definition (it is
+ * English wording too), absent or null reading as none. */
+function glossField(outcome: EntryOutcome): string {
+  return outcome.englishGloss ? normalizeGloss(outcome.englishGloss) : NULL_MARKER;
+}
+
 /** How many FIELD_SEP-separated fields an entry fingerprint had before 0029 added usageFields:
  * 'entry', spelling, syllables, definition, cited etymology. */
 const PRE_USAGE_ENTRY_FIELDS = 5;
+/** ...after 0029 (+ pos, labels, flag), and after the extended definition joined (+ gloss). */
+const USAGE_ENTRY_FIELDS = PRE_USAGE_ENTRY_FIELDS + 3;
+const CURRENT_ENTRY_FIELDS = USAGE_ENTRY_FIELDS + 1;
 
 /** Extends a fingerprint stored before 0029 with the usage fields, leaving the rest byte-identical.
  *
@@ -351,9 +386,17 @@ const PRE_USAGE_ENTRY_FIELDS = 5;
  *
  * Returns null for anything that is not a pre-0029 entry fingerprint, including one already
  * extended, so running the backfill twice changes nothing. */
-export function extendLegacyEntryFingerprint(fingerprint: string, pos: string | null): string | null {
+export function extendLegacyEntryFingerprint(
+  fingerprint: string,
+  pos: string | null,
+  englishGloss: string | null = null,
+): string | null {
   const fields = fingerprint.split(FIELD_SEP);
-  if (fields[0] !== 'entry' || fields.length !== PRE_USAGE_ENTRY_FIELDS) return null;
+  if (fields[0] !== 'entry') return null;
+  // Extended definition only: stored after 0029, before the gloss joined the claim. Exact for the
+  // same reason - english_gloss was not editable after creation before then.
+  if (fields.length === USAGE_ENTRY_FIELDS) return [fingerprint, glossField(blankEntry({ englishGloss }))].join(FIELD_SEP);
+  if (fields.length !== PRE_USAGE_ENTRY_FIELDS) return null;
   return [
     fingerprint,
     ...usageFields({
@@ -366,7 +409,12 @@ export function extendLegacyEntryFingerprint(fingerprint: string, pos: string | 
       usageLabels: [],
       onlyInDerivedTerms: resolveOnlyInDerivedTerms(pos, false),
     }),
+    glossField(blankEntry({ englishGloss })),
   ].join(FIELD_SEP);
+}
+
+function blankEntry(over: Partial<EntryOutcome>): EntryOutcome {
+  return { kind: 'entry', displayText: '', syllables: [], definitionText: null, citedEntryId: null, ...over };
 }
 
 /** Sets the only-in-derived-terms field of a stored 0029-layout entry fingerprint, leaving every
@@ -376,8 +424,9 @@ export function extendLegacyEntryFingerprint(fingerprint: string, pos: string | 
  * fingerprint. */
 export function setDerivedOnlyInEntryFingerprint(fingerprint: string, onlyInDerivedTerms: boolean): string | null {
   const fields = fingerprint.split(FIELD_SEP);
-  if (fields[0] !== 'entry' || fields.length !== PRE_USAGE_ENTRY_FIELDS + 3) return null;
-  fields[fields.length - 1] = onlyInDerivedTerms ? 'derived-only' : 'free';
+  if (fields[0] !== 'entry' || (fields.length !== USAGE_ENTRY_FIELDS && fields.length !== CURRENT_ENTRY_FIELDS)) return null;
+  // The flag is the last of the three usage fields, whatever follows it.
+  fields[USAGE_ENTRY_FIELDS - 1] = onlyInDerivedTerms ? 'derived-only' : 'free';
   return fields.join(FIELD_SEP);
 }
 
@@ -390,6 +439,7 @@ export type ClaimField =
   | 'partOfSpeech'
   | 'usageLabels'
   | 'onlyInDerivedTerms'
+  | 'englishGloss'
   | 'components';
 
 /** The entry fingerprint WITHOUT the student definition: what word this is, not what it means.
@@ -441,6 +491,7 @@ export function differingFields(outcomes: ContributionOutcome[]): ClaimField[] {
   if (varies((o) => usageFields(o)[0])) fields.push('partOfSpeech');
   if (varies((o) => usageFields(o)[1])) fields.push('usageLabels');
   if (varies((o) => usageFields(o)[2])) fields.push('onlyInDerivedTerms');
+  if (varies((o) => glossField(o))) fields.push('englishGloss');
   return fields;
 }
 
