@@ -2,7 +2,8 @@
 //
 // Brings every stored entry-axis vote and decision up to the current claim layout, so an older
 // vote and a new one confirming the same word agree instead of reading as a conflict:
-//   extend      - rows from before 0029 gain part of speech, usage labels and the flag
+//   extend      - rows in an older layout gain the fields since added: part of speech, usage labels
+//                 and the flag (0029), and the extended definition
 //   affix_flag  - rows asserting an affix under 0029 get the flag turned on, as 0030 requires
 // Run after migrating (0029 and 0030) and deploying.
 //
@@ -37,7 +38,7 @@ try {
   const plan = await planEntryUsageBackfill(pool);
   const n = (repair, kind) => plan.planned.filter((p) => p.repair === repair && p.kind === kind).length;
   console.log(`${plan.planned.length} entry fingerprints to bring up to date`);
-  console.log(`  extend (pre-0029):   ${n('extend', 'contribution')} contributions, ${n('extend', 'decision')} decisions`);
+  console.log(`  extend (older layout):${n('extend', 'contribution')} contributions, ${n('extend', 'decision')} decisions`);
   console.log(`  affix flag (0030):   ${n('affix_flag', 'contribution')} contributions, ${n('affix_flag', 'decision')} decisions`);
   for (const p of plan.planned.filter((q) => q.repair === 'affix_flag')) console.log(`    ${p.kind} on ${p.wordId} (${p.pos})`);
 
