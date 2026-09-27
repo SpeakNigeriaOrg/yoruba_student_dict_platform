@@ -343,11 +343,11 @@ describe('AddWord - Word tab', () => {
       // Reaching this branch means "I looked for this and it is not there", so the spelling is the
       // query. It used to clear the field and ask for it again, at the one moment the answer was
       // already on screen - the query was private to SearchBox and nothing carried it across.
-      vi.stubGlobal('fetch', mockFetch({ kaikkiResults: [] }));
+      vi.stubGlobal('fetch', mockFetch({ kaikkiResults: [], vocabResults: [] }));
       const user = userEvent.setup();
 
       render(<AddWord />);
-      await user.type(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...'), 'redio');
+      await user.type(screen.getByPlaceholderText('Search the dictionary and Wiktionary by spelling or meaning...'), 'redio');
       await user.click(screen.getByRole('button', { name: 'Search' }));
       await waitFor(() => screen.getByText('No results.'));
 
@@ -593,11 +593,12 @@ const RESULT = {
 };
 
 async function searchWith(result: Record<string, unknown>, props: Record<string, unknown> = {}) {
-  const fetchMock = mockFetch({ kaikkiResults: [result] });
+  // No dictionary match: these tests are about the Wiktionary rows.
+  const fetchMock = mockFetch({ kaikkiResults: [result], vocabResults: [] });
   vi.stubGlobal('fetch', fetchMock);
   const user = userEvent.setup();
   render(<AddWord {...props} />);
-  await user.type(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...'), 'jẹun');
+  await user.type(screen.getByPlaceholderText('Search the dictionary and Wiktionary by spelling or meaning...'), 'jẹun');
   await user.click(screen.getByRole('button', { name: 'Search' }));
   // Wait on the result ROW rather than a particular gloss, so this helper works for any fixture.
   await screen.findByRole('listitem');
@@ -1348,7 +1349,7 @@ describe('AddWord - after adding, you can add another', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
     // The form is gone, so the search box is what is in front of the curator again.
     expect(screen.queryByLabelText('Selected etymology')).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search Kaikki by spelling or meaning...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search the dictionary and Wiktionary by spelling or meaning...')).toBeInTheDocument();
   });
 });
 
@@ -1511,5 +1512,49 @@ describe('AddWord - usage labels and "survives only inside other words" (0029)',
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added phrase'));
     const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/phrases')![1].body);
     expect(body.usageLabels).toEqual(['archaic']);
+  });
+});
+
+describe('AddWord - the search also covers what the dictionary already holds', () => {
+  // Reported: the Word tab searched Wiktionary alone, so a word we hold without citing Wiktionary
+  // (an off-path word, or any phrase) was never found - and a whole form could be filled in for a
+  // word the dictionary already had.
+  const HELD = [
+    { wordId: 'idana_cooking', displayText: 'ìdáná', syllables: ['ì', 'dá', 'ná'], definition: 'the act of cooking', baseSpelling: 'idana', matchedVia: 'yoruba_exact' },
+    { wordId: 'ile_idana_kitchen', displayText: 'ilé ìdáná', syllables: ['i', 'lé', 'ì', 'dá', 'ná'], definition: 'kitchen', baseSpelling: 'ile idana', matchedVia: 'yoruba_prefix', entryType: 'phrase' },
+  ];
+
+  it('lists our words and phrases first, marked, with Open instead of Select', async () => {
+    const onOpenWord = vi.fn();
+    vi.stubGlobal('fetch', mockFetch({ vocabResults: HELD }));
+    const user = userEvent.setup();
+    render(<AddWord onOpenWord={onOpenWord} />);
+    await user.type(screen.getByPlaceholderText('Search the dictionary and Wiktionary by spelling or meaning...'), 'idana');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    const rows = await screen.findAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('ìdáná — the act of cooking already in the dictionary');
+    expect(rows[1]).toHaveTextContent('ilé ìdáná');
+    expect(rows[1]).toHaveTextContent('phrase');
+    expect(rows[2]).toHaveTextContent('testform'); // the Wiktionary result still follows
+    expect(within(rows[0]).queryByRole('button', { name: 'Select' })).not.toBeInTheDocument();
+    await user.click(within(rows[0]).getByRole('button', { name: 'Open' }));
+    expect(onOpenWord).toHaveBeenCalledWith('idana_cooking');
+  });
+
+  it('does not list a word twice when its Wiktionary row already says we hold it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        vocabResults: [HELD[0]],
+        kaikkiResults: [
+          { form: 'ìdáná', pos: 'noun', glosses: ['cooking'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['ìdáná'], entryId: 'en-idana', etymologyNumber: null, claim: { status: 'in_dictionary', wordId: 'idana_cooking', displayText: 'ìdáná' } },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(await screen.findAllByRole('listitem')).toHaveLength(1);
   });
 });

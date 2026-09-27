@@ -100,6 +100,28 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] | null }) {
  * Silent when the etymology is free. A green "available" badge on all fifteen rows would be a
  * reassurance on every line, and a signal that fires constantly is one people stop reading - which is
  * precisely how the previous warning came to be ignored. */
+/** One row of the Word tab's search: a word or phrase we already hold, or a Wiktionary etymology.
+ *
+ * The search used to cover Wiktionary alone. A Wiktionary entry we cite carries a badge saying so,
+ * but a word we hold WITHOUT citing one - an off-path word like ìdáná, or any phrase - was not found
+ * at all, and the duplicate warning only appears after something is picked. So someone could fill
+ * in a whole form for a word the dictionary already had. Ours are listed first, with Open. */
+type AddWordHit = { kind: 'held'; result: VocabSearchResult } | { kind: 'wiktionary'; result: KaikkiSearchResult };
+
+async function searchDictionaryAndWiktionary(query: string): Promise<AddWordHit[]> {
+  // Our dictionary failing to answer must not hide Wiktionary, which is the search's main job.
+  const [held, corpus] = await Promise.all([searchVocab(query).catch(() => [] as VocabSearchResult[]), searchKaikki(query)]);
+  // A word we hold that cites a listed Wiktionary entry already shows on that entry's row
+  // ("in the dictionary", with Open) - listing it again above would say the same thing twice.
+  const shownOnWiktionaryRow = new Set(
+    corpus.flatMap((r) => (r.claim?.status === 'in_dictionary' ? [r.claim.wordId] : [])),
+  );
+  return [
+    ...held.filter((h) => !shownOnWiktionaryRow.has(h.wordId)).map((result): AddWordHit => ({ kind: 'held', result })),
+    ...corpus.map((result): AddWordHit => ({ kind: 'wiktionary', result })),
+  ];
+}
+
 function ClaimBadge({ result }: { result: KaikkiSearchResult }) {
   // Said first, because it changes what the row's button does. A multi-word entry is a phrase whatever
   // else is true of it, and offering "Select" here would add a phrase as a word.
@@ -462,33 +484,60 @@ function WordTab({
         <>
           <p className="field-note">
             A word enters the dictionary as one Wiktionary etymology. Search for it and pick the etymology you mean - the
-            same spelling often has several.
+            same spelling often has several. Words and phrases the dictionary already holds are listed first.
           </p>
-          <SearchBox
-            search={searchKaikki}
-            renderResult={(r) => (
-              <>
-                <EtymologyLabel result={r} />
-                <ClaimBadge result={r} />
-              </>
-            )}
-            onSelect={pickResult}
+          <SearchBox<AddWordHit>
+            search={searchDictionaryAndWiktionary}
+            renderResult={(hit) =>
+              hit.kind === 'held' ? (
+                <>
+                  <strong>{hit.result.displayText}</strong>
+                  {hit.result.definition ? ` — ${hit.result.definition}` : ''}{' '}
+                  <span className="badge decided">already in the dictionary</span>
+                  {hit.result.entryType === 'phrase' ? (
+                    <>
+                      {' '}
+                      <span className="badge">phrase</span>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <EtymologyLabel result={hit.result} />
+                  <ClaimBadge result={hit.result} />
+                </>
+              )
+            }
+            onSelect={(hit) => {
+              if (hit.kind === 'wiktionary') pickResult(hit.result);
+            }}
             onQueryChange={setLastQuery}
             selectLabel="Select"
-            placeholder="Search Kaikki by spelling or meaning..."
+            placeholder="Search the dictionary and Wiktionary by spelling or meaning..."
             resultsAriaLabel="Kaikki search results"
-            isSelected={(r) => r.entryId !== null && r.entryId === selected?.entryId}
+            isSelected={(hit) => hit.kind === 'wiktionary' && hit.result.entryId !== null && hit.result.entryId === selected?.entryId}
             // An etymology already in the dictionary cannot be added again - the server refuses it, and
             // 0017 makes it impossible - so offer the useful action instead of a button that leads to a
             // rejection after the form is filled in. A REQUESTED one keeps Select: adding it is exactly
-            // what fulfilling the request means, and doing so now closes the request.
-            renderAction={(r) =>
-              r.claim?.status === 'in_dictionary' && onOpenWord ? (
+            // what fulfilling the request means, and doing so now closes the request. A word we hold
+            // is never selectable here - there is nothing to add - so it gets Open, or just says so.
+            renderAction={(hit) => {
+              if (hit.kind === 'held') {
+                return onOpenWord ? (
+                  <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(hit.result.wordId)}>
+                    Open
+                  </button>
+                ) : (
+                  <span className="field-note">already added</span>
+                );
+              }
+              const r = hit.result;
+              return r.claim?.status === 'in_dictionary' && onOpenWord ? (
                 <button type="button" className="btn btn-secondary" onClick={() => onOpenWord(r.claim!.wordId)}>
                   Open {r.claim.wordId}
                 </button>
-              ) : null
-            }
+              ) : null;
+            }}
           />
         </>
       )}
