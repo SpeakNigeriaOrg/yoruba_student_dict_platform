@@ -874,7 +874,7 @@ describe('EtymologyReview', () => {
     expect(rows[0].textContent).toContain('in the dictionary');
     expect(rows[1].textContent).toContain('from Wiktionary');
     // WHICH etymology, not just a spelling - the whole reason words enter at etymology-N level.
-    expect(rows[1].textContent).toContain('etymology 1');
+    expect(rows[1].textContent).toContain('entry 1');
   });
 
   it('requests a part we do not hold and lets the volunteer finish the task immediately', async () => {

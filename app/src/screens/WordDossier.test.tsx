@@ -375,7 +375,7 @@ describe('setting the record from the dossier', () => {
     ]);
     const claims = within(await waitFor(() => screen.getByLabelText('Set the record'))).getByLabelText('Claims for entry');
     expect(claims).toHaveTextContent('to hang, suspend');
-    expect(claims).toHaveTextContent('etymology 2');
+    expect(claims).toHaveTextContent('Wiktionary entry: kọ́ (verb, entry 2)');
   });
 
   it('spells an etymology claim\'s components instead of listing bare word_ids', async () => {

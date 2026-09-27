@@ -269,7 +269,7 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
         renderResult={(r) => (
           <>
             <strong>{r.form}</strong> ({r.pos}
-            {r.etymologyNumber ? `, etymology ${r.etymologyNumber}` : ''}) - {r.glosses.join('; ')}
+            {r.etymologyNumber ? `, entry ${r.etymologyNumber}` : ''}) - {r.glosses.join('; ')}
           </>
         )}
         onSelect={pickResult}
@@ -281,7 +281,7 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
         <>
           <p aria-label="Cited etymology for missing component">
             Citing: <strong>{selected.form}</strong> ({selected.pos}
-            {selected.etymologyNumber ? `, etymology ${selected.etymologyNumber}` : ''}) -{' '}
+            {selected.etymologyNumber ? `, entry ${selected.etymologyNumber}` : ''}) -{' '}
             {selected.glosses.join('; ')}
           </p>
           <div className="field">
@@ -420,7 +420,7 @@ function ProposalItemRow({
             {candidates.map((c, i) => (
               <li key={c.entryId}>
                 <strong>{c.form}</strong> ({c.pos}
-                {c.etymologyNumber ? `, etymology ${c.etymologyNumber}` : ''}) - {c.glosses.join('; ') || '(no gloss)'}
+                {c.etymologyNumber ? `, entry ${c.etymologyNumber}` : ''}) - {c.glosses.join('; ') || '(no gloss)'}
                 {i === 0 && item.wiktionaryGloss && candidates.length > 1 ? (
                   <span className="badge decided"> best match</span>
                 ) : null}
@@ -1200,7 +1200,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               ) : (
                 <>
                   <strong>{r.form}</strong> — from Wiktionary ({r.pos}
-                  {r.etymologyNumber ? `, etymology ${r.etymologyNumber}` : ''}) - {r.glosses.join('; ')}
+                  {r.etymologyNumber ? `, entry ${r.etymologyNumber}` : ''}) - {r.glosses.join('; ')}
                 </>
               )
             }

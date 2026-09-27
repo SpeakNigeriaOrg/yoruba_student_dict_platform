@@ -59,9 +59,29 @@ export function CitedEtymology({ entryId, label }: { entryId: string; label?: Et
   return (
     <span>
       <strong>{label.form}</strong> ({label.pos}
-      {label.etymologyNumber ? `, etymology ${label.etymologyNumber}` : ''})
+      {label.etymologyNumber ? `, entry ${label.etymologyNumber}` : ''})
       {label.glosses.length > 0 ? ` - ${label.glosses.join('; ')}` : ''}
     </span>
+  );
+}
+
+/** Which Wiktionary entry the word is - part of an ENTRY claim, because it is the word's identity
+ * (`kọ́` is three words on Wiktionary; this says which one), not anything about its parts.
+ *
+ * It used to read "cites etymology 2" / "cites no Wiktionary etymology": Wiktionary's own name for
+ * those numbered sections, and the same word as our Etymology axis - so an entry claim looked like
+ * it was saying something about what the word is made of. */
+function WiktionaryEntryLine({ entryId, labels }: { entryId: string | null; labels: ConsensusLabels }) {
+  return (
+    <div className="field-note" aria-label="Wiktionary entry">
+      {entryId ? (
+        <>
+          Wiktionary entry: <CitedEtymology entryId={entryId} label={labels.etymologies[entryId]} />
+        </>
+      ) : (
+        <em>not on Wiktionary</em>
+      )}
+    </div>
   );
 }
 
@@ -146,15 +166,7 @@ export function OutcomeSummary({
       {/* Below the definition rather than beside the spelling: it is the claim's identity,
           not a detail of its wording, and burying it inline made the one case it exists for
           - two claims that agree on every word and disagree on which word it is - invisible. */}
-      <div className="field-note">
-        {outcome.citedEntryId ? (
-          <>
-            cites <CitedEtymology entryId={outcome.citedEntryId} label={labels.etymologies[outcome.citedEntryId]} />
-          </>
-        ) : (
-          <em>cites no Wiktionary etymology</em>
-        )}
-      </div>
+      <WiktionaryEntryLine entryId={outcome.citedEntryId} labels={labels} />
       <UsageLine pos={outcome.pos} usageLabels={outcome.usageLabels} onlyInDerivedTerms={outcome.onlyInDerivedTerms} />
     </span>
   );
@@ -164,7 +176,7 @@ const FIELD_LABELS: Record<ClaimField, string> = {
   spelling: 'the spelling',
   syllables: 'the syllable split',
   definition: 'the student definition',
-  etymology: 'which etymology it cites',
+  etymology: 'which Wiktionary entry it is',
   partOfSpeech: 'the part of speech',
   usageLabels: 'the usage labels',
   onlyInDerivedTerms: 'whether it is a standalone word',
@@ -190,7 +202,7 @@ export function DisagreementNote({ summary }: { summary: ConsensusSummary }) {
     return (
       <p className="field-note" aria-label="Wording only">
         <strong>Same word, different wording.</strong> Every claim agrees on the spelling, the syllables, the
-        etymology and the part of speech, and they differ only in how the student definition is worded — so this is a choice between good
+        Wiktionary entry and the part of speech, and they differ only in how the student definition is worded — so this is a choice between good
         sentences, not a conflict to settle.
       </p>
     );
@@ -251,15 +263,7 @@ export function CurrentRecord({
             <span className="outcome-syllables"> {syllables.join(' · ')}</span>
             <br />
             {definition ?? <em>(no definition)</em>}
-            <div className="field-note">
-              {citedEntryId ? (
-                <>
-                  cites <CitedEtymology entryId={citedEntryId} label={labels.etymologies[citedEntryId]} />
-                </>
-              ) : (
-                <em>cites no Wiktionary etymology</em>
-              )}
-            </div>
+            <WiktionaryEntryLine entryId={citedEntryId} labels={labels} />
             {usage ? <UsageLine {...usage} /> : null}
           </>
         )}
