@@ -4,6 +4,7 @@ import {
   differingFields,
   extendLegacyEntryFingerprint,
   extendLegacyEtymologyFingerprint,
+  setBorrowingInEtymologyFingerprint,
   fingerprintIdentity,
   fingerprintOutcome,
   setDerivedOnlyInEntryFingerprint,
@@ -549,6 +550,15 @@ describe('resolveEtymologyOutcome', () => {
     const before = now.split('\u001f').slice(0, 3).join('\u001f');
     expect(extendLegacyEtymologyFingerprint(before)).toBe(now);
     expect(extendLegacyEtymologyFingerprint(now)).toBeNull();
+  });
+
+  it('rewrites only the borrowing fields of a stored etymology fingerprint', () => {
+    const none = fingerprintOutcome(resolveEtymologyOutcome(observed, { componentsAction: 'confirm_existing' }));
+    const en = fingerprintOutcome(
+      resolveEtymologyOutcome(observed, { componentsAction: 'confirm_existing', borrowedAction: 'set', borrowedFrom: 'en', borrowedTerm: 'bread' }),
+    );
+    expect(setBorrowingInEtymologyFingerprint(none, 'en', 'bread')).toBe(en);
+    expect(setBorrowingInEtymologyFingerprint(none.split('\u001f').slice(0, 3).join('\u001f'), 'en', null)).toBeNull();
   });
 
   it('renaming a component keeps the borrowing fields', () => {

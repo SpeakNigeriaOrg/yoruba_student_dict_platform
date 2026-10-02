@@ -39,6 +39,14 @@ export function loanLanguageName(code: string): string {
   return LOAN_LANGUAGES.find((l) => l.code === code)?.name ?? code;
 }
 
+/** The source word from a Wiktionary {{bor}} template's term argument. Wiktionary writes `-` there
+ * when no particular word is named ({{bor|yo|ff|-}} for màlúù, "from Fula"), which is no word at
+ * all, so it reads as null like an empty argument. */
+export function wiktionaryLoanTerm(term: string | null | undefined): string | null {
+  const t = term?.trim();
+  return t && t !== '-' ? t : null;
+}
+
 /** A Wiktionary source-language code reduced to the list's: regional variants (`en-GB`) count as
  * the language, anything else unlisted is kept as given. */
 export function normalizeLoanLanguage(code: string): string {

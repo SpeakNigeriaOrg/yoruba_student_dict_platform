@@ -111,6 +111,21 @@ a follow-up. In production they ran in this order (2026-09-22 to 2026-09-26):
 an affix, always false for a character, otherwise the reviewer's call (0030,
 `shared/src/partsOfSpeech.ts`). The game export leaves out every entry that is not standalone.
 
+## After 0032: loanwords
+
+0032 adds `golden_record.borrowed_from`/`borrowed_term` and the borrowing Wiktionary's own `{{bor}}`
+states (`kaikki_senses`), and borrowing joins the etymology claim. In production (2026-10-02):
+
+1. **Migrate, re-ingest (`build-9`, as above), deploy.**
+2. **`node scripts/backfillEntryUsageFields.mjs --apply`.** Its *extend* repair completes etymology
+   votes stored before 0032 as "not borrowed".
+3. **`node scripts/backfillBorrowingFromWiktionary.mjs` (dry run), then `--apply`.** Step 2 was
+   wrong for a cited word whose Wiktionary entry says it is borrowed (búrẹ́dì, from English "bread"):
+   as for part of speech, an earlier vote endorsed what the word cites. This gives such words
+   Wiktionary's borrowing and completes their votes and decisions from before the deploy with it;
+   later ones are real answers and are left alone. Production: 16 words, 5 votes. Run it after
+   step 2, never instead of it.
+
 ## After 0019: the app asks, and nobody has been asked yet
 
 `0019_contribution_grants.sql` adds `contribution_grants`, the `grant_release_state` function, and

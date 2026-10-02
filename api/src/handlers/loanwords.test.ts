@@ -3,7 +3,7 @@
 // backfill that completes etymology votes stored before borrowing joined the claim.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { extendLegacyEtymologyFingerprint } from '@yoruba-student-dict-platform/shared';
+import { extendLegacyEtymologyFingerprint, fingerprintOutcome, resolveEtymologyOutcome } from '@yoruba-student-dict-platform/shared';
 import { cleanUpTestData, deleteTestKaikkiSenses, getTestPool, insertTestKaikkiSense } from '../testSupport.js';
 import { applyEtymologyDecision } from './applyEtymologyDecision.js';
 import { submitContribution } from './submitContribution.js';
@@ -12,6 +12,7 @@ import { listConsensus } from './listConsensus.js';
 import { createWord } from './createWord.js';
 import { getEtymologyReview } from './getEtymologyReview.js';
 import { applyEntryUsageBackfill, planEntryUsageBackfill } from './backfillEntryUsageFields.js';
+import { applyBorrowingBackfill, planBorrowingBackfill } from './backfillBorrowingFromWiktionary.js';
 import { writeCitationInTransaction } from './upstreamCitations.js';
 
 const NS = 'testloan_';
@@ -139,5 +140,62 @@ describe('loanwords', () => {
     expect((await applyEntryUsageBackfill(pool, mine)).written).toBe(1);
     const after = await pool.query<{ value_fingerprint: string }>('select value_fingerprint from contributions where contribution_id = $1', [id]);
     expect(after.rows[0].value_fingerprint).toBe(current);
+  });
+  it("the Wiktionary repair gives a cited word its entry's borrowing, and completes earlier votes and the decision with it", async () => {
+    const entryId = `${ENTRY_NS}buredi`;
+    await insertTestKaikkiSense(pool, { entryId, headword: 'buredi', canonicalValue: 'búrẹ́dì', pos: 'noun', glosses: ['bread'] });
+    await pool.query("update kaikki_senses set borrowed_from = 'en', borrowed_term = 'bread' where entry_id = $1", [entryId]);
+    const wordId = `${NS}buredi`;
+    await pool.query('insert into golden_record (word_id, display_text, syllables) values ($1, $2, $3)', [wordId, 'búrẹ́dì', ['bú', 'rẹ́', 'dì']]);
+    await writeCitationInTransaction(pool, wordId, { entryId }, curator);
+    // Two votes and a decision from before the deploy, completed as "not borrowed"...
+    const notBorrowed = { componentsAction: 'confirm_atomic' } as const;
+    await submitContribution(pool, { axis: 'etymology', wordId, proposedValue: notBorrowed }, ada);
+    await submitContribution(pool, { axis: 'etymology', wordId, proposedValue: notBorrowed }, ben);
+    await applyEtymologyDecision(pool, wordId, notBorrowed, curator);
+    await pool.query("update contributions set submitted_at = '2026-09-01' where word_id = $1", [wordId]);
+    await pool.query("update word_decisions set decided_at = '2026-09-01' where word_id = $1", [wordId]);
+    // ...and one real "not borrowed" vote cast after it, which must be left alone.
+    const cy = (
+      await pool.query<{ user_id: string }>('insert into users (email, display_name, role) values ($1, $2, $3) returning user_id', [
+        `${NS}cy@example.com`,
+        'cy',
+        'volunteer',
+      ])
+    ).rows[0].user_id;
+    await submitContribution(pool, { axis: 'etymology', wordId, proposedValue: notBorrowed }, cy);
+    await pool.query("update contributions set submitted_at = '2026-10-03' where word_id = $1 and submitted_by = $2", [wordId, cy]);
+    // The repair is for words whose record says nothing about borrowing.
+    await pool.query('update golden_record set borrowed_from = null, borrowed_term = null where word_id = $1', [wordId]);
+
+    const before = '2026-10-02T18:39:12Z';
+    const plan = await planBorrowingBackfill(pool, before);
+    const mine = { before, planned: plan.planned.filter((p) => p.wordId === wordId) };
+    expect(mine.planned).toEqual([{ wordId, displayText: 'búrẹ́dì', borrowedFrom: 'en', borrowedTerm: 'bread', votes: 2, decisions: 1 }]);
+    expect((await applyBorrowingBackfill(pool, mine)).written).toBe(1);
+
+    expect(await borrowing(wordId)).toEqual({ borrowed_from: 'en', borrowed_term: 'bread' });
+    const borrowed = fingerprintOutcome(
+      resolveEtymologyOutcome(
+        { components: [], atomic: false, borrowedFrom: null, borrowedTerm: null },
+        { ...notBorrowed, borrowedAction: 'set', borrowedFrom: 'en', borrowedTerm: 'bread' },
+      ),
+    );
+    const votes = await pool.query<{ submitted_by: string; value_fingerprint: string }>(
+      "select submitted_by, value_fingerprint from contributions where word_id = $1 and axis = 'etymology'",
+      [wordId],
+    );
+    expect(votes.rows).toHaveLength(3);
+    for (const v of votes.rows) {
+      if (v.submitted_by === cy) expect(v.value_fingerprint).not.toBe(borrowed);
+      else expect(v.value_fingerprint).toBe(borrowed);
+    }
+    const decision = await pool.query<{ value_fingerprint: string }>(
+      "select value_fingerprint from word_decisions where word_id = $1 and axis = 'etymology'",
+      [wordId],
+    );
+    expect(decision.rows[0].value_fingerprint).toBe(borrowed);
+    // Idempotent: the record is no longer silent.
+    expect((await planBorrowingBackfill(pool, before)).planned.filter((p) => p.wordId === wordId)).toEqual([]);
   });
 });

@@ -9,7 +9,7 @@
 // rather than loading the whole lexicon into memory - the "real, queryable
 // tables" this migration exists for, not another full in-memory load.
 
-import type { ComponentCandidate, KaikkiLexicon, KaikkiSense } from '@yoruba-student-dict-platform/shared';
+import { wiktionaryLoanTerm, type ComponentCandidate, type KaikkiLexicon, type KaikkiSense } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from './db.js';
 
 interface KaikkiSenseRow {
@@ -51,7 +51,7 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
     altOfTargets: row.alt_of_targets,
     componentCandidates: row.component_candidates,
     usedInCandidates: row.used_in_candidates,
-    ...(row.borrowed_from ? { borrowedFrom: row.borrowed_from, borrowedTerm: row.borrowed_term } : {}),
+    ...(row.borrowed_from ? { borrowedFrom: row.borrowed_from, borrowedTerm: wiktionaryLoanTerm(row.borrowed_term) } : {}),
     // Never persisted (see ingest/'s own design notes) - only ever an
     // input to reciprocal synthesis at ingestion time, not meant to be
     // reloaded, same as the Python original.

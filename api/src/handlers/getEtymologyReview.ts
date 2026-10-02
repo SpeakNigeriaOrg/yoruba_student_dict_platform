@@ -31,6 +31,7 @@ import {
   componentsAxisFields,
   diagnoseEntry,
   normalizeLoanLanguage,
+  wiktionaryLoanTerm,
   orthographyInsensitiveForm,
   type ComponentsProposalItem,
   type DiagnosticsOverrides,
@@ -288,7 +289,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
   const b = borrowingRows.rows[0];
   const borrowing: Borrowing | null = b?.borrowed_from ? { from: b.borrowed_from, term: b.borrowed_term } : null;
   const wiktionaryBorrowing: Borrowing | null = b?.wik_from
-    ? { from: normalizeLoanLanguage(b.wik_from), term: b.wik_term }
+    ? { from: normalizeLoanLanguage(b.wik_from), term: wiktionaryLoanTerm(b.wik_term) }
     : null;
 
   const key = orthographyInsensitiveForm(entry.displayText);

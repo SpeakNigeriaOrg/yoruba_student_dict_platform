@@ -306,6 +306,13 @@ describe('deriveBorrowing (0032)', () => {
     expect(deriveBorrowing(realEntries['en-Tunisia-yo-name-CjYOiE~K'])).toEqual({ borrowedFrom: 'en', borrowedTerm: 'Tunisia' });
   });
 
+  it("reads Wiktionary's '-' (no particular source word) as no word", () => {
+    expect(deriveBorrowing(makeEntry({ etymologyTemplates: [{ name: 'bor', args: { '1': 'yo', '2': 'ff', '3': '-' } }] }))).toEqual({
+      borrowedFrom: 'ff',
+      borrowedTerm: null,
+    });
+  });
+
   it('says nothing for a word Wiktionary does not mark borrowed, and ignores the looser {{der}}', () => {
     expect(deriveBorrowing(makeEntry({ etymologyTemplates: [] }))).toEqual({ borrowedFrom: null, borrowedTerm: null });
     expect(

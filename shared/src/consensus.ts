@@ -351,6 +351,20 @@ function borrowingFields(outcome: EtymologyOutcome): [string, string] {
 /** The etymology fingerprint before 0032: 'etymology', atomic/composite, components. */
 const PRE_BORROWING_ETYMOLOGY_FIELDS = 3;
 
+/** Rewrites the borrowing fields of a stored 0032-layout etymology fingerprint, leaving the rest
+ * byte-identical - for a word_decisions row, which stores no outcome to recompute from. Null for
+ * anything that is not a 0032-layout etymology fingerprint. */
+export function setBorrowingInEtymologyFingerprint(
+  fingerprint: string,
+  borrowedFrom: string | null,
+  borrowedTerm: string | null,
+): string | null {
+  const fields = fingerprint.split(FIELD_SEP);
+  if (fields[0] !== 'etymology' || fields.length !== PRE_BORROWING_ETYMOLOGY_FIELDS + 2) return null;
+  const [from, term] = borrowingFields({ kind: 'etymology', components: [], atomic: false, borrowedFrom, borrowedTerm });
+  return [...fields.slice(0, PRE_BORROWING_ETYMOLOGY_FIELDS), from, term].join(FIELD_SEP);
+}
+
 /** Extends a pre-0032 etymology fingerprint with "not borrowed". Exact: nothing could record a
  * loanword before 0032. Null for anything else, so the backfill is idempotent. */
 export function extendLegacyEtymologyFingerprint(fingerprint: string): string | null {

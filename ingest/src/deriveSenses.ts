@@ -9,7 +9,7 @@
 // Python file's own comments for the full rationale behind each rule;
 // this file mirrors its structure closely enough to diff against.
 
-import { orthographyInsensitiveForm } from '@yoruba-student-dict-platform/shared';
+import { orthographyInsensitiveForm, wiktionaryLoanTerm } from '@yoruba-student-dict-platform/shared';
 import type { AltForm, CanonicalEntry, ComponentCandidate, DerivedKaikkiSense } from './types.js';
 
 // Forms tagged only with these are still standard modern Yoruba spelling
@@ -215,7 +215,7 @@ export function deriveBorrowing(entry: CanonicalEntry): { borrowedFrom: string |
   const t = (entry.etymologyTemplates ?? []).find((x) => x.name !== null && ['bor', 'bor+', 'lbor', 'obor', 'slbor'].includes(x.name));
   const lang = t?.args['2']?.trim();
   if (!t || !lang) return { borrowedFrom: null, borrowedTerm: null };
-  return { borrowedFrom: lang, borrowedTerm: t.args['3']?.trim() || null };
+  return { borrowedFrom: lang, borrowedTerm: wiktionaryLoanTerm(t.args['3']) };
 }
 
 export function deriveSenses(entries: CanonicalEntry[]): DerivedKaikkiSense[] {
