@@ -209,6 +209,7 @@ export function UserContribution({ userId, contributionId, onOpenUser, onOpenDos
               definition={word.definition}
               citedEntryId={word.citedEntryId}
               components={word.components.map((c) => c.wordId)}
+              wiktionaryEtymologyText={word.wiktionaryEtymologyText}
             />
           </div>
         ) : null}

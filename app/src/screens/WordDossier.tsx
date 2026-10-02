@@ -30,7 +30,7 @@ import {
 import { CitationMark } from './StateMarks.js';
 // The same renderer the bulk queue uses, so the two places a curator sets the record cannot
 // show a claim two different ways - see ClaimViews.tsx.
-import { ClaimRow, CurrentRecord, DisagreementNote } from './ClaimViews.js';
+import { ClaimRow, CurrentRecord, DisagreementNote, WiktionaryEtymologyText } from './ClaimViews.js';
 import { describeLoan } from './LoanwordFields.js';
 
 function when(iso: string | null): string {
@@ -208,6 +208,7 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
 
         <div className="dossier-section" aria-label="Composition">
           <h3>Composition</h3>
+          <WiktionaryEtymologyText text={dossier.wiktionaryEtymologyText} />
           {dossier.components.length === 0 ? (
             <p className="field-note">Atomic - no recorded parts.</p>
           ) : (
@@ -607,6 +608,7 @@ function DecideSection({ wordId, components }: { wordId: string; components: str
               usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
               englishGloss={g.currentEnglishGloss}
               borrowing={{ from: g.currentBorrowedFrom ?? null, term: g.currentBorrowedTerm ?? null }}
+              wiktionaryEtymologyText={g.wiktionaryEtymologyText}
               components={components}
               labels={g.labels}
             />

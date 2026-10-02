@@ -272,6 +272,8 @@ export interface UserContributionDetail {
     pos: string | null;
     englishGloss: string | null;
     citedEntryId: string | null;
+    /** The cited entry's etymology text on Wiktionary. */
+    wiktionaryEtymologyText?: string | null;
     components: Array<{ wordId: string; displayText: string; position: number }>;
   } | null;
   examples: UserContributionExample[];
@@ -508,6 +510,8 @@ export interface MyEntryAnswer {
 // the meaning fields (CheckDefinitionResult) arrive in ONE response, because
 // they are reviewed as one task.
 export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
+  /** Each candidate etymology with its text on Wiktionary. */
+  candidatesConsidered?: Array<NonNullable<DiagnoseEntryResult['candidatesConsidered']>[number] & { etymologyText?: string | null }>;
   syllables: string[];
   axisDecided: AxisDecided;
   /** What this word cites, and the COPY of that etymology taken when a human
@@ -904,6 +908,8 @@ export interface WordDossier {
   pin: unknown;
   pinnedAt: string | null;
   pinnedByEmail: string | null;
+  /** The cited entry's etymology text as Wiktionary has it now. */
+  wiktionaryEtymologyText?: string | null;
   components: Array<{ wordId: string; displayText: string; position: number; definition: string | null }>;
   usedAsComponentOf: Array<{ wordId: string; displayText: string }>;
   decisions: DossierDecision[];
@@ -1232,6 +1238,8 @@ export interface ConsensusGroup {
   currentEnglishGloss?: string | null;
   currentBorrowedFrom?: string | null;
   currentBorrowedTerm?: string | null;
+  /** Etymology axis: the cited entry's etymology text on Wiktionary. */
+  wiktionaryEtymologyText?: string | null;
   axis: 'entry' | 'etymology';
   decidedAt: string | null;
   decidedByEmail: string | null;

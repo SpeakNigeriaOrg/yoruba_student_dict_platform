@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { summarizeConsensus, type EntryOutcome } from '@yoruba-student-dict-platform/shared';
-import { CurrentRecord, DisagreementNote, OutcomeSummary } from './ClaimViews.js';
+import { CurrentRecord, DisagreementNote, OutcomeSummary, WiktionaryEtymologyText } from './ClaimViews.js';
 
 afterEach(cleanup);
 
@@ -59,5 +59,41 @@ describe('usage in the claim views', () => {
     ]);
     render(<DisagreementNote summary={summary} />);
     expect(screen.getByLabelText('What differs')).toHaveTextContent('They differ on the part of speech.');
+  });
+});
+
+describe("Wiktionary's etymology text", () => {
+  it('shows a short text whole, and nothing at all when there is none', () => {
+    const { rerender } = render(<WiktionaryEtymologyText text="From ọmọ + ọba." />);
+    expect(screen.getByLabelText("Wiktionary's etymology")).toHaveTextContent("Wiktionary's etymology: From ọmọ + ọba.");
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    rerender(<WiktionaryEtymologyText text="  " />);
+    expect(screen.queryByLabelText("Wiktionary's etymology")).not.toBeInTheDocument();
+  });
+
+  it('cuts a very long text at a word, with a control to show all of it', async () => {
+    const long = `${'Cognate with Igala and Edo forms '.repeat(12)}and the end.`;
+    render(<WiktionaryEtymologyText text={long} />);
+    const note = screen.getByLabelText("Wiktionary's etymology");
+    expect(note).not.toHaveTextContent('and the end.');
+    expect(note).toHaveTextContent('…');
+    screen.getByRole('button', { name: 'Show all' }).click();
+    expect(await screen.findByRole('button', { name: 'Show less' })).toBeInTheDocument();
+    expect(screen.getByLabelText("Wiktionary's etymology")).toHaveTextContent('and the end.');
+  });
+
+  it("is part of the etymology record's baseline", () => {
+    render(
+      <CurrentRecord
+        axis="etymology"
+        displayText="sọ̀rọ̀"
+        syllables={['sọ̀', 'rọ̀']}
+        definition="to speak"
+        citedEntryId={null}
+        components={[]}
+        wiktionaryEtymologyText="Contraction of sọ + ọ̀rọ̀."
+      />,
+    );
+    expect(screen.getByLabelText('What the record says now')).toHaveTextContent('Contraction of sọ + ọ̀rọ̀.');
   });
 });

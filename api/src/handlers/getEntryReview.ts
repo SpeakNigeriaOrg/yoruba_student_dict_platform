@@ -34,6 +34,7 @@ import {
   diagnoseEntry,
   resolveDefinitionSource,
   resolveEffectiveDisplayText,
+  type CandidateConsidered,
   type CheckDefinitionResult,
   type CheckSyllableSplitResult,
   type DiagnoseEntryResult,
@@ -80,6 +81,8 @@ export interface EntryUsage {
 }
 
 export interface EntryReviewResult extends DiagnoseEntryResult, CheckSyllableSplitResult, CheckDefinitionResult {
+  /** diagnoseEntry's candidates, each with its etymology text on Wiktionary - see getEntryReview. */
+  candidatesConsidered?: Array<CandidateConsidered & { etymologyText: string | null }>;
   syllables: string[];
   axisDecided: AxisDecided;
   /** Null for a word with no citation row at all - which after the E3 backfill
@@ -136,8 +139,23 @@ export async function getEntryReview(client: Queryable, wordId: string, userId: 
     source.note,
   );
 
+  // Each etymology the word might be, with what Wiktionary's editors wrote about where it comes
+  // from - often the clearest way to tell "etymology 1" from "etymology 2". Added here rather than
+  // in diagnoseEntry, whose output is pinned to the Python engine's by the parity tests.
+  const etymologyTextByEntry = new Map(
+    Object.values(lexicon)
+      .flat()
+      .filter((s) => s.entryId && s.etymologyText?.trim())
+      .map((s) => [s.entryId as string, s.etymologyText as string]),
+  );
+  const candidatesConsidered = diagnosis.candidatesConsidered?.map((c) => ({
+    ...c,
+    etymologyText: (c.entryId && etymologyTextByEntry.get(c.entryId)) || null,
+  }));
+
   return {
     ...diagnosis,
+    candidatesConsidered,
     ...syllableSplit,
     ...definitionFields,
     syllables: entry.syllables,

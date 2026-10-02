@@ -170,6 +170,34 @@ describe('AddWord - Word tab', () => {
     );
   });
 
+  it("shows each etymology's own text on Wiktionary, in the results and once it is cited", async () => {
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        {
+          form: 'sọ̀rọ̀',
+          pos: 'verb',
+          glosses: ['to speak'],
+          matchedVia: 'yoruba_exact',
+          altOfTargets: [],
+          standardForms: ['sọ̀rọ̀'],
+          entryId: 'en-soro-yo-verb-ABC',
+          etymologyNumber: null,
+          componentCandidates: [],
+          etymologyText: 'Contraction of sọ + ọ̀rọ̀, literally “to say words”.',
+        },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    // No structured parts at all - the text is the only account of where the word comes from.
+    expect(await screen.findByLabelText("Wiktionary's etymology")).toHaveTextContent('Contraction of sọ + ọ̀rọ̀');
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    expect(screen.getByLabelText('Cited etymology')).toHaveTextContent('Contraction of sọ + ọ̀rọ̀');
+  });
+
   it('says nothing when Kaikki proposes only a single root - a root is not a breakdown', async () => {
     const fetchMock = mockFetch({
       kaikkiResults: [

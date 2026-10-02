@@ -418,3 +418,12 @@ describe('setting the record from the dossier', () => {
     expect(section).toHaveTextContent('nothing to ratify');
   });
 });
+
+describe("Wiktionary's etymology text on the dossier", () => {
+  it('heads the Composition section, so a word with no parts still shows what is said about it', async () => {
+    mount({ wiktionaryEtymologyText: 'Cognate with Igala ọwọ́.' });
+    const composition = await screen.findByLabelText('Composition');
+    expect(composition).toHaveTextContent("Wiktionary's etymology: Cognate with Igala ọwọ́.");
+    expect(composition).toHaveTextContent('Atomic - no recorded parts.');
+  });
+});

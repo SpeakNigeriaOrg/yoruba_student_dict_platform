@@ -767,6 +767,20 @@ describe('curator tools', () => {
     expect(list).toHaveTextContent('to hang, suspend');
   });
 
+  it("show each etymology's own text on Wiktionary, which is often what tells them apart", async () => {
+    const user = userEvent.setup();
+    const [first, ...rest] = entryAmbiguousFixture.candidatesConsidered;
+    await loaded({
+      ...entryAmbiguousFixture,
+      candidatesConsidered: [{ ...first, etymologyText: 'From Proto-Yoruba *kɔ́.' }, ...rest.map((c) => ({ ...c, etymologyText: null }))],
+    });
+    await user.click(screen.getByRole('button', { name: 'Curator tools' }));
+
+    const notes = within(screen.getByLabelText('Candidates considered')).getAllByLabelText("Wiktionary's etymology");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toHaveTextContent('From Proto-Yoruba *kɔ́.');
+  });
+
   it('submit the chosen etymology by ID, not by a spelling that identifies nothing', async () => {
     const user = userEvent.setup();
     const fetchMock = await loaded(entryAmbiguousFixture);

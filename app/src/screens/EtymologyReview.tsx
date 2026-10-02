@@ -31,6 +31,7 @@ import {
   type EtymologyReviewResult,
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { WiktionaryEtymologyText } from './ClaimViews.js';
 import { LoanwordFields, NOT_A_LOANWORD, describeLoan, loanDraftFrom, sameLoan, type LoanDraft } from './LoanwordFields.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { SearchBox } from './SearchBox.js';
@@ -1065,12 +1066,11 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         </>
       )}
 
-      {review.etymologyText && !isPhrase && !(decidedAndSettled && !showReconsider) ? (
-        <div aria-label="Kaikki etymology note">
-          <p>Wiktionary&apos;s etymology:</p>
-          <p><em>{review.etymologyText}</em></p>
-        </div>
-      ) : null}
+      {/* Always, once there is some: for a phrase too, and for a word already decided - the
+          record above is our answer, and this is what Wiktionary's editors say about it. It used
+          to disappear exactly when the parts were settled, which is when someone reading the
+          record most wants the reasoning. */}
+      <WiktionaryEtymologyText text={review.etymologyText} />
 
       {/* The "Used in (other words that use this one as a component)" section stood here, with the
           curator-only "Already confirmed as used in" below it. Both are gone.

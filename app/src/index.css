@@ -508,6 +508,14 @@ audio {
   color: var(--ink-soft);
   margin: -6px 0 14px;
 }
+/* Wiktionary's etymology text (ClaimViews' WiktionaryEtymologyText): a block, but a span, so it
+   can sit inside a search row or a banner paragraph. */
+.etymology-text {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin: 4px 0;
+}
 
 /* ---- Comparison grid ---- */
 

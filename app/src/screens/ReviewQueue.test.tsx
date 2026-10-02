@@ -831,3 +831,28 @@ describe('ReviewQueue - the authoring vote backfill', () => {
     expect(status).toHaveTextContent('1 failed: oju_face (etymology)');
   });
 });
+
+describe("Wiktionary's etymology text beside etymology claims", () => {
+  it('shows it on an etymology row, in the bulk-confirm section too, and never on an entry row', async () => {
+    const etymologyClaim: ConsensusTallyEntry = {
+      fingerprint: 'fp-ety',
+      outcome: { kind: 'etymology', components: ['so_say', 'oro_word'], atomic: false },
+      count: 2,
+      voters: ['a', 'b'],
+      voterLabels: ['a', 'b'],
+      earliestSubmittedAt: '2026-08-01T00:00:00.000Z',
+    };
+    mockFetch([
+      group('soro_speak', 'ready', [etymologyClaim], 0, {
+        axis: 'etymology',
+        wiktionaryEtymologyText: 'Contraction of sọ + ọ̀rọ̀, literally “to say words”.',
+      }),
+      group('ikun_stomach', 'single', [claim('fp-entry', 1, ['a'])]),
+    ]);
+    render(<ReviewQueue onOpenWord={() => {}} />);
+
+    const notes = await screen.findAllByLabelText("Wiktionary's etymology");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toHaveTextContent("Wiktionary's etymology: Contraction of sọ + ọ̀rọ̀, literally “to say words”.");
+  });
+});

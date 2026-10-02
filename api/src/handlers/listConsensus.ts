@@ -27,6 +27,7 @@ import {
 import type { Queryable } from '../db.js';
 import { ENTRY_USAGE_COLUMNS, type EntryUsageRow } from '../entryUsage.js';
 import type { DecisionAxis } from '../reviewShared.js';
+import { loadWiktionaryEtymologyTexts } from '../wiktionaryEtymology.js';
 
 /** How one Wiktionary etymology reads to a human.
  *
@@ -79,6 +80,9 @@ export interface ConsensusGroup {
   /** The record's loanword source (0032), null when not a loanword. Etymology axis. */
   currentBorrowedFrom: string | null;
   currentBorrowedTerm: string | null;
+  /** Etymology axis: the cited entry's etymology text - what Wiktionary's editors say, beside the
+   * parts the claims name. Null on other axes. See wiktionaryEtymology.ts. */
+  wiktionaryEtymologyText: string | null;
   axis: DecisionAxis;
   /** Present only once a curator has decided. */
   decidedAt: string | null;
@@ -221,6 +225,7 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       currentEnglishGloss: word.english_gloss,
       currentBorrowedFrom: word.borrowed_from,
       currentBorrowedTerm: word.borrowed_term,
+      wiktionaryEtymologyText: null, // filled in below, batched like the labels
       axis,
       decidedAt: decision?.decided_at ?? null,
       decidedByEmail: decision?.email ?? null,
@@ -232,6 +237,13 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
   }
 
   await attachLabels(client, groups);
+  const etymologyTexts = await loadWiktionaryEtymologyTexts(
+    client,
+    groups.filter((g) => g.axis === 'etymology').map((g) => g.wordId),
+  );
+  for (const g of groups) {
+    if (g.axis === 'etymology') g.wiktionaryEtymologyText = etymologyTexts.get(g.wordId) ?? null;
+  }
 
   // Conflicts first, then dissent, then the bulk-confirmable set; within a
   // bucket, best-supported first so a curator's attention goes to the clearest

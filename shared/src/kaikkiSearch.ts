@@ -147,6 +147,8 @@ export interface KaikkiSearchResult {
    * nothing, which does not happen in practice but is worth keeping distinguishable from "there
    * was no template to begin with"). */
   componentCandidates: ComponentCandidate[] | null;
+  /** The etymology's own text on Wiktionary, present only when it has some. */
+  etymologyText?: string;
 }
 
 // One key per ETYMOLOGY. The lexicon deliberately cross-indexes the same
@@ -379,5 +381,9 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     // Only when Wiktionary marks it borrowed, so every other result keeps its exact shape (the
     // Python-parity fixtures compare results whole).
     ...(sense.borrowedFrom ? { borrowedFrom: sense.borrowedFrom, borrowedTerm: sense.borrowedTerm ?? null } : {}),
+    // What Wiktionary's editors wrote about where the word comes from - the reasoning behind
+    // componentCandidates, and the only account at all for an etymology with none. Only when there
+    // is some, for the same parity reason.
+    ...(sense.etymologyText?.trim() ? { etymologyText: sense.etymologyText } : {}),
   }));
 }

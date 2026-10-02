@@ -34,6 +34,7 @@
 // listConsensus now resolves both to something readable and hands them down as
 // `group.labels`. The raw id is the fallback, never the first choice.
 
+import { useState } from 'react';
 import type { ConsensusLabels, EtymologyLabel } from '../api.js';
 import { describeLoan } from './LoanwordFields.js';
 import type {
@@ -44,6 +45,37 @@ import type {
 } from '@yoruba-student-dict-platform/shared';
 
 const NO_LABELS: ConsensusLabels = { components: {}, etymologies: {} };
+
+/** Longer than this is cut, with a control to show all: 90% of Wiktionary's etymology texts are
+ * under 163 characters, but the longest runs to 1,589. */
+const LONG_ETYMOLOGY = 300;
+
+/** What Wiktionary's editors wrote about where a word comes from, in their words.
+ *
+ * Shown wherever a word's etymology is, beside its parts, because the parts alone miss two
+ * things: 1,756 Wiktionary etymologies have this text and no structured breakdown, so a screen
+ * showing only parts showed nothing for them; and where there are parts, this is the reasoning
+ * behind them ("Contraction of sọ + ọ̀rọ̀, literally 'to say words'"). */
+export function WiktionaryEtymologyText({ text }: { text: string | null | undefined }) {
+  const [open, setOpen] = useState(false);
+  if (!text?.trim()) return null;
+  const long = text.length > LONG_ETYMOLOGY;
+  const shown = long && !open ? `${text.slice(0, LONG_ETYMOLOGY).replace(/\s+\S*$/, '')}…` : text;
+  return (
+    // A span styled as a block, so it can sit inside a search row's <span> or a banner's <p>.
+    <span className="etymology-text" aria-label="Wiktionary's etymology">
+      Wiktionary&apos;s etymology: <em>{shown}</em>
+      {long ? (
+        <>
+          {' '}
+          <button type="button" className="btn btn-link" onClick={() => setOpen(!open)}>
+            {open ? 'Show less' : 'Show all'}
+          </button>
+        </>
+      ) : null}
+    </span>
+  );
+}
 
 /** One cited etymology, the way the Add Word screen writes it, so the same etymology reads
  * the same wherever a human meets it. Falls back to the bare id for a citation whose corpus
@@ -246,6 +278,7 @@ export function CurrentRecord({
   usage,
   englishGloss,
   borrowing,
+  wiktionaryEtymologyText,
   labels = NO_LABELS,
 }: {
   axis: 'entry' | 'etymology';
@@ -261,6 +294,8 @@ export function CurrentRecord({
   components?: string[];
   /** The record's loanword source (0032). Etymology axis. */
   borrowing?: { from: string | null; term: string | null };
+  /** The cited entry's etymology text on Wiktionary. Etymology axis. */
+  wiktionaryEtymologyText?: string | null;
   labels?: ConsensusLabels;
 }) {
   const loan = borrowing ? describeLoan(borrowing.from, borrowing.term) : null;
@@ -284,6 +319,7 @@ export function CurrentRecord({
                 {loan}
               </div>
             ) : null}
+            <WiktionaryEtymologyText text={wiktionaryEtymologyText} />
           </>
         ) : (
           <>

@@ -28,6 +28,7 @@
 import type { Queryable } from '../db.js';
 import { citationState, type CitationState } from '@yoruba-student-dict-platform/shared';
 import { WordNotFoundError } from './errors.js';
+import { loadWiktionaryEtymologyText } from '../wiktionaryEtymology.js';
 
 export interface DossierDecision {
   axis: string;
@@ -142,8 +143,10 @@ export interface WordDossier {
   pin: unknown;
   pinnedAt: string | null;
   pinnedByEmail: string | null;
+  /** The cited entry's etymology text as Wiktionary has it now - see wiktionaryEtymology.ts. */
+  wiktionaryEtymologyText: string | null;
 
-  components: Array<{ wordId: string; displayText: string; position: number; definition: string | null }>;
+  components:Array<{ wordId: string; displayText: string; position: number; definition: string | null }>;
   usedAsComponentOf: Array<{ wordId: string; displayText: string }>;
   decisions: DossierDecision[];
   contributions: DossierContribution[];
@@ -364,6 +367,7 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     pin: cite?.pin ?? null,
     pinnedAt: cite?.pinned_at ?? null,
     pinnedByEmail: cite?.pinned_by_email ?? null,
+    wiktionaryEtymologyText: await loadWiktionaryEtymologyText(client, wordId),
     // definition included for the same reason getEtymologyReview.ts's resolvedDefinition/
     // componentsOnRecord carry it: the spelling alone does not say which word this is - sùn is
     // at least three things (sleep, aim, complain), and the dossier is exactly where a curator

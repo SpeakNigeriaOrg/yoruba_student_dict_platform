@@ -40,6 +40,7 @@
 import type { Queryable } from '../db.js';
 import { recordingMatchesGolden } from '../reviewShared.js';
 import { UserNotFoundError } from './errors.js';
+import { loadWiktionaryEtymologyText } from '../wiktionaryEtymology.js';
 import type { ReleaseState } from './userDossier.js';
 
 export class ContributionNotFoundError extends Error {
@@ -118,6 +119,8 @@ export interface UserContributionWord {
   pos: string | null;
   englishGloss: string | null;
   citedEntryId: string | null;
+  /** The cited entry's etymology text - see wiktionaryEtymology.ts. */
+  wiktionaryEtymologyText: string | null;
   components: Array<{ wordId: string; displayText: string; position: number }>;
 }
 
@@ -299,6 +302,7 @@ export async function loadUserContribution(
       pos: w.pos,
       englishGloss: w.english_gloss,
       citedEntryId: w.cited_entry_id,
+      wiktionaryEtymologyText: await loadWiktionaryEtymologyText(client, wordId),
       components: components.rows.map((r) => ({
         wordId: r.component_word_id,
         displayText: r.display_text,

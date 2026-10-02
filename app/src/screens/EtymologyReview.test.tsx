@@ -581,7 +581,7 @@ describe('EtymologyReview', () => {
       render(<EtymologyReview wordId={wordId} isCurator={true} />);
       await waitFor(() => screen.getByText(spelling));
 
-      const note = screen.getByLabelText('Kaikki etymology note');
+      const note = screen.getByLabelText("Wiktionary's etymology");
       expect(note).toHaveTextContent("Wiktionary's etymology:");
       expect(note).toHaveTextContent('Clipping of an older form.');
       expect(note.className).not.toContain('warning-banner');
@@ -595,7 +595,7 @@ describe('EtymologyReview', () => {
     render(<EtymologyReview wordId="fixturegen2_compound_madeupword" isCurator={true} />);
     await waitFor(() => screen.getByText('fixturegen2_compoundspelling'));
 
-    expect(screen.queryByLabelText('Kaikki etymology note')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Wiktionary's etymology")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -1548,5 +1548,27 @@ describe('clues from other Wiktionary pages', () => {
     const requestCall = fetchMock.mock.calls.find((c) => c[0] === '/api/component-requests');
     expect(JSON.parse((requestCall![1] as RequestInit).body as string)).toEqual({ entryId: 'en-ade-1' });
     await waitFor(() => expect(screen.getByLabelText('Draft components')).toHaveTextContent('adé'));
+  });
+});
+
+describe("Wiktionary's etymology text on the etymology review", () => {
+  it('stays on screen once the etymology is decided, and for a phrase', async () => {
+    const decided = {
+      ...etymologyConfirmedFixture,
+      axisDecided: { ...etymologyConfirmedFixture.axisDecided, etymology: true },
+      etymologyText: 'From part one + part two.',
+    };
+    const phrase = { ...etymologyFixture, entryType: 'phrase', etymologyText: 'From part one + part two.' };
+    for (const [fixture, wordId] of [
+      [decided, 'fixturegenconfirmed_compound_word'],
+      [phrase, 'fixturegen2_compound_madeupword'],
+    ] as const) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => fixture }));
+      render(<EtymologyReview wordId={wordId} isCurator={false} />);
+      expect(await screen.findByLabelText("Wiktionary's etymology")).toHaveTextContent('From part one + part two.');
+      // The settled view, where the text used to disappear.
+      if (fixture === decided) expect(screen.getByRole('button', { name: "Compare against Wiktionary's proposal" })).toBeInTheDocument();
+      cleanup();
+    }
   });
 });

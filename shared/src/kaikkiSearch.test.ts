@@ -27,7 +27,7 @@ const fixtures = loadFixture<SearchKaikkiFixture[]>('search_kaikki.json');
  * decomposition for Add Word's benefit) - so they are not part of that contract and are dropped
  * before comparing. Their own behaviour is covered elsewhere, not here. */
 function withoutCitation(results: ReturnType<typeof searchKaikki>): unknown[] {
-  return results.map(({ entryId: _entryId, etymologyNumber: _etymologyNumber, componentCandidates: _componentCandidates, ...rest }) => rest);
+  return results.map(({ entryId: _entryId, etymologyNumber: _etymologyNumber, componentCandidates: _componentCandidates, etymologyText: _etymologyText, ...rest }) => rest);
 }
 
 /** Queries where the English RANKING deliberately no longer matches kaikki_search.py.

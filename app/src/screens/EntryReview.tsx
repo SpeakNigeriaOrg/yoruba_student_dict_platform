@@ -63,6 +63,7 @@ import {
   type WordDeletionImpact,
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { WiktionaryEtymologyText } from './ClaimViews.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
@@ -775,6 +776,8 @@ function CuratorTools({
                       <strong>{c.form}</strong> ({c.pos}
                       {c.etymologyNumber ? `, etymology ${c.etymologyNumber}` : ''}) - {c.glosses.join('; ')}
                     </label>
+                    {/* Often the clearest way to tell one etymology of a spelling from another. */}
+                    <WiktionaryEtymologyText text={c.etymologyText} />
                   </li>
                 ))}
               </ul>

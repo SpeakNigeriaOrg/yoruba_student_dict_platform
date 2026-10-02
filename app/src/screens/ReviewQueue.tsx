@@ -40,7 +40,7 @@ import {
 import type { ConsensusBucket } from '@yoruba-student-dict-platform/shared';
 // One renderer for a claim, shared with the dossier - see ClaimViews.tsx's header for why
 // the two screens are no longer allowed their own.
-import { ClaimRow, CurrentRecord, DisagreementNote } from './ClaimViews.js';
+import { ClaimRow, CurrentRecord, DisagreementNote, WiktionaryEtymologyText } from './ClaimViews.js';
 
 /** `chooseLabel` is per section rather than one shared word, because choosing a claim is a
  * different act in each: settling a live argument, overriding a decision you already made,
@@ -259,6 +259,12 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
                   </div>
 
                   <DisagreementNote summary={g.summary} />
+
+                  {/* What Wiktionary's editors say about where the word comes from - in every
+                      section, 'ready' included, because a claim naming parts is confirmed here
+                      without opening the word, and the text is the reasoning behind them (or, for
+                      an etymology with no parts at all, the only account there is). */}
+                  {g.axis === 'etymology' ? <WiktionaryEtymologyText text={g.wiktionaryEtymologyText} /> : null}
 
                   {/* The baseline the claims are proposing to change. Only where there is a
                       real choice to make: in 'ready' the queue is a bulk wave-through and a

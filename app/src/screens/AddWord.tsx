@@ -41,6 +41,7 @@ import {
 } from '@yoruba-student-dict-platform/shared';
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
 import { PartOfSpeechField } from './PartOfSpeechField.js';
+import { WiktionaryEtymologyText } from './ClaimViews.js';
 import { UsageCheckboxes } from './UsageFields.js';
 import { LoanwordFields, NOT_A_LOANWORD, type LoanDraft } from './LoanwordFields.js';
 import { PhraseComposer } from './PhraseComposer.js';
@@ -185,6 +186,9 @@ function EtymologyLabel({ result }: { result: KaikkiSearchResult }) {
     <>
       <strong>{result.form}</strong> ({result.pos}
       {result.etymologyNumber ? `, etymology ${result.etymologyNumber}` : ''}) - {result.glosses.join('; ')}
+      {/* What Wiktionary's editors say about where it comes from - with the number, what tells one
+          etymology of a spelling from another, and the reasoning behind any suggested parts. */}
+      <WiktionaryEtymologyText text={result.etymologyText} />
     </>
   );
 }
