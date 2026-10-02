@@ -17,7 +17,7 @@ import {
   rootBonus,
   type GlossStats,
 } from './englishRelevance.js';
-import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
+import { bareAffixForm, looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
 import type { ComponentCandidate, KaikkiLexicon, KaikkiSense } from './types.js';
 
 export interface KaikkiSearchRecord {
@@ -244,16 +244,24 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
 
   const results = new Map<string, { tier: KaikkiSearchTier; score: number; sense: KaikkiSense }>();
 
-  for (const { form, sense } of records) {
-    const fExact = form.toLowerCase();
-    const fTone = toneInsensitiveForm(form);
-    const fOrtho = orthographyInsensitiveForm(form);
+  /** The three whole-string tiers for one spelling. */
+  const wholeStringTier = (f: string): KaikkiSearchTier | null => {
+    if (f.toLowerCase() === qExact) return 'yoruba_exact';
+    if (qTone && toneInsensitiveForm(f) === qTone) return 'yoruba_tone';
+    if (qOrtho && orthographyInsensitiveForm(f) === qOrtho) return 'yoruba_ortho';
+    return null;
+  };
 
-    let tier: KaikkiSearchTier | null = null;
-    if (fExact === qExact) tier = 'yoruba_exact';
-    else if (qTone && fTone === qTone) tier = 'yoruba_tone';
-    else if (qOrtho && fOrtho === qOrtho) tier = 'yoruba_ortho';
-    else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
+  for (const { form, sense } of records) {
+    const fOrtho = orthographyInsensitiveForm(form);
+    const bare = bareAffixForm(form);
+
+    // An affix also answers to its spelling without the hyphen - see bareAffixForm.
+    const direct = wholeStringTier(form);
+    let tier: KaikkiSearchTier | null = direct ?? (bare ? wholeStringTier(bare) : null);
+    // Within a tier, the word itself before an affix spelled the same: "o" lists o, then o-.
+    const viaBareAffix = tier !== null && direct === null;
+    if (!tier && qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
     // A LATER word of a multi-word form, typed on its own. Wiktionary has no entry for
     // amóhùnmáwòrán, only for ẹ̀rọ amóhùnmáwòrán ("television") - so without this, searching
     // "amohunmaworan" found nothing but the phrase's Ajami spelling, whose gloss happens to name
@@ -279,7 +287,9 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
           ? prefixMatchScore(qOrtho.length, fOrtho.length)
           : laterWord
             ? prefixMatchScore(qOrtho.length, laterWord.length) * LATER_WORD_WEIGHT
-            : 0;
+            : viaBareAffix
+              ? -1
+              : 0;
       const key = senseKey(sense);
       const existing = results.get(key);
       // Better rank wins; at equal rank the better score does. The same sense reaches this loop

@@ -8,7 +8,7 @@
 // result, unlike Kaikki's per-sense records).
 
 import { orthographyInsensitiveForm, toneInsensitiveForm } from './orthography.js';
-import { looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
+import { bareAffixForm, looksLikeYoruba, tokenizeEnglish } from './searchShared.js';
 import type { Vocab } from './types.js';
 
 export type VocabSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'yoruba_substring' | 'word_id' | 'english';
@@ -56,10 +56,17 @@ export function searchVocab(vocab: Vocab, query: string, limit = 15): VocabSearc
     const fTone = toneInsensitiveForm(displayText);
     const fOrtho = orthographyInsensitiveForm(displayText);
 
+    // An affix also answers to its spelling without the hyphen - see bareAffixForm. Within a tier
+    // it comes after the word itself: "o" lists o, then o-.
+    const bare = bareAffixForm(displayText);
     let tier: VocabSearchTier | null = null;
+    let viaBareAffix = false;
     if (fExact === qExact) tier = 'yoruba_exact';
     else if (qTone && fTone === qTone) tier = 'yoruba_tone';
     else if (qOrtho && fOrtho === qOrtho) tier = 'yoruba_ortho';
+    else if (bare && bare.toLowerCase() === qExact) [tier, viaBareAffix] = ['yoruba_exact', true];
+    else if (bare && qTone && toneInsensitiveForm(bare) === qTone) [tier, viaBareAffix] = ['yoruba_tone', true];
+    else if (bare && qOrtho && orthographyInsensitiveForm(bare) === qOrtho) [tier, viaBareAffix] = ['yoruba_ortho', true];
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
     // A fragment from anywhere in the spelling, ranked below every form of prefix match.
     //
@@ -77,7 +84,7 @@ export function searchVocab(vocab: Vocab, query: string, limit = 15): VocabSearc
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.includes(qOrtho)) tier = 'yoruba_substring';
     else if (qExact && wordId.toLowerCase().includes(qExact)) tier = 'word_id';
 
-    if (tier) results.set(wordId, { tier, score: 0 });
+    if (tier) results.set(wordId, { tier, score: viaBareAffix ? -1 : 0 });
   }
 
   if (qTokens.length > 0) {

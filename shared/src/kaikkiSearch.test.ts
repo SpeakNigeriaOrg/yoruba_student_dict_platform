@@ -425,3 +425,25 @@ describe('a word typed on its own finds the phrases it is a later word of', () =
     expect(searchKaikki(recs, 'omo').map((r) => r.form)).toEqual(['ọmọdé', 'ilé ọmọ']);
   });
 });
+
+describe('an affix answers to its spelling without the hyphen', () => {
+  const form = (value: string) => ({ value, inferenceMethod: 'test', confidence: 1, originalValue: value });
+  const entry = (entryId: string, spelling: string, pos: string) =>
+    sense({ entryId, pos, headword: spelling, canonicalForm: form(spelling), standardForms: [spelling], glosses: [entryId] });
+  const recs = buildSearchIndex({
+    a: [entry('oni-prefix', 'oní-', 'prefix')],
+    b: [entry('oni-today', 'òní', 'noun')],
+    c: [entry('ola-suffix', '-ọlá', 'suffix')],
+  });
+
+  it('"oni" finds oní-, after the word that matches at the same tier', () => {
+    expect(searchKaikki(recs, 'oni').map((r) => [r.form, r.matchedVia])).toEqual([
+      ['òní', 'yoruba_tone'],
+      ['oní-', 'yoruba_tone'],
+    ]);
+  });
+
+  it('"ola" finds the suffix -ọlá', () => {
+    expect(searchKaikki(recs, 'ola').map((r) => r.form)).toEqual(['-ọlá']);
+  });
+});

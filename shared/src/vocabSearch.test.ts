@@ -45,3 +45,30 @@ describe('searchVocab direct unit tests', () => {
     expect(results.some((r) => r.wordId === 'moto_automobile' && r.matchedVia === 'word_id')).toBe(true);
   });
 });
+
+describe('affixes answer to their spelling without the hyphen', () => {
+  const affixes: Vocab = {
+    o_word: { displayText: 'o', syllables: ['o'], definition: 'you' },
+    o_prefix: { displayText: 'o-', syllables: ['o'], definition: 'nominalizing prefix' },
+    o_low_prefix: { displayText: 'ò-', syllables: ['ò'], definition: 'nominalizing prefix' },
+    o_dot_prefix: { displayText: 'ọ-', syllables: ['ọ'], definition: 'nominalizing prefix' },
+    ola_suffix: { displayText: '-ọlá', syllables: ['ọ', 'lá'], definition: 'honour' },
+    ni_interfix: { displayText: '-ní-', syllables: ['ní'], definition: 'interfix' },
+  };
+
+  it('"o" finds the o- prefixes, each after the word spelled the same at its tier', () => {
+    // The word_id tier (ola_suffix contains an o) is not what this is about.
+    const spelled = searchVocab(affixes, 'o').filter((r) => r.matchedVia !== 'word_id');
+    expect(spelled.map((r) => [r.displayText, r.matchedVia])).toEqual([
+      ['o', 'yoruba_exact'],
+      ['o-', 'yoruba_exact'],
+      ['ò-', 'yoruba_tone'],
+      ['ọ-', 'yoruba_ortho'],
+    ]);
+  });
+
+  it('works for suffixes and interfixes too', () => {
+    expect(searchVocab(affixes, 'ola')[0]).toMatchObject({ displayText: '-ọlá', matchedVia: 'yoruba_ortho' });
+    expect(searchVocab(affixes, 'ní')[0]).toMatchObject({ displayText: '-ní-', matchedVia: 'yoruba_exact' });
+  });
+});

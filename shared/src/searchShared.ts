@@ -15,6 +15,18 @@ const STOPWORDS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'is', 'or',
 // unrelated one-letter/pronoun glosses.
 const YORUBA_ONLY_CHARS = new Set(['ẹ', 'ọ', 'ṣ', ...TONE_MARKS, ...UNDERDOT_MARKS]);
 
+/** An affix's spelling without its hyphens - `o-` to `o`, `-ọlá` to `ọlá`, `-ní-` to `ní` - or null for
+ * anything that is not an affix.
+ *
+ * The hyphen is how a dictionary writes "attaches to another word", not part of what a reader types:
+ * searching "o" found none of the four o- prefixes (o-, ò-, ọ-, ọ̀-), because `o` never equals `o-`
+ * and a one-letter query is too short for a prefix match. Both searches also compare a query
+ * against this form, in the same whole-string tiers. */
+export function bareAffixForm(form: string): string | null {
+  const bare = form.replace(/^-+|-+$/g, '');
+  return bare !== form && bare !== '' ? bare : null;
+}
+
 export function looksLikeYoruba(query: string): boolean {
   const decomposed = query.toLowerCase().normalize('NFD');
   return [...decomposed].some((c) => YORUBA_ONLY_CHARS.has(c));
