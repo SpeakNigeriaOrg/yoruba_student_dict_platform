@@ -129,7 +129,7 @@ describe('EtymologyReview', () => {
     expect(screen.queryByRole('button', { name: 'Confirm components' })).not.toBeInTheDocument();
     // Exactly one answer, and it is a positive claim about the word.
     expect(screen.getByRole('button', { name: 'It has no parts' })).toBeInTheDocument();
-    expect(screen.getByText(/Wiktionary proposes no breakdown/)).toBeInTheDocument();
+    expect(screen.getByText(/own Wiktionary page proposes no breakdown/)).toBeInTheDocument();
   });
 
   it('never offers a volunteer the curator-only "add this missing word" button', async () => {
@@ -1477,5 +1477,76 @@ describe('is it a loanword? (0032)', () => {
     render(<EtymologyReview wordId="w" isCurator={false} />);
     await screen.findByRole('checkbox', { name: /Loanword/ });
     expect(screen.queryByRole('button', { name: 'Save the loanword answer' })).not.toBeInTheDocument();
+  });
+});
+
+describe('clues from other Wiktionary pages', () => {
+  const parent = (entryId: string, glosses: string[], held: { wordId: string; displayText: string } | null) => ({
+    entryId,
+    form: 'adé',
+    pos: 'noun',
+    etymologyNumber: null,
+    glosses,
+    held,
+  });
+  const clueFixture = {
+    ...etymologyFixture,
+    displayText: 'aládé',
+    components: [],
+    componentsOnRecord: [],
+    componentsProposal: [],
+    derivedTermClues: [
+      {
+        form: 'adé',
+        parents: [parent('en-ade-1', ['crown'], { wordId: 'ade_crown', displayText: 'adé' }), parent('en-ade-2', ['a bird'], null)],
+        otherWordsWithThisSpelling: 1,
+      },
+    ],
+  };
+
+  it("keeps a parent page's listing apart from the word's own etymology, and says where it came from", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => clueFixture }));
+    render(<EtymologyReview wordId="alade_crowned" isCurator={false} />);
+
+    const clues = await screen.findByLabelText('Clues from other Wiktionary pages');
+    expect(clues).toHaveTextContent('2 different Wiktionary entries for adé list aládé among the words that come from them');
+    expect(clues).toHaveTextContent("The list doesn't say what the other parts are.");
+    expect(clues).toHaveTextContent('Wiktionary has 1 other word spelled aládé, so it may mean that one instead.');
+    // Not offered as the word's own breakdown.
+    expect(screen.queryByLabelText('Proposed components')).not.toBeInTheDocument();
+    expect(screen.getByText(/This word's own Wiktionary page proposes no breakdown/)).toBeInTheDocument();
+  });
+
+  it('names the one parent page plainly when only one lists the word', async () => {
+    const one = {
+      ...clueFixture,
+      derivedTermClues: [{ form: 'adé', parents: [parent('en-ade-1', ['crown'], null)], otherWordsWithThisSpelling: 0 }],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => one }));
+    render(<EtymologyReview wordId="alade_crowned" isCurator={false} />);
+
+    const clues = await screen.findByLabelText('Clues from other Wiktionary pages');
+    expect(clues).toHaveTextContent("Wiktionary's page for adé (crown) lists aládé among the words that come from it. That suggests adé is one of its parts.");
+    expect(clues).not.toHaveTextContent('other word spelled');
+    expect(screen.getByRole('button', { name: 'Use adé as a part: crown' })).toHaveTextContent('Use adé as a part (request it)');
+  });
+
+  it('using a parent starts the list of parts with it', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/etymology')) return Promise.resolve({ ok: true, json: async () => clueFixture });
+      if (url === '/api/component-requests' && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ wordId: 'ade_crown', outcome: 'resolved', displayText: 'adé' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ results: [] }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<EtymologyReview wordId="alade_crowned" isCurator={false} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Use adé as a part: crown' }));
+
+    const requestCall = fetchMock.mock.calls.find((c) => c[0] === '/api/component-requests');
+    expect(JSON.parse((requestCall![1] as RequestInit).body as string)).toEqual({ entryId: 'en-ade-1' });
+    await waitFor(() => expect(screen.getByLabelText('Draft components')).toHaveTextContent('adé'));
   });
 });

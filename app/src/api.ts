@@ -436,6 +436,20 @@ export interface EtymologyReviewResult {
       held: { wordId: string; displayText: string } | null;
     }[];
   })[];
+  /** Clues from OTHER Wiktionary pages - a page whose "Derived terms" list names this word. Never
+   * part of componentsProposal. See getEtymologyReview.ts's DerivedTermClue. */
+  derivedTermClues?: {
+    form: string;
+    parents: {
+      entryId: string;
+      form: string;
+      pos: string;
+      etymologyNumber: string | null;
+      glosses: string[];
+      held: { wordId: string; displayText: string } | null;
+    }[];
+    otherWordsWithThisSpelling: number;
+  }[];
   components: string[];
   /** Our own decomposition, resolved to spellings, atomic collapsed to []. See the handler: this
    * exists so the screen shows words rather than word_ids, and tests "do we hold a breakdown?"

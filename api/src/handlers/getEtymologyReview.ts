@@ -37,7 +37,7 @@ import {
   type DiagnosticsOverrides,
 } from '@yoruba-student-dict-platform/shared';
 import type { Queryable } from '../db.js';
-import { loadKaikkiSensesForKey } from '../kaikkiData.js';
+import { loadKaikkiSensesForKey, loadSenseByEntryId } from '../kaikkiData.js';
 import { loadAxisDecided, loadDefinition, loadVocab, type AxisDecided } from '../reviewShared.js';
 import { WordNotFoundError } from './errors.js';
 import { loadMyEntryAnswer, type MyEntryAnswer } from '../myEntryAnswer.js';
@@ -88,6 +88,29 @@ export interface WiktionaryPartCandidate {
   held: { wordId: string; displayText: string } | null;
 }
 
+/** "Wiktionary's page for ọwọ́ lists àtẹ́lẹwọ́ among the words that come from it."
+ *
+ * Secondary evidence, kept apart from componentsProposal. These used to be mixed into it as if they
+ * were parts from the word's own etymology: ìgbẹ́ was proposed as "made of gbẹ́" on the strength of
+ * gbẹ́'s list alone, and agbálẹ̀ as a- + gbálẹ̀ + gbá, gbá being already inside gbálẹ̀. A listing
+ * says the parent is somewhere in the word, not what the word's parts are - and it is matched only
+ * by spelling, because a derived-terms item is a bare spelling with no id.
+ *
+ * That makes it ambiguous at both ends, and both are reported rather than resolved:
+ *   - `parents`: the parent end is exact (ingest records which entry's list it is), but several
+ *     etymologies sharing the parent's spelling can each list the word - Wiktionary then does not
+ *     say which meaning it comes from (the yorubadict lesson: say so, offer them all).
+ *   - `otherWordsWithThisSpelling`: the child end - other Wiktionary etymologies spelled like this
+ *     word received the same listing, and the list cannot say which of them it meant. */
+export interface DerivedTermClue {
+  /** The parent's spelling. */
+  form: string;
+  /** Each parent etymology whose list names this word. Empty only for data ingested before the
+   * parent's entry was recorded, when only the spelling is known. */
+  parents: WiktionaryPartCandidate[];
+  otherWordsWithThisSpelling: number;
+}
+
 export interface EtymologyReviewResult {
   wordId: string;
   displayText: string;
@@ -112,7 +135,12 @@ export interface EtymologyReviewResult {
    * silent, so a reviewer confirms rather than re-enters. */
   borrowing: Borrowing | null;
   wiktionaryBorrowing: Borrowing | null;
+  /** What the word's OWN Wiktionary page says it is built from - its etymology section's templates.
+   * Never includes a parent-page clue (derivedTermClues below). */
   componentsProposal: ProposalItemWithNearMatches[];
+  /** Secondary evidence from OTHER Wiktionary pages: a page whose "Derived terms" list names this
+   * word. See DerivedTermClue. */
+  derivedTermClues: DerivedTermClue[];
   components: string[];
   /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
    * collapsed to an empty list.
@@ -294,22 +322,55 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
 
   const key = orthographyInsensitiveForm(entry.displayText);
   const senses = await loadKaikkiSensesForKey(client, key);
-  const lexicon = senses.length > 0 ? { [key]: senses } : {};
+  // A cited word IS its cited etymology (0014), so that is the one whose evidence is shown. Matching
+  // by spelling and gloss instead - diagnoseEntry's job for a word with no citation - put the wrong
+  // etymology, or none, in front of the reviewer for 29 of 266 cited words (2026-10-02): every
+  // spelling Wiktionary has several entries for, ẹ, o, ti, bàbá among them.
+  const cited = await client.query<{ entry_id: string }>(
+    'select entry_id from upstream_citations where word_id = $1 and entry_id is not null',
+    [wordId],
+  );
+  const citedEntryId = cited.rows[0]?.entry_id ?? null;
+  const citedSense = citedEntryId
+    ? (senses.find((s) => s.entryId === citedEntryId) ?? (await loadSenseByEntryId(client, citedEntryId)))
+    : null;
+  const lexicon = citedSense ? { [key]: [citedSense] } : senses.length > 0 ? { [key]: senses } : {};
   const overrides = await loadSpellingConfirmedOverrides(client);
 
   const diagnosis = diagnoseEntry(wordId, entry, lexicon);
   const index = buildVocabSpellingIndex(vocab);
   const componentOwners = buildComponentOwnersIndex(vocab);
 
-  const partCandidates = await loadPartCandidates(
-    client,
-    (diagnosis.matchedComponentCandidates ?? []).flatMap((c) => c.entryIds ?? []),
-  );
+  // The word's own etymology, and the clues other pages give about it - see DerivedTermClue.
+  const ownCandidates = (diagnosis.matchedComponentCandidates ?? []).filter((c) => c.provenance !== 'derived_reciprocal');
+  const clueCandidates = (diagnosis.matchedComponentCandidates ?? []).filter((c) => c.provenance === 'derived_reciprocal');
+
+  const partCandidates = await loadPartCandidates(client, [
+    ...ownCandidates.flatMap((c) => c.entryIds ?? []),
+    ...clueCandidates.flatMap((c) => c.entryIds ?? []),
+  ]);
+
+  const derivedTermClues: DerivedTermClue[] = clueCandidates.map((c) => {
+    const parentIds = c.entryIds ?? [];
+    // Every etymology loaded under this spelling that the same list reached, this word's own aside.
+    const reached = senses.filter(
+      (s) =>
+        s.entryId !== diagnosis.matchedEntryId &&
+        (s.componentCandidates ?? []).some(
+          (o) => o.provenance === 'derived_reciprocal' && o.form === c.form && (o.entryIds ?? []).some((id) => parentIds.includes(id)),
+        ),
+    );
+    return {
+      form: c.form,
+      parents: parentIds.map((id) => partCandidates.get(id)).filter((p): p is WiktionaryPartCandidate => p !== undefined),
+      otherWordsWithThisSpelling: reached.length,
+    };
+  });
 
   const fields = componentsAxisFields(
     wordId,
     vocab,
-    diagnosis.matchedComponentCandidates,
+    ownCandidates,
     diagnosis.matchedUsedInCandidates,
     lexicon,
     overrides,
@@ -339,7 +400,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
     // usedAsComponentOf stop here.
     componentsProposal: fields.componentsProposal.map((item, i) => {
       // One proposal item per matched candidate, in order (componentsAxisFields maps them 1:1).
-      const candidate = diagnosis.matchedComponentCandidates?.[i];
+      const candidate = ownCandidates[i];
       return {
         ...item,
         possibleMatchWords: item.possibleMatches.map((id) => ({
@@ -353,6 +414,7 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
           .filter((c): c is WiktionaryPartCandidate => c !== undefined),
       };
     }),
+    derivedTermClues,
     components: fields.components,
     // The self-reference is not a component; see the field's own note. vocab is already loaded, so
     // resolving each id to its spelling costs nothing extra.

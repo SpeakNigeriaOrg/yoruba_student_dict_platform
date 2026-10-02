@@ -3,6 +3,7 @@ import { orthographyInsensitiveForm } from '@yoruba-student-dict-platform/shared
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { getEtymologyReview } from './getEtymologyReview.js';
 import { WordNotFoundError } from './errors.js';
+import { writeCitationInTransaction } from './upstreamCitations.js';
 
 const NS = 'testgetety_';
 const pool = getTestPool();
@@ -197,5 +198,63 @@ describe('getEtymologyReview', () => {
 
     expect(result.definition).toBeNull();
     expect(result.axisDecided).toEqual({ entry: false, etymology: false, audio: false, audioDiverges: false, example: false });
+  });
+});
+
+describe('clues from other Wiktionary pages (derived terms)', () => {
+  const E = 'testgetety-entry-';
+
+  afterAll(async () => {
+    await pool.query('delete from kaikki_senses where entry_id like $1', [`${E}%`]);
+  });
+
+  async function sense(entryId: string, spelling: string, glosses: string[], candidates: Array<{ form: string; provenance: string; entryIds?: string[] }>) {
+    const { rows } = await pool.query<{ sense_id: string }>(
+      `insert into kaikki_senses
+         (entry_id, pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses)
+       values ($1, 'noun', $2, $2, 'explicit_canonical_tag', 1.0, $2, $3, $4) returning sense_id`,
+      [entryId, spelling, [spelling], glosses],
+    );
+    await pool.query('insert into kaikki_sense_keys (sense_id, orthography_insensitive_key) values ($1, $2)', [
+      rows[0].sense_id,
+      orthographyInsensitiveForm(spelling),
+    ]);
+    for (const [position, c] of candidates.entries()) {
+      await pool.query(
+        'insert into kaikki_component_candidates (sense_id, position, form, provenance, candidate_entry_ids) values ($1, $2, $3, $4, $5)',
+        [rows[0].sense_id, position, c.form, c.provenance, c.entryIds ?? null],
+      );
+    }
+  }
+
+  it("keeps a parent page's listing out of the word's own etymology, and names its ambiguity at both ends", async () => {
+    const parent = `${NS}crownspelling`;
+    const child = `${NS}crownedspelling`;
+    // Two etymologies spelled like the parent both list the child; we hold the first.
+    await sense(`${E}crown-1`, parent, ['crown'], []);
+    await sense(`${E}crown-2`, parent, ['a kind of bird'], []);
+    await insertWord(`${NS}crown`, parent);
+    await writeCitationInTransaction(pool, `${NS}crown`, { entryId: `${E}crown-1` }, userId);
+    // The child's own etymology names one part; the listing reached it and another etymology
+    // spelled the same way.
+    const clue = { form: parent, provenance: 'derived_reciprocal', entryIds: [`${E}crown-1`, `${E}crown-2`] };
+    await sense(`${E}crowned-1`, child, ['one who wears a crown'], [{ form: `${NS}ownpart`, provenance: 'etymology_template' }, clue]);
+    await sense(`${E}crowned-2`, child, ['something else entirely'], [clue]);
+    await insertWord(`${NS}crowned`, child);
+    await writeCitationInTransaction(pool, `${NS}crowned`, { entryId: `${E}crowned-1` }, userId);
+
+    const review = await getEtymologyReview(pool, `${NS}crowned`, userId);
+
+    expect(review.componentsProposal.map((p) => p.kaikkiForm)).toEqual([`${NS}ownpart`]);
+    expect(review.derivedTermClues).toEqual([
+      {
+        form: parent,
+        parents: [
+          expect.objectContaining({ entryId: `${E}crown-1`, glosses: ['crown'], held: { wordId: `${NS}crown`, displayText: parent } }),
+          expect.objectContaining({ entryId: `${E}crown-2`, glosses: ['a kind of bird'], held: null }),
+        ],
+        otherWordsWithThisSpelling: 1,
+      },
+    ]);
   });
 });

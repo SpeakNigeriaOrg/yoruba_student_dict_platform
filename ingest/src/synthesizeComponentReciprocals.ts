@@ -11,6 +11,13 @@
 // proposal later can tell "Kaikki's own etymology for this word says so"
 // apart from "inferred because some other word's derived-terms list names
 // this one".
+//
+// WHICH PARENT, exactly. A derived-terms item is only a spelling (`{type:'term', text:'àtẹ́lẹwọ́'}`),
+// so the CHILD end of the link is matched by spelling and can be ambiguous - every etymology spelled
+// that way receives it. The PARENT end is not: it is the very entry whose list this is, so its
+// entry_id is recorded on the candidate (entryIds), and two parent etymologies sharing a spelling
+// that both list the word are merged into one candidate naming both. The review screen shows this
+// as a clue from the parent's page, never as the word's own etymology.
 
 import type { DerivedKaikkiSense } from './types.js';
 
@@ -36,9 +43,14 @@ export function synthesizeComponentReciprocals(senses: DerivedKaikkiSense[]): vo
     for (const derivedSpelling of sense.derivedFormTexts) {
       const targets = aliasIndex.get(derivedSpelling) ?? [];
       for (const target of targets) {
-        const alreadyPresent = target.componentCandidates.some((c) => c.form === sense.canonicalForm.value);
-        if (!alreadyPresent) {
-          target.componentCandidates.push({ form: sense.canonicalForm.value, provenance: 'derived_reciprocal' });
+        const form = sense.canonicalForm.value;
+        // The word's own etymology already names this part: the clue adds nothing.
+        if (target.componentCandidates.some((c) => c.form === form && c.provenance !== 'derived_reciprocal')) continue;
+        const existing = target.componentCandidates.find((c) => c.form === form && c.provenance === 'derived_reciprocal');
+        if (!existing) {
+          target.componentCandidates.push({ form, provenance: 'derived_reciprocal', entryIds: [sense.entryId] });
+        } else if (!(existing.entryIds ?? []).includes(sense.entryId)) {
+          existing.entryIds = [...(existing.entryIds ?? []), sense.entryId];
         }
       }
     }

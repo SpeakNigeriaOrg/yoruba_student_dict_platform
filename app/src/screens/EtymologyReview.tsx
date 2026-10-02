@@ -457,6 +457,99 @@ function ProposalItemRow({
   );
 }
 
+/** Clues from other Wiktionary pages: a page whose "Derived terms" list names this word.
+ *
+ * Shown apart from Wiktionary's own breakdown, and said plainly as what it is, because it is weaker
+ * evidence: a listing says the parent is somewhere in the word, not what the word's parts are, and
+ * it names the word only by spelling. Both kinds of doubt that follow are stated rather than hidden
+ * (the lesson from yorubadict): several meanings of the parent can each list the word, and the
+ * spelling can belong to more than one word. Using a parent starts the list of parts with it -
+ * the reviewer supplies the rest. */
+function DerivedTermClues({
+  clues,
+  word,
+  onUse,
+}: {
+  clues: NonNullable<EtymologyReviewResult['derivedTermClues']>;
+  word: string;
+  onUse: (entryId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pick(entryId: string) {
+    setBusy(entryId);
+    setError(null);
+    try {
+      await onUse(entryId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div aria-label="Clues from other Wiktionary pages">
+      <h3>Clues from other Wiktionary pages</h3>
+      <ul>
+        {clues.map((clue) => {
+          const one = clue.parents.length === 1 ? clue.parents[0] : null;
+          const others = clue.otherWordsWithThisSpelling;
+          return (
+            <li key={clue.form}>
+              {clue.parents.length > 1 ? (
+                <p>
+                  {clue.parents.length} different Wiktionary entries for <strong>{clue.form}</strong> list{' '}
+                  <strong>{word}</strong> among the words that come from them, without saying which meaning it comes
+                  from. That suggests one of them is a part of {word}.
+                </p>
+              ) : (
+                <p>
+                  Wiktionary&apos;s page for <strong>{clue.form}</strong>
+                  {one?.glosses[0] ? ` (${one.glosses[0]})` : ''} lists <strong>{word}</strong> among the words that
+                  come from it. That suggests {clue.form} is one of its parts.
+                </p>
+              )}
+              <p className="field-note">
+                The list doesn&apos;t say what the other parts are.
+                {others > 0
+                  ? ` It also gives only a spelling, and Wiktionary has ${others} other ${others === 1 ? 'word' : 'words'} spelled ${word}, so it may mean ${others === 1 ? 'that one' : 'one of those'} instead.`
+                  : ''}
+              </p>
+              {clue.parents.length > 0 ? (
+                <ul className="plain-list">
+                  {clue.parents.map((p) => (
+                    <li key={p.entryId}>
+                      <strong>{p.form}</strong> ({p.pos}
+                      {p.etymologyNumber ? `, entry ${p.etymologyNumber}` : ''}) - {p.glosses.join('; ') || '(no gloss)'}
+                      {p.held ? <span className="field-note"> - in the dictionary</span> : null}{' '}
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={busy !== null}
+                        onClick={() => void pick(p.entryId)}
+                        aria-label={`Use ${p.form} as a part: ${p.glosses[0] ?? p.pos}`}
+                      >
+                        {busy === p.entryId
+                          ? 'Working...'
+                          : p.held
+                            ? `Use ${p.form} as a part`
+                            : `Use ${p.form} as a part (request it)`}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {error ? <p role="alert">{error}</p> : null}
+    </div>
+  );
+}
+
 export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = true }: EtymologyReviewProps) {
   const [review, setReview] = useState<EtymologyReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -629,6 +722,13 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       if (item.wordId) addDraftComponent(item.wordId, { displayText: item.kaikkiForm, pending: false });
     }
     setClaimsHasParts(true);
+  }
+
+  /** A clue's parent starts the list of parts: whatever of Wiktionary's own breakdown already
+   * resolved goes in first, then the parent - resolved to the word we hold, or requested. */
+  async function startPartsWithClueParent(entryId: string) {
+    openPickerFromProposal();
+    acceptRequestResult(await requestComponent(entryId));
   }
 
   /** Both request paths land here: the returned word_id goes straight into the draft, whether
@@ -959,6 +1059,9 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               </p>
             </div>
           ) : null}
+          {(review.derivedTermClues ?? []).length > 0 ? (
+            <DerivedTermClues clues={review.derivedTermClues ?? []} word={shownDisplayText} onUse={startPartsWithClueParent} />
+          ) : null}
         </>
       )}
 
@@ -1043,7 +1146,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
       ) : null}
       {!isPhrase && !hasProposal && !hasRealExistingComponents ? (
         <p className="field-note">
-          Wiktionary proposes no breakdown for this word, and none is on record. If it is a single indivisible word, say
+          This word&apos;s own Wiktionary page proposes no breakdown, and none is on record. If it is a single indivisible word, say
           so - that is a real answer, not a fallback.
         </p>
       ) : null}

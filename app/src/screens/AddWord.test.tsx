@@ -135,6 +135,41 @@ describe('AddWord - Word tab', () => {
     expect(screen.queryByLabelText('Word components section')).not.toBeInTheDocument();
   });
 
+  it("keeps a parent page's derived-terms listing out of the breakdown, and says where it came from", async () => {
+    const fetchMock = mockFetch({
+      kaikkiResults: [
+        {
+          form: 'agbálẹ̀',
+          pos: 'noun',
+          glosses: ['sweeper'],
+          matchedVia: 'yoruba_exact',
+          altOfTargets: [],
+          standardForms: ['agbálẹ̀'],
+          entryId: 'en-agbale-yo-noun-ABC',
+          etymologyNumber: null,
+          componentCandidates: [
+            { form: 'a-', provenance: 'etymology_template' },
+            { form: 'gbálẹ̀', provenance: 'etymology_template' },
+            { form: 'gbá', provenance: 'derived_reciprocal', entryIds: ['en-gba-yo-verb-X'] },
+          ],
+        },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => screen.getByText('agbálẹ̀'));
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+
+    // Was "a- + gbálẹ̀ + gbá": gbá's list counted as a third part, though gbá is inside gbálẹ̀.
+    expect(screen.getByLabelText("Wiktionary's suggested components")).toHaveTextContent(/^Wiktionary suggests this is built from: a- \+ gbálẹ̀$/);
+    expect(screen.getByLabelText('Clues from other Wiktionary pages')).toHaveTextContent(
+      "Wiktionary's page for gbá lists this word among the words that come from it, so gbá may be one of its parts.",
+    );
+  });
+
   it('says nothing when Kaikki proposes only a single root - a root is not a breakdown', async () => {
     const fetchMock = mockFetch({
       kaikkiResults: [

@@ -389,6 +389,9 @@ function WordTab({
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
   /** The part of speech this word will resolve to: the one typed here off-path, else the cited
    * etymology's own. What decides whether "not a standalone word" is fixed (an affix) or asked. */
+  // The picked etymology's own breakdown, and the parent pages whose derived-terms lists name it.
+  const ownParts = (selected?.componentCandidates ?? []).filter((c) => c.provenance !== 'derived_reciprocal');
+  const clueParents = (selected?.componentCandidates ?? []).filter((c) => c.provenance === 'derived_reciprocal').map((c) => c.form);
   const effectivePos = offPath ? pos || null : (selected?.pos ?? null);
   const citable = offPath ? Boolean(exemptReason.trim()) : Boolean(selected?.entryId);
 
@@ -721,9 +724,26 @@ function WordTab({
               EtymologyReview's singleRootProposal - so only shown once there is a real one to
               weigh. Unresolved against our vocab on purpose: this is a hint to act on with the
               picker below, not a claim about whether we already hold these words. */}
-          {selected && selected.componentCandidates && selected.componentCandidates.length > 1 ? (
+          {ownParts.length > 1 ? (
             <p className="field-note" aria-label="Wiktionary's suggested components">
-              Wiktionary suggests this is built from: {selected.componentCandidates.map((c) => c.form).join(' + ')}
+              Wiktionary suggests this is built from: {ownParts.map((c) => c.form).join(' + ')}
+            </p>
+          ) : null}
+          {/* The weaker, secondary evidence, said as what it is - see EtymologyReview's
+              DerivedTermClues. It used to be counted as a part in the line above. */}
+          {clueParents.length > 0 ? (
+            <p className="field-note" aria-label="Clues from other Wiktionary pages">
+              {clueParents.length === 1 ? (
+                <>
+                  Wiktionary&apos;s page for <strong>{clueParents[0]}</strong> lists this word among the words that come
+                  from it, so {clueParents[0]} may be one of its parts.
+                </>
+              ) : (
+                <>
+                  Wiktionary&apos;s pages for <strong>{clueParents.join(', ')}</strong> list this word among the words
+                  that come from them, so they may be among its parts.
+                </>
+              )}
             </p>
           ) : null}
 

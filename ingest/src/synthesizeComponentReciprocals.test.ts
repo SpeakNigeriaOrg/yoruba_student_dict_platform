@@ -48,9 +48,34 @@ describe('synthesizeComponentReciprocals', () => {
 
     expect(compound.componentCandidates).toEqual([
       { form: 'jù', provenance: 'etymology_template' },
-      { form: 'kàn', provenance: 'derived_reciprocal' },
+      { form: 'kàn', provenance: 'derived_reciprocal', entryIds: ['root'] },
     ]);
     expect(root.componentCandidates).toEqual([]); // the source itself is untouched
+  });
+
+  it('names exactly which parent etymology listed the word, merging two that share a spelling', () => {
+    const parent = (entryId: string): DerivedKaikkiSense => ({
+      entryId,
+      pos: 'noun',
+      etymologyNumber: null,
+      headword: 'ade',
+      canonicalForm: { value: 'adé', inferenceMethod: 'explicit_canonical_tag', confidence: 1, originalValue: 'ade' },
+      standardForms: ['adé'],
+      glosses: [],
+      altOfTargets: [],
+      componentCandidates: [],
+      indexKeys: [],
+      derivedFormTexts: ['aládé'],
+    });
+    const child: DerivedKaikkiSense = {
+      ...parent('child'),
+      headword: 'alade',
+      canonicalForm: { value: 'aládé', inferenceMethod: 'explicit_canonical_tag', confidence: 1, originalValue: 'alade' },
+      standardForms: ['aládé'],
+      derivedFormTexts: [],
+    };
+    synthesizeComponentReciprocals([parent('ade-1'), parent('ade-2'), child]);
+    expect(child.componentCandidates).toEqual([{ form: 'adé', provenance: 'derived_reciprocal', entryIds: ['ade-1', 'ade-2'] }]);
   });
 
   it('does not add a duplicate reciprocal candidate if one already exists (e.g. from a real etymology_template)', () => {
