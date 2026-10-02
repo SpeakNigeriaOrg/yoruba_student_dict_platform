@@ -62,8 +62,32 @@ export function deriveAltOfTargets(entry: CanonicalEntry): string[] {
     for (const alt of sense.altOf) {
       if (alt.word && !targets.includes(alt.word)) targets.push(alt.word);
     }
+    const ajami = ajamiSpellingTarget(sense);
+    if (ajami && !targets.includes(ajami)) targets.push(ajami);
   }
   return targets;
+}
+
+/** The Latin-script word an Ajami spelling is a spelling of.
+ *
+ * Kaikki records "alternative form of" (351 senses) and "archaic spelling of" (9) as alt_of, but
+ * not Wiktionary's Ajami template: all 157 "Ajami spelling of X" senses come through with alt_of
+ * empty, though each is a cross-reference exactly like the others (counted 2026-10-02). Left
+ * unrecorded, an Ajami spelling looked like a word in its own right - search matched "amohunmaworan"
+ * against the gloss "Ajami spelling of ẹ̀rọ amóhùnmáwòrán" and ranked the Ajami entry above the
+ * phrase it spells, and Add Word could not warn that the word it spells was already in.
+ *
+ * Not prose parsing: the target must also be one of the sense's own links, which every one of the
+ * 157 satisfies - 15 of them followed by the word's gloss in brackets ("Ajami spelling of àdúrà
+ * (“prayer”)"). Skipped when Kaikki already gives alt_of. */
+function ajamiSpellingTarget(sense: CanonicalEntry['senses'][number]): string | null {
+  if (sense.altOf.length > 0) return null;
+  for (const gloss of sense.glosses) {
+    const m = /^Ajami spelling of (.+?)(?:\s+\(.*\))?$/.exec(gloss.trim());
+    const target = m?.[1].trim();
+    if (target && sense.links.includes(target)) return target;
+  }
+  return null;
 }
 
 /** Component word spellings from this entry's own etymologyMorphemes -

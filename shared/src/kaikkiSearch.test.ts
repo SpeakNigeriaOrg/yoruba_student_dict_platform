@@ -381,3 +381,47 @@ describe('ties break on gloss length, not on position in the corpus file', () =>
     expect(first).toBe('terser');
   });
 });
+
+describe('a word typed on its own finds the phrases it is a later word of', () => {
+  // The real case: Wiktionary has no entry for amóhùnmáwòrán, only for ẹ̀rọ amóhùnmáwòrán and its
+  // Ajami spelling - and the Ajami spelling's gloss names the phrase.
+  const form = (value: string) => ({ value, inferenceMethod: 'test', confidence: 1, originalValue: value });
+  const phrase = sense({
+    entryId: 'tv',
+    pos: 'noun',
+    headword: 'ẹrọ amohunmaworan',
+    canonicalForm: form('ẹ̀rọ amóhùnmáwòrán'),
+    standardForms: ['ẹ̀rọ amóhùnmáwòrán'],
+    glosses: ['television, TV'],
+  });
+  const ajami = sense({
+    entryId: 'tv-ajami',
+    pos: 'noun',
+    headword: 'عَِروَْ اموْهُنمَووْرَن',
+    canonicalForm: form('عَِروَْ اموْهُنمَووْرَن'),
+    standardForms: ['عَِروَْ اموْهُنمَووْرَن'],
+    glosses: ['Ajami spelling of ẹ̀rọ amóhùnmáwòrán'],
+    altOfTargets: ['ẹ̀rọ amóhùnmáwòrán'],
+  });
+  const ile = sense({ entryId: 'ile', pos: 'noun', headword: 'ilé', canonicalForm: form('ilé'), standardForms: ['ilé'], glosses: ['house'] });
+  const tvRecords = buildSearchIndex({ ero: [phrase], ajami: [ajami], ile: [ile] });
+
+  it('ranks the phrase first, and its Ajami spelling - which only names it - below it', () => {
+    expect(searchKaikki(tvRecords, 'amohunmaworan').map((r) => [r.form, r.matchedVia])).toEqual([
+      ['ẹ̀rọ amóhùnmáwòrán', 'yoruba_word'],
+      ['عَِروَْ اموْهُنمَووْرَن', 'english'],
+    ]);
+  });
+
+  it('matches the start of a later word, never the inside of one', () => {
+    expect(searchKaikki(tvRecords, 'amohun').map((r) => r.form)[0]).toBe('ẹ̀rọ amóhùnmáwòrán');
+    expect(searchKaikki(tvRecords, 'hunmaworan').map((r) => r.form)).not.toContain('ẹ̀rọ amóhùnmáwòrán');
+  });
+
+  it('counts a later word for less than a word the form starts with', () => {
+    const phraseWithIle = sense({ entryId: 'ile-omo', pos: 'noun', headword: 'ilé ọmọ', canonicalForm: form('ilé ọmọ'), standardForms: ['ilé ọmọ'], glosses: ['womb'] });
+    const omode = sense({ entryId: 'omode', pos: 'noun', headword: 'ọmọdé', canonicalForm: form('ọmọdé'), standardForms: ['ọmọdé'], glosses: ['young person'] });
+    const recs = buildSearchIndex({ a: [phraseWithIle], b: [omode] });
+    expect(searchKaikki(recs, 'omo').map((r) => r.form)).toEqual(['ọmọdé', 'ilé ọmọ']);
+  });
+});

@@ -42,7 +42,7 @@ export function buildSearchIndex(lexicon: KaikkiLexicon): KaikkiSearchRecord[] {
   return records;
 }
 
-type KaikkiSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'english';
+type KaikkiSearchTier = 'yoruba_exact' | 'yoruba_tone' | 'yoruba_ortho' | 'yoruba_prefix' | 'yoruba_word' | 'english';
 
 // ---------------------------------------------------------------------------
 // Three HARD tiers, then two that compete on score
@@ -68,6 +68,7 @@ const TIER_RANK: Record<KaikkiSearchTier, number> = {
   yoruba_tone: 1,
   yoruba_ortho: 2,
   yoruba_prefix: SOFT_RANK,
+  yoruba_word: SOFT_RANK,
   english: SOFT_RANK,
 };
 
@@ -187,6 +188,37 @@ function glossStatsFor(records: KaikkiSearchRecord[]): GlossStats {
   return buildGlossStats(dedupedSenses(records).map(({ sense }) => sense.glosses));
 }
 
+/** A word of a phrase counts for half a word the phrase starts with: `ọmọ` should bring up the
+ * words built on it (ọmọdé, ọmọba) before the phrases it merely appears in (ilé ọmọ). */
+const LATER_WORD_WEIGHT = 0.5;
+
+/** A cross-reference never outranks the word it points to, when both are found.
+ *
+ * A cross-reference's gloss names its target - "Ajami spelling of ẹ̀rọ amóhùnmáwòrán", "alternative
+ * form of àdúrà" - so it matches a search for the target's spelling through the English pass. That
+ * is useful: it is how "adura" turns up àdúà and the Ajami ادُرَ. But it scored as a strong English
+ * match, so where the target itself was only a soft match the spelling outranked the word: the
+ * phrase ẹ̀rọ amóhùnmáwòrán came second to its own Ajami spelling for "amohunmaworan". A
+ * cross-reference is never a better answer than its target, so it is placed just below it. Only
+ * soft scores move: a target found by a hard tier already ranks above anything soft. */
+function keepCrossReferencesBelowTheirTargets(
+  results: Map<string, { tier: KaikkiSearchTier; score: number; sense: KaikkiSense }>,
+): void {
+  const softScoreByForm = new Map<string, number>();
+  for (const r of results.values()) {
+    if (TIER_RANK[r.tier] !== SOFT_RANK) continue;
+    const form = r.sense.canonicalForm.value.normalize('NFC');
+    softScoreByForm.set(form, Math.max(softScoreByForm.get(form) ?? -Infinity, r.score));
+  }
+  for (const r of results.values()) {
+    if (TIER_RANK[r.tier] !== SOFT_RANK) continue;
+    for (const target of r.sense.altOfTargets ?? []) {
+      const targetScore = softScoreByForm.get(target.normalize('NFC'));
+      if (targetScore !== undefined && r.score >= targetScore) r.score = targetScore - 1e-6;
+    }
+  }
+}
+
 /** Total gloss length in characters - the tie-break. */
 function glossLength(sense: KaikkiSense): number {
   return sense.glosses.reduce((n, g) => n + g.length, 0);
@@ -222,11 +254,32 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     else if (qTone && fTone === qTone) tier = 'yoruba_tone';
     else if (qOrtho && fOrtho === qOrtho) tier = 'yoruba_ortho';
     else if (qOrtho && qOrtho.length >= 2 && fOrtho.startsWith(qOrtho)) tier = 'yoruba_prefix';
+    // A LATER word of a multi-word form, typed on its own. Wiktionary has no entry for
+    // amóhùnmáwòrán, only for ẹ̀rọ amóhùnmáwòrán ("television") - so without this, searching
+    // "amohunmaworan" found nothing but the phrase's Ajami spelling, whose gloss happens to name
+    // it ("Ajami spelling of ẹ̀rọ amóhùnmáwòrán"), and never the phrase itself.
+    //
+    // The start of a word, not any substring (vocabSearch's yoruba_substring), because this corpus
+    // is large enough that a fragment from inside a word would match half of it. Scored like a
+    // prefix, by how much of that WORD the query covers (at LATER_WORD_WEIGHT), sharing the soft rank.
+    const laterWord =
+      !tier && qOrtho && qOrtho.length >= 2
+        ? fOrtho
+            .split(/[\s-]+/)
+            .slice(1)
+            .find((w) => w.startsWith(qOrtho))
+        : undefined;
+    if (laterWord) tier = 'yoruba_word';
 
     if (tier) {
       // A prefix match carries a real score now: how much of the word the query covers. The other
       // three are whole-string identifications, where "how much" is not a question.
-      const score = tier === 'yoruba_prefix' ? prefixMatchScore(qOrtho.length, fOrtho.length) : 0;
+      const score =
+        tier === 'yoruba_prefix'
+          ? prefixMatchScore(qOrtho.length, fOrtho.length)
+          : laterWord
+            ? prefixMatchScore(qOrtho.length, laterWord.length) * LATER_WORD_WEIGHT
+            : 0;
       const key = senseKey(sense);
       const existing = results.get(key);
       // Better rank wins; at equal rank the better score does. The same sense reaches this loop
@@ -269,6 +322,8 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
       results.set(match.key, { tier: 'english', score: match.score + bonus, sense: match.sense });
     }
   }
+
+  keepCrossReferencesBelowTheirTargets(results);
 
   const ranked = [...results.values()].sort(
     (a, b) =>

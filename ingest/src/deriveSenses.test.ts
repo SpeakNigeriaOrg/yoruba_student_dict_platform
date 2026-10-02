@@ -114,6 +114,27 @@ describe('deriveAltOfTargets', () => {
     const entry = realEntries['en-o-yo-verb-rtjhekLI'];
     expect(deriveAltOfTargets(entry)).toEqual(['wò']);
   });
+
+  it('real data: an Ajami spelling targets the word it spells, which Kaikki leaves out of alt_of', () => {
+    expect(deriveAltOfTargets(realEntries['en-عَِروَْ_اموْهُنمَووْرَن-yo-noun-yvdYKUvZ'])).toEqual(['ẹ̀rọ amóhùnmáwòrán']);
+  });
+
+  it('every Ajami spelling in the corpus gets its target, including one glossed in brackets', () => {
+    const ajami = Object.values(realEntries).filter((e) => e.senses.some((s) => s.glosses.some((g) => g.startsWith('Ajami spelling of '))));
+    expect(ajami.length).toBeGreaterThan(100);
+    expect(ajami.filter((e) => deriveAltOfTargets(e).length === 0)).toEqual([]);
+    const bracketed = makeEntry({
+      senses: [{ id: 's', glosses: ['Ajami spelling of àdúrà (“prayer”)'], rawGlosses: [], tags: [], examples: [], links: ['àdúrà'], altOf: [] }],
+    });
+    expect(deriveAltOfTargets(bracketed)).toEqual(['àdúrà']);
+  });
+
+  it('takes no Ajami target that is not one of the sense links', () => {
+    const entry = makeEntry({
+      senses: [{ id: 's', glosses: ['Ajami spelling of something else'], rawGlosses: [], tags: [], examples: [], links: [], altOf: [] }],
+    });
+    expect(deriveAltOfTargets(entry)).toEqual([]);
+  });
 });
 
 describe('deriveComponentCandidateForms', () => {
