@@ -82,7 +82,8 @@ export async function createWord(pool: pg.Pool, input: CreateWordInput, createdB
     // inside createWordInTransaction because approveContribution composes that one to apply a
     // VOLUNTEER's proposal, where the approving curator is not the author.
     await recordAuthoringVote(client, input.wordId, createdBy, {
-      hasComponents: (input.components?.length ?? 0) > 0,
+      // A loanword is an etymology claim too, even with no parts - so its author votes on that axis.
+      hasComponents: (input.components?.length ?? 0) > 0 || Boolean(input.borrowedFrom),
     });
   });
 }
@@ -103,8 +104,9 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
     await client.query(
       // only_in_derived_terms is set here, not left to writeCreationUsageInTransaction: an affix
       // pos with the flag off breaks 0030's check at the insert itself.
-      `insert into golden_record (word_id, display_text, syllables, definition, pos, english_gloss, etymid_label, updated_by, only_in_derived_terms)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `insert into golden_record (word_id, display_text, syllables, definition, pos, english_gloss, etymid_label, updated_by,
+                                  only_in_derived_terms, borrowed_from, borrowed_term)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         input.wordId,
         input.displayText,
@@ -115,6 +117,8 @@ export async function createWordInTransaction(client: Queryable, input: CreateWo
         input.etymidLabel ?? null,
         createdBy,
         isAffixPartOfSpeech(input.pos),
+        input.borrowedFrom ?? null,
+        input.borrowedFrom ? (input.borrowedTerm ?? null) : null,
       ],
     );
   } catch (err) {

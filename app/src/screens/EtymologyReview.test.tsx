@@ -1435,3 +1435,47 @@ describe("choosing a part from Wiktionary's own candidates", () => {
     );
   });
 });
+
+describe('is it a loanword? (0032)', () => {
+  function mock(fixture: unknown) {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve({ ok: true, json: async () => (init?.method === 'POST' ? { contributionId: 'c1' } : fixture) }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+  const posted = (fetchMock: ReturnType<typeof vi.fn>) =>
+    JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/contributions')![1].body as string);
+
+  it("starts from Wiktionary's own answer, and saving records it", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mock({ ...etymologyFixture, borrowing: null, wiktionaryBorrowing: { from: 'en', term: 'radio' } });
+    render(<EtymologyReview wordId="redio_radio" isCurator={false} />);
+    expect(await screen.findByLabelText('Wiktionary says')).toHaveTextContent('borrowed from English (radio)');
+    expect(screen.getByRole('checkbox', { name: /Loanword/ })).toBeChecked();
+    expect(screen.getByLabelText('Borrowed from')).toHaveValue('en');
+
+    await user.click(screen.getByRole('button', { name: 'Save the loanword answer' }));
+    await waitFor(() =>
+      expect(posted(fetchMock)).toMatchObject({ componentsAction: 'confirm_existing', borrowedAction: 'set', borrowedFrom: 'en', borrowedTerm: 'radio' }),
+    );
+  });
+
+  it('marks a word nobody has called borrowed, from a chosen language', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mock({ ...etymologyFixture, borrowing: null, wiktionaryBorrowing: null });
+    render(<EtymologyReview wordId="w" isCurator={false} />);
+    await user.click(await screen.findByRole('checkbox', { name: /Loanword/ }));
+    await user.selectOptions(screen.getByLabelText('Borrowed from'), 'ha');
+    await user.type(screen.getByLabelText('Original word (optional)'), 'kasuwa');
+    await user.click(screen.getByRole('button', { name: 'Save the loanword answer' }));
+    await waitFor(() => expect(posted(fetchMock)).toMatchObject({ borrowedAction: 'set', borrowedFrom: 'ha', borrowedTerm: 'kasuwa' }));
+  });
+
+  it('offers no separate save when nothing about borrowing changed', async () => {
+    mock({ ...etymologyFixture, borrowing: { from: 'en', term: null }, wiktionaryBorrowing: null });
+    render(<EtymologyReview wordId="w" isCurator={false} />);
+    await screen.findByRole('checkbox', { name: /Loanword/ });
+    expect(screen.queryByRole('button', { name: 'Save the loanword answer' })).not.toBeInTheDocument();
+  });
+});

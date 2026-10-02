@@ -168,6 +168,7 @@ async function loadEntries(pool, only) {
   const { rows } = await pool.query(
     `select g.word_id, g.display_text, g.syllables, g.definition, g.entry_type,
             g.pos, g.english_gloss, g.etymid_label, g.usage_labels, g.only_in_derived_terms,
+            g.borrowed_from, g.borrowed_term,
             c.entry_id, c.exempt_reason, c.pin
        from golden_record g
        left join upstream_citations c on c.word_id = g.word_id
@@ -412,6 +413,14 @@ export function buildDraft(entry, components, examples, audio, derivedTerms = []
 
   const etymologyLines = [];
   if (etymid) etymologyLines.push(`{{etymid|yo|${wikiArg(etymid)}}}`);
+  // A loanword (0032), in Wiktionary's own markup: {{bor+}} renders "Borrowed from English radio"
+  // and files the entry under "Yoruba terms borrowed from English". New entries only - a cited
+  // entry's etymology is upstream's, and its own {{bor}} is where we read ours from.
+  if (!cited && entry.borrowed_from) {
+    etymologyLines.push(
+      `{{bor+|yo|${wikiArg(entry.borrowed_from)}${entry.borrowed_term ? `|${wikiArg(entry.borrowed_term)}` : ''}}}`,
+    );
+  }
   if (components.length > 0) {
     const args = components.map((c) => wikiArg(c.displayText)).join('|');
     const glossArgs = components

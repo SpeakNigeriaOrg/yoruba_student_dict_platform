@@ -135,6 +135,10 @@ export interface DerivedKaikkiSense {
    * syllabic one (`/ō.ló.ŋ́.ɡ͡bò/`, `ŋ́` standing alone). Was parsed and dropped before 0016. It is
    * a CHECK, not a source - see that migration for why its unit is not ours. */
   ipa: string | null;
+  /** From the entry's own {{bor}} / {{bor+}} etymology template (0032): the source language code
+   * and the word it was borrowed as. Null when Wiktionary does not mark it borrowed. */
+  borrowedFrom: string | null;
+  borrowedTerm: string | null;
   componentCandidates: ComponentCandidate[];
   usedInCandidates: ComponentCandidate[];
   indexKeys: string[];

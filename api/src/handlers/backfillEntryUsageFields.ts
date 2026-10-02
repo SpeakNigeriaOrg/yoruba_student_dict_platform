@@ -12,6 +12,8 @@
 //
 //    The same repair also appends the extended definition (english_gloss) to fingerprints stored
 //    before it joined the claim - exact for the same reason: it could only be set at creation.
+//    And it extends ETYMOLOGY fingerprints stored before 0032 with "not borrowed" - exact, since
+//    nothing could record a loanword before then.
 //
 // 2. AFFIX FLAG (after 0030). 0030 turned the flag ON for every affix - it is never a standalone
 //    word - where 0029 had forced it off. A vote that asserted an affix pos under 0029 therefore
@@ -29,6 +31,7 @@
 import type pg from 'pg';
 import {
   extendLegacyEntryFingerprint,
+  extendLegacyEtymologyFingerprint,
   fingerprintOutcome,
   isAffixPartOfSpeech,
   resolveOnlyInDerivedTerms,
@@ -39,6 +42,8 @@ import { withTransaction, type Queryable } from '../db.js';
 
 export interface UsageBackfillItem {
   kind: 'contribution' | 'decision';
+  /** Which axis the row is on. Entry unless stated. */
+  axis?: 'entry' | 'etymology';
   repair: 'extend' | 'affix_flag';
   /** contribution_id, or the word_id of a word_decisions row. */
   id: string;
@@ -110,6 +115,29 @@ export async function planEntryUsageBackfill(client: Queryable): Promise<UsageBa
       }
     }
   }
+  const etymology = await client.query<{ kind: 'contribution' | 'decision'; id: string; word_id: string; fingerprint: string }>(
+    `select 'contribution' as kind, contribution_id::text as id, word_id, value_fingerprint as fingerprint
+       from contributions where axis = 'etymology' and value_fingerprint is not null and word_id is not null
+     union all
+     select 'decision', word_id, word_id, value_fingerprint
+       from word_decisions where axis = 'etymology' and value_fingerprint is not null
+      order by 1, 2`,
+  );
+  for (const r of etymology.rows) {
+    const extended = extendLegacyEtymologyFingerprint(r.fingerprint);
+    if (extended === null) continue;
+    planned.push({
+      kind: r.kind,
+      axis: 'etymology',
+      repair: 'extend',
+      id: r.id,
+      wordId: r.word_id,
+      pos: null,
+      fingerprint: r.fingerprint,
+      newFingerprint: extended,
+      patch: { borrowedFrom: null, borrowedTerm: null },
+    });
+  }
   return { planned };
 }
 
@@ -145,8 +173,8 @@ export async function applyEntryUsageBackfill(
             )
           : client.query(
               `update word_decisions set value_fingerprint = $1
-                where word_id = $2 and axis = 'entry' and value_fingerprint = $3`,
-              [item.newFingerprint, item.id, item.fingerprint],
+                where word_id = $2 and axis = $4 and value_fingerprint = $3`,
+              [item.newFingerprint, item.id, item.fingerprint, item.axis ?? 'entry'],
             ),
       );
       // Zero rows means the fingerprint moved since planning - someone voted again - which is not

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveAltOfTargets,
   deriveComponentCandidateForms,
+  deriveBorrowing,
   deriveComponentCandidates,
   deriveDerivedFormTexts,
   deriveGlosses,
@@ -297,5 +298,18 @@ describe('deriveSense / deriveSenses on the real corpus', () => {
       { form: 'di', provenance: 'etymology_template', gloss: 'to become', entryIds: ['en-di-yo-verb-z1VevidF', 'en-di-yo-verb-UZXa~C2e'] },
       { form: 'odò', provenance: 'etymology_template', gloss: 'river', entryIds: ['en-odo-yo-noun-X1qO2PE5', 'en-odo-yo-noun-a7h4tkl1'] },
     ]);
+  });
+});
+
+describe('deriveBorrowing (0032)', () => {
+  it("reads Wiktionary's own {{bor}} - real data: Tùnísíà is borrowed from English Tunisia", () => {
+    expect(deriveBorrowing(realEntries['en-Tunisia-yo-name-CjYOiE~K'])).toEqual({ borrowedFrom: 'en', borrowedTerm: 'Tunisia' });
+  });
+
+  it('says nothing for a word Wiktionary does not mark borrowed, and ignores the looser {{der}}', () => {
+    expect(deriveBorrowing(makeEntry({ etymologyTemplates: [] }))).toEqual({ borrowedFrom: null, borrowedTerm: null });
+    expect(
+      deriveBorrowing(makeEntry({ etymologyTemplates: [{ name: 'der', args: { '1': 'yo', '2': 'en', '3': 'x' } }] })),
+    ).toEqual({ borrowedFrom: null, borrowedTerm: null });
   });
 });

@@ -198,6 +198,7 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     // a fact about Yoruba rather than about our splitting. Trimmed, and an empty string becomes
     // null so "no transcription" has one representation.
     ipa: entry.ipa?.[0]?.ipa?.trim() || null,
+    ...deriveBorrowing(entry),
     componentCandidates: deriveComponentCandidates(entry),
     usedInCandidates: deriveUsedInCandidateForms(entry).map(
       (form): ComponentCandidate => ({ form, provenance: 'synthesized_from_etymology' }),
@@ -205,6 +206,16 @@ export function deriveSense(entry: CanonicalEntry): DerivedKaikkiSense {
     indexKeys: deriveIndexKeys(entry),
     derivedFormTexts: deriveDerivedFormTexts(entry),
   };
+}
+
+/** The first borrowing template in the entry's etymology - {{bor|yo|en|radio}}, {{bor+|...}}, or the
+ * learned/orthographic/semi-learned variants - as {source language, word}. Only direct borrowings:
+ * {{der}} ("derived from") is too loose to call a word a loanword. */
+export function deriveBorrowing(entry: CanonicalEntry): { borrowedFrom: string | null; borrowedTerm: string | null } {
+  const t = (entry.etymologyTemplates ?? []).find((x) => x.name !== null && ['bor', 'bor+', 'lbor', 'obor', 'slbor'].includes(x.name));
+  const lang = t?.args['2']?.trim();
+  if (!t || !lang) return { borrowedFrom: null, borrowedTerm: null };
+  return { borrowedFrom: lang, borrowedTerm: t.args['3']?.trim() || null };
 }
 
 export function deriveSenses(entries: CanonicalEntry[]): DerivedKaikkiSense[] {

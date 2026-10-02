@@ -35,6 +35,7 @@
 // `group.labels`. The raw id is the fallback, never the first choice.
 
 import type { ConsensusLabels, EtymologyLabel } from '../api.js';
+import { describeLoan } from './LoanwordFields.js';
 import type {
   ClaimField,
   ConsensusSummary,
@@ -147,6 +148,7 @@ export function OutcomeSummary({
   labels?: ConsensusLabels;
 }) {
   if (outcome.kind === 'etymology') {
+    const loan = describeLoan(outcome.borrowedFrom, outcome.borrowedTerm);
     return (
       <span>
         {outcome.atomic ? (
@@ -154,6 +156,11 @@ export function OutcomeSummary({
         ) : (
           <ComponentList components={outcome.components} labels={labels.components} />
         )}
+        {loan ? (
+          <div className="field-note" aria-label="Loanword">
+            {loan}
+          </div>
+        ) : null}
       </span>
     );
   }
@@ -187,6 +194,7 @@ const FIELD_LABELS: Record<ClaimField, string> = {
   onlyInDerivedTerms: 'whether it is a standalone word',
   englishGloss: 'the extended definition',
   components: 'the components',
+  borrowing: 'whether it is a loanword, and from what',
 };
 
 /** What the competing claims are actually arguing about.
@@ -237,6 +245,7 @@ export function CurrentRecord({
   components,
   usage,
   englishGloss,
+  borrowing,
   labels = NO_LABELS,
 }: {
   axis: 'entry' | 'etymology';
@@ -250,8 +259,11 @@ export function CurrentRecord({
   englishGloss?: string | null;
   /** Only meaningful on the etymology axis, and only where the caller holds them. */
   components?: string[];
+  /** The record's loanword source (0032). Etymology axis. */
+  borrowing?: { from: string | null; term: string | null };
   labels?: ConsensusLabels;
 }) {
+  const loan = borrowing ? describeLoan(borrowing.from, borrowing.term) : null;
   return (
     <div className="claim-current" aria-label="What the record says now">
       <div className="claim-votes">
@@ -259,13 +271,20 @@ export function CurrentRecord({
       </div>
       <div className="claim-outcome">
         {axis === 'etymology' ? (
-          components === undefined ? (
-            <em>not shown</em>
-          ) : components.length === 0 ? (
-            <em>no parts (atomic)</em>
-          ) : (
-            <ComponentList components={components} labels={labels.components} />
-          )
+          <>
+            {components === undefined ? (
+              <em>not shown</em>
+            ) : components.length === 0 ? (
+              <em>no parts (atomic)</em>
+            ) : (
+              <ComponentList components={components} labels={labels.components} />
+            )}
+            {loan ? (
+              <div className="field-note" aria-label="Loanword">
+                {loan}
+              </div>
+            ) : null}
+          </>
         ) : (
           <>
             <strong>{displayText}</strong>

@@ -272,6 +272,7 @@ export function ReviewQueue({ onOpenWord }: ReviewQueueProps) {
                       citedEntryId={g.currentCitedEntryId}
                       usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
                       englishGloss={g.currentEnglishGloss}
+                      borrowing={{ from: g.currentBorrowedFrom ?? null, term: g.currentBorrowedTerm ?? null }}
                       labels={g.labels}
                     />
                   ) : null}

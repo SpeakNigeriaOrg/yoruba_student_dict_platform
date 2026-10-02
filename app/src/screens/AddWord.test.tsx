@@ -1558,3 +1558,44 @@ describe('AddWord - the search also covers what the dictionary already holds', (
     expect(await screen.findAllByRole('listitem')).toHaveLength(1);
   });
 });
+
+describe('AddWord - loanwords (0032)', () => {
+  it("pre-fills from the picked Wiktionary entry's own borrowing, and sends it", async () => {
+    const fetchMock = mockFetch({
+      vocabResults: [],
+      kaikkiResults: [
+        { form: 'rédíò', pos: 'noun', glosses: ['radio'], matchedVia: 'yoruba_exact', altOfTargets: [], standardForms: ['rédíò'], entryId: 'en-redio', etymologyNumber: null, borrowedFrom: 'en', borrowedTerm: 'radio' },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.click(await screen.findByRole('button', { name: 'Select' }));
+    expect(screen.getByRole('checkbox', { name: /Loanword/ })).toBeChecked();
+    expect(screen.getByLabelText('Wiktionary says')).toHaveTextContent('borrowed from English (radio)');
+
+    await user.clear(screen.getByLabelText(/Word ID hint/));
+    await user.type(screen.getByLabelText(/Word ID hint/), 'radio');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+    expect(body).toMatchObject({ borrowedFrom: 'en', borrowedTerm: 'radio' });
+  });
+
+  it('sends nothing about borrowing for an ordinary word', async () => {
+    const fetchMock = mockFetch({ vocabResults: [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(<AddWord />);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.click(await screen.findByRole('button', { name: 'Select' }));
+    expect(screen.getByRole('checkbox', { name: /Loanword/ })).not.toBeChecked();
+    await user.clear(screen.getByLabelText(/Word ID hint/));
+    await user.type(screen.getByLabelText(/Word ID hint/), 'meaning');
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added'));
+    const body = JSON.parse(fetchMock.mock.calls.find((c) => c[0] === '/api/words')![1].body);
+    expect(body).not.toHaveProperty('borrowedFrom');
+  });
+});

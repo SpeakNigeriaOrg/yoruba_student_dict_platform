@@ -128,6 +128,9 @@ export interface WordDossier {
   /** 0029. */
   usageLabels: string[];
   onlyInDerivedTerms: boolean;
+  /** Loanword source (0032), null when not one. */
+  borrowedFrom: string | null;
+  borrowedTerm: string | null;
   updatedAt: string;
   updatedByEmail: string | null;
 
@@ -162,11 +165,14 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     etymid_label: string | null;
     usage_labels: string[];
     only_in_derived_terms: boolean;
+    borrowed_from: string | null;
+    borrowed_term: string | null;
     updated_at: string;
     updated_by_email: string | null;
   }>(
     `select g.display_text, g.syllables, g.definition, g.entry_type, g.pos, g.english_gloss,
-            g.etymid_label, g.usage_labels, g.only_in_derived_terms, g.updated_at, u.email as updated_by_email
+            g.etymid_label, g.usage_labels, g.only_in_derived_terms, g.borrowed_from, g.borrowed_term,
+            g.updated_at, u.email as updated_by_email
        from golden_record g
        left join users u on u.user_id = g.updated_by
       where g.word_id = $1`,
@@ -348,6 +354,8 @@ export async function loadWordDossier(client: Queryable, wordId: string): Promis
     etymidLabel: w.etymid_label,
     usageLabels: w.usage_labels,
     onlyInDerivedTerms: w.only_in_derived_terms,
+    borrowedFrom: w.borrowed_from,
+    borrowedTerm: w.borrowed_term,
     updatedAt: w.updated_at,
     updatedByEmail: w.updated_by_email,
     citation: citationState(cite?.entry_id ?? null, cite?.exempt_reason ?? null),

@@ -92,6 +92,10 @@ export function validateEntryUsageInput(input: EntryUsageInput): void {
 export interface CreationUsage {
   usageLabels?: string[];
   onlyInDerivedTerms?: boolean;
+  /** Loanword (0032): source language code and, optionally, the word it was borrowed as. Written in
+   * the insert itself; the author's etymology vote then carries it (authoringVote.ts). */
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
 }
 
 /** Off the wire. Absent means "nothing to say" - no labels, flag off - which is what every word
@@ -112,6 +116,16 @@ export function parseCreationUsage(body: Record<string, unknown>): CreationUsage
       throw new InvalidEntryUsageError('onlyInDerivedTerms must be a boolean if provided');
     }
     out.onlyInDerivedTerms = body.onlyInDerivedTerms;
+  }
+  if (body.borrowedFrom != null) {
+    if (typeof body.borrowedFrom !== 'string' || !/^[a-z]{2,3}(-[A-Za-z]{2,8})*$/.test(body.borrowedFrom)) {
+      throw new InvalidEntryUsageError('borrowedFrom must be a Wiktionary language code (e.g. en, ha)');
+    }
+    out.borrowedFrom = body.borrowedFrom;
+    if (body.borrowedTerm != null) {
+      if (typeof body.borrowedTerm !== 'string') throw new InvalidEntryUsageError('borrowedTerm must be text');
+      out.borrowedTerm = body.borrowedTerm.trim() || null;
+    }
   }
   return out;
 }

@@ -94,9 +94,25 @@ export function parseEtymologyInput(b: Record<string, unknown>): ApplyEtymologyD
   if (b.components !== undefined && (!Array.isArray(b.components) || !b.components.every((c) => typeof c === 'string'))) {
     throw new Error('components must be an array of word_id strings if provided');
   }
+  const borrowedAction = b.borrowedAction;
+  if (borrowedAction !== undefined && borrowedAction !== 'confirm' && borrowedAction !== 'set') {
+    throw new Error("borrowedAction must be 'confirm' or 'set' if provided");
+  }
+  // A Wiktionary language code (en, ha, en-GB...) - the shape {{bor}} takes; the screen offers a list.
+  if (b.borrowedFrom != null && (typeof b.borrowedFrom !== 'string' || !/^[a-z]{2,3}(-[A-Za-z]{2,8})*$/.test(b.borrowedFrom))) {
+    throw new Error('borrowedFrom must be a Wiktionary language code (e.g. en, ha) or null');
+  }
+  if (b.borrowedTerm != null && typeof b.borrowedTerm !== 'string') throw new Error('borrowedTerm must be text if provided');
   return {
     componentsAction: b.componentsAction as ApplyEtymologyDecisionInput['componentsAction'],
     components: b.components as string[] | undefined,
+    ...(borrowedAction
+      ? {
+          borrowedAction,
+          borrowedFrom: (b.borrowedFrom as string | null | undefined) ?? null,
+          borrowedTerm: (b.borrowedTerm as string | null | undefined) ?? null,
+        }
+      : {}),
     note: typeof b.note === 'string' ? b.note : undefined,
   };
 }

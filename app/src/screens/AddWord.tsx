@@ -32,6 +32,7 @@ import type { KaikkiSearchResult, VocabSearchResult } from '@yoruba-student-dict
 import {
   checkPhraseSpelling,
   fixedOnlyInDerivedTerms,
+  normalizeLoanLanguage,
   describePhraseSpelling,
   isMultiWord,
   orthographyInsensitiveForm,
@@ -41,6 +42,7 @@ import {
 import { createPhrase, createWord, getDuplicateCheck, searchKaikki, searchVocab, type DuplicateMatch } from '../api.js';
 import { PartOfSpeechField } from './PartOfSpeechField.js';
 import { UsageCheckboxes } from './UsageFields.js';
+import { LoanwordFields, NOT_A_LOANWORD, type LoanDraft } from './LoanwordFields.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { phraseSyllables, splitPhrase } from './phraseWords.js';
 import { SearchBox } from './SearchBox.js';
@@ -244,6 +246,8 @@ function WordTab({
    * it is obsolete - that is ours to say, and saying it here saves a correction vote later. */
   const [usageLabels, setUsageLabels] = useState<string[]>([]);
   const [onlyInDerivedTerms, setOnlyInDerivedTerms] = useState(false);
+  /** Loanword (0032) - seeded from the picked Wiktionary entry's own {{bor}} when it has one. */
+  const [loan, setLoan] = useState<LoanDraft>(NOT_A_LOANWORD);
   /** Whether the extended definition has been typed into directly, rather than just following the
    * student definition. Same pattern as the Phrase tab's `definitionEdited` (see PhraseDraft),
    * mirrored in the opposite direction: there, the dictionary wording is the thing adopted from
@@ -330,6 +334,7 @@ function WordTab({
       onBuildAsPhrase({ entry: result, displayText: form, tokens: phraseTokens(form) });
       return;
     }
+    setLoan(result.borrowedFrom ? { from: normalizeLoanLanguage(result.borrowedFrom), term: result.borrowedTerm ?? '' } : NOT_A_LOANWORD);
     setSelected(result);
     chooseSpelling(form);
     // Seeded from the etymology's primary gloss, not authored from scratch: the
@@ -350,6 +355,7 @@ function WordTab({
     setPos('');
     setEnglishGloss('');
     setUsageLabels([]);
+    setLoan(NOT_A_LOANWORD);
     setOnlyInDerivedTerms(false);
     setGlossEdited(false);
     setOffPath(false);
@@ -434,6 +440,7 @@ function WordTab({
         // Only the reviewer's own answer is sent: for an affix the server sets it (never standalone),
         // and for a letter it cannot apply.
         ...(onlyInDerivedTerms && fixedOnlyInDerivedTerms(effectivePos) === null ? { onlyInDerivedTerms: true } : {}),
+        ...(loan.from ? { borrowedFrom: loan.from, borrowedTerm: loan.term.trim() || null } : {}),
       });
       setStatus(`Added ${wordIdPreview} to vocabulary.`);
       const syllablesOut = offPath ? composedSyllables : syllablesText.split(',').map((x) => x.trim()).filter(Boolean);
@@ -696,6 +703,14 @@ function WordTab({
                 setUsageLabels(next.usageLabels);
                 setOnlyInDerivedTerms(next.onlyInDerivedTerms);
               }}
+            />
+          ) : null}
+          {selected || offPath ? (
+            <LoanwordFields
+              idPrefix="word"
+              value={loan}
+              onChange={setLoan}
+              wiktionary={selected?.borrowedFrom ? { from: normalizeLoanLanguage(selected.borrowedFrom), term: selected.borrowedTerm ?? null } : null}
             />
           ) : null}
 
@@ -1024,6 +1039,8 @@ interface PhraseDraft {
   /** 0029, asked whether the phrase is adopted or composed - see the Word tab's note. */
   usageLabels: string[];
   onlyInDerivedTerms: boolean;
+  /** Loanword (0032). */
+  loan: LoanDraft;
   /** The student definition, when it is NOT the dictionary wording verbatim.
    *
    * Same two-field shape as the spelling above, for the same reason: the answer is usually already
@@ -1069,6 +1086,7 @@ const EMPTY_DRAFT: PhraseDraft = {
   englishGloss: '',
   usageLabels: [],
   onlyInDerivedTerms: false,
+  loan: NOT_A_LOANWORD,
   definition: '',
   definitionEdited: false,
 };
@@ -1138,6 +1156,7 @@ function PhraseTab({
       // the one that will actually show this field.
       pos: handoff.entry?.pos || EMPTY_DRAFT.pos,
       englishGloss: handoff.entry?.glosses[0] ?? '',
+      loan: handoff.entry ? handoff.entry.borrowedFrom ? { from: normalizeLoanLanguage(handoff.entry.borrowedFrom), term: handoff.entry.borrowedTerm ?? '' } : NOT_A_LOANWORD : NOT_A_LOANWORD,
     });
     setStatus(
       `${handoff.displayText} is ${handoff.tokens.length} words, so it is a phrase. Its spelling is filled in ` +
@@ -1227,6 +1246,7 @@ function PhraseTab({
           ? {}
           : { pos: pos.trim() || null, englishGloss: englishGloss.trim() || null }),
         ...(draft.usageLabels.length > 0 ? { usageLabels: draft.usageLabels } : {}),
+        ...(draft.loan.from ? { borrowedFrom: draft.loan.from, borrowedTerm: draft.loan.term.trim() || null } : {}),
         ...(draft.onlyInDerivedTerms && fixedOnlyInDerivedTerms(adopted ? adopted.pos : pos || null) === null
           ? { onlyInDerivedTerms: true }
           : {}),
@@ -1283,6 +1303,7 @@ function PhraseTab({
             adopted: r,
             pos: r.pos,
             englishGloss: r.glosses[0] ?? '',
+            loan: r.borrowedFrom ? { from: normalizeLoanLanguage(r.borrowedFrom), term: r.borrowedTerm ?? '' } : NOT_A_LOANWORD,
           });
           setStatus(
             `Citing ${form} as this phrase, with Wiktionary's own spelling. Add the word behind each part below - ` +
@@ -1481,6 +1502,12 @@ function PhraseTab({
         onlyInDerivedTerms={draft.onlyInDerivedTerms}
         pos={adopted ? adopted.pos : pos || null}
         onChange={(next) => setDraft({ ...draft, ...next })}
+      />
+      <LoanwordFields
+        idPrefix="phrase"
+        value={draft.loan}
+        onChange={(next) => setDraft({ ...draft, loan: next })}
+        wiktionary={adopted?.borrowedFrom ? { from: normalizeLoanLanguage(adopted.borrowedFrom), term: adopted.borrowedTerm ?? null } : null}
       />
 
       {/* Asked for whatever the citation says, unlike the two fields above. A pin holds the wording

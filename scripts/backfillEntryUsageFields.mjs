@@ -36,10 +36,12 @@ const pool = new pg.Pool({ connectionString });
 
 try {
   const plan = await planEntryUsageBackfill(pool);
-  const n = (repair, kind) => plan.planned.filter((p) => p.repair === repair && p.kind === kind).length;
+  const n = (repair, kind, axis = 'entry') =>
+    plan.planned.filter((p) => p.repair === repair && p.kind === kind && (p.axis ?? 'entry') === axis).length;
   console.log(`${plan.planned.length} entry fingerprints to bring up to date`);
-  console.log(`  extend (older layout):${n('extend', 'contribution')} contributions, ${n('extend', 'decision')} decisions`);
+  console.log(`  entry, older layout: ${n('extend', 'contribution')} contributions, ${n('extend', 'decision')} decisions`);
   console.log(`  affix flag (0030):   ${n('affix_flag', 'contribution')} contributions, ${n('affix_flag', 'decision')} decisions`);
+  console.log(`  etymology (0032):    ${n('extend', 'contribution', 'etymology')} contributions, ${n('extend', 'decision', 'etymology')} decisions`);
   for (const p of plan.planned.filter((q) => q.repair === 'affix_flag')) console.log(`    ${p.kind} on ${p.wordId} (${p.pos})`);
 
   if (!apply) {

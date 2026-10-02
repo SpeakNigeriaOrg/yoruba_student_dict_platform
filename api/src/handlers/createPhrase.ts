@@ -110,8 +110,9 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
 
   await client.query(
     // See createWord: an affix pos needs the flag in the same insert (0030's check).
-    `insert into golden_record (word_id, display_text, syllables, entry_type, definition, pos, english_gloss, etymid_label, updated_by, only_in_derived_terms)
-     values ($1, $2, $3, 'phrase', $4, $5, $6, $7, $8, $9)`,
+    `insert into golden_record (word_id, display_text, syllables, entry_type, definition, pos, english_gloss, etymid_label, updated_by,
+                                only_in_derived_terms, borrowed_from, borrowed_term)
+     values ($1, $2, $3, 'phrase', $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       input.wordId,
       input.displayText,
@@ -122,6 +123,8 @@ export async function createPhraseInTransaction(client: Queryable, input: Create
       input.etymidLabel ?? null,
       createdBy,
       isAffixPartOfSpeech(input.pos),
+      input.borrowedFrom ?? null,
+      input.borrowedFrom ? (input.borrowedTerm ?? null) : null,
     ],
   );
 

@@ -31,6 +31,7 @@ import {
   type EtymologyReviewResult,
 } from '../api.js';
 import { AxisBanner } from './AxisBanner.js';
+import { LoanwordFields, NOT_A_LOANWORD, describeLoan, loanDraftFrom, sameLoan, type LoanDraft } from './LoanwordFields.js';
 import { PhraseComposer } from './PhraseComposer.js';
 import { SearchBox } from './SearchBox.js';
 
@@ -478,6 +479,9 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
   const [chosenParts, setChosenParts] = useState<Record<number, ChosenPart>>({});
   /** The reviewer removed the last part from the list - so "no parts" is what they are saying. */
   const [emptiedByEdit, setEmptiedByEdit] = useState(false);
+  /** Is it a loanword, and from what (0032)? Seeded from their own answer, else the record, else
+   * what the cited Wiktionary entry says. Sent with every answer given on this tab. */
+  const [loan, setLoan] = useState<LoanDraft>(NOT_A_LOANWORD);
   /** Closed by default on an already-settled word - see decidedAndSettled below. Opened
    * deliberately, the same pattern as showCustomComponents, so reconsidering is always one
    * click away rather than gone. */
@@ -495,6 +499,7 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     setSelectedCandidateWordIds({});
     setChosenParts({});
     setEmptiedByEdit(false);
+    setLoan(NOT_A_LOANWORD);
     setShowReconsider(false);
     getEtymologyReview(wordId)
       .then((result) => {
@@ -516,6 +521,11 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
         setDraftComponents(seed.map((c) => c.wordId));
         setDraftLabels(Object.fromEntries(seed.map((c) => [c.wordId, { displayText: c.displayText, pending: c.pending }])));
         if (mine) setAnswerRecorded(true);
+        setLoan(
+          loanDraftFrom(
+            mine?.borrowing !== undefined ? mine.borrowing : (result.borrowing ?? result.wiktionaryBorrowing ?? null),
+          ),
+        );
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -538,7 +548,16 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
     }
   }
 
-  async function submit(input: ApplyEtymologyDecisionInput, successMessage: string) {
+  async function submit(answer: ApplyEtymologyDecisionInput, successMessage: string) {
+    // The loanword answer rides along with every answer on this tab: 'set' when it differs from the
+    // record (including when it was seeded from Wiktionary and the record is silent). Left out
+    // otherwise, which the server reads as confirming what is on record.
+    const input: ApplyEtymologyDecisionInput = {
+      ...answer,
+      ...(review && !sameLoan(loan, review.borrowing ?? null)
+        ? { borrowedAction: 'set' as const, borrowedFrom: loan.from, borrowedTerm: loan.from ? loan.term.trim() || null : null }
+        : {}),
+    };
     try {
       // Everyone contributes, curators included - and this axis is the clearest case for it.
       // A curator's grasp of a word's parts is not better than a volunteer's; it is one more
@@ -826,6 +845,11 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               ))}
             </ul>
           )}
+          {myAnswer.borrowing ? (
+            <p className="field-note" aria-label="Your loanword answer">
+              {describeLoan(myAnswer.borrowing.from, myAnswer.borrowing.term)}
+            </p>
+          ) : null}
           <p className="field-note your-change" aria-label="Your change">
             ✎ Your answer
             {myAnswer.differsFromRecord
@@ -856,6 +880,33 @@ export function EtymologyReview({ wordId, isCurator, onDecided, showAxisChips = 
               : 'Recorded when this entry was added, and not yet confirmed here - that is what this screen is for.'}
           </p>
         </div>
+      ) : null}
+
+      {/* Where the word comes from, besides what it is made of. Asked on every word: a loanword
+          usually has no parts, and saying so is the components question's job below. */}
+      <h3>Is it a loanword?</h3>
+      <LoanwordFields
+        idPrefix="etymology"
+        value={loan}
+        onChange={(next) => {
+          setLoan(next);
+          setAnswerRecorded(false);
+        }}
+        wiktionary={review.wiktionaryBorrowing ?? null}
+      />
+      {/* For when this is the only thing being changed - a settled word's components are not
+          re-asked just to record that it is borrowed. Keeps the parts as they are on record. */}
+      {!sameLoan(loan, review.myEtymologyAnswer?.borrowing !== undefined ? review.myEtymologyAnswer.borrowing : (review.borrowing ?? null)) &&
+      !answerRecorded ? (
+        <p>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void submit({ componentsAction: 'confirm_existing', note: note || undefined }, 'Saved the loanword answer.')}
+          >
+            Save the loanword answer
+          </button>
+        </p>
       ) : null}
 
       {/* The reconsider toggle. Shown only in place of the section it opens - both never appear

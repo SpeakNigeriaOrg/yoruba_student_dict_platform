@@ -31,6 +31,7 @@ import { CitationMark } from './StateMarks.js';
 // The same renderer the bulk queue uses, so the two places a curator sets the record cannot
 // show a claim two different ways - see ClaimViews.tsx.
 import { ClaimRow, CurrentRecord, DisagreementNote } from './ClaimViews.js';
+import { describeLoan } from './LoanwordFields.js';
 
 function when(iso: string | null): string {
   if (!iso) return '-';
@@ -142,6 +143,12 @@ export function WordDossier({ wordId, onOpenWord, onOpenDossier }: WordDossierPr
 
                 Null means "read the pin", not "missing" - shown resolved rather than as a bare
                 placeholder, which said nothing about what the pin actually held. */}
+            {dossier.borrowedFrom ? (
+              <>
+                <dt>Loanword</dt>
+                <dd>{describeLoan(dossier.borrowedFrom, dossier.borrowedTerm)}</dd>
+              </>
+            ) : null}
             <dt>Part of speech</dt>
             <dd>
               {[
@@ -599,6 +606,7 @@ function DecideSection({ wordId, components }: { wordId: string; components: str
               citedEntryId={g.currentCitedEntryId}
               usage={{ pos: g.currentPos, usageLabels: g.currentUsageLabels, onlyInDerivedTerms: g.currentOnlyInDerivedTerms }}
               englishGloss={g.currentEnglishGloss}
+              borrowing={{ from: g.currentBorrowedFrom ?? null, term: g.currentBorrowedTerm ?? null }}
               components={components}
               labels={g.labels}
             />

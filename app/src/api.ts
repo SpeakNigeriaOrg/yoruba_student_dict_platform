@@ -416,7 +416,11 @@ export interface EtymologyReviewResult {
     atomic: boolean;
     components: { wordId: string; displayText: string; definition: string | null; pending: boolean }[];
     differsFromRecord: boolean;
+    borrowing?: { from: string; term: string | null } | null;
   } | null;
+  /** Loanword (0032): the record's, and what the cited Wiktionary entry says. */
+  borrowing?: { from: string; term: string | null } | null;
+  wiktionaryBorrowing?: { from: string; term: string | null } | null;
   /** possibleMatchWords: see getEtymologyReview.ts's ProposalItemWithNearMatches. */
   componentsProposal: (ComponentsProposalItem & {
     possibleMatchWords?: { wordId: string; displayText: string; definition: string | null }[];
@@ -454,6 +458,10 @@ export type ComponentsAction = 'confirm_atomic' | 'confirm_existing' | 'reject_p
 export interface ApplyEtymologyDecisionInput {
   componentsAction: ComponentsAction;
   components?: string[];
+  /** Loanword (0032): 'set' with borrowedFrom null says it is not one. */
+  borrowedAction?: 'confirm' | 'set';
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
   note?: string;
 }
 
@@ -608,6 +616,9 @@ export type UpstreamCitationInput = { entryId: string } | { exemptReason: string
  * the locally composed phrase. A cited entry leaves them absent, and the generator reads
  * pin.pos / pin.glosses instead. */
 export interface PublicationFields {
+  /** Loanword (0032): source language code and, optionally, the word it was borrowed as. */
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
   /** Usage labels and "not a standalone word" (0029/0030) - unlike the three overrides
    * here, sent for a cited entry too: no pin carries them. Absent means none. */
   usageLabels?: string[];
@@ -869,6 +880,8 @@ export interface WordDossier {
   etymidLabel: string | null;
   usageLabels: string[];
   onlyInDerivedTerms: boolean;
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
   updatedAt: string;
   updatedByEmail: string | null;
   citation: CitationState;
@@ -1203,6 +1216,8 @@ export interface ConsensusGroup {
   currentUsageLabels: string[];
   currentOnlyInDerivedTerms: boolean;
   currentEnglishGloss?: string | null;
+  currentBorrowedFrom?: string | null;
+  currentBorrowedTerm?: string | null;
   axis: 'entry' | 'etymology';
   decidedAt: string | null;
   decidedByEmail: string | null;

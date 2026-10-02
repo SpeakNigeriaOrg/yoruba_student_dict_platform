@@ -3,6 +3,7 @@ import {
   AGREEMENT_THRESHOLD,
   differingFields,
   extendLegacyEntryFingerprint,
+  extendLegacyEtymologyFingerprint,
   fingerprintIdentity,
   fingerprintOutcome,
   setDerivedOnlyInEntryFingerprint,
@@ -515,7 +516,46 @@ describe('resolveEtymologyOutcome', () => {
       kind: 'etymology',
       components: [],
       atomic: true,
+      borrowedFrom: null,
+      borrowedTerm: null,
     });
+  });
+
+  it("records a loanword: 'set' names the source, 'confirm' keeps it, and a word needs a language", () => {
+    const radio = resolveEtymologyOutcome({ components: [] }, {
+      componentsAction: 'confirm_atomic',
+      borrowedAction: 'set',
+      borrowedFrom: 'en',
+      borrowedTerm: ' radio ',
+    });
+    expect(radio).toMatchObject({ borrowedFrom: 'en', borrowedTerm: 'radio' });
+    expect(
+      resolveEtymologyOutcome({ components: [], borrowedFrom: 'ha', borrowedTerm: null }, { componentsAction: 'confirm_existing' }),
+    ).toMatchObject({ borrowedFrom: 'ha', borrowedTerm: null });
+    expect(
+      resolveEtymologyOutcome({ components: [] }, { componentsAction: 'confirm_atomic', borrowedAction: 'set', borrowedFrom: null, borrowedTerm: 'x' }),
+    ).toMatchObject({ borrowedFrom: null, borrowedTerm: null });
+  });
+
+  it('a different source language is a different claim, and is named as such', () => {
+    const en = resolveEtymologyOutcome({ components: [] }, { componentsAction: 'confirm_atomic', borrowedAction: 'set', borrowedFrom: 'en' });
+    const ha = resolveEtymologyOutcome({ components: [] }, { componentsAction: 'confirm_atomic', borrowedAction: 'set', borrowedFrom: 'ha' });
+    expect(fingerprintOutcome(en)).not.toBe(fingerprintOutcome(ha));
+    expect(differingFields([en, ha])).toEqual(['borrowing']);
+  });
+
+  it('extends a pre-0032 etymology fingerprint as "not borrowed", exactly and once', () => {
+    const now = fingerprintOutcome(resolveEtymologyOutcome(observed, { componentsAction: 'confirm_existing' }));
+    const before = now.split('\u001f').slice(0, 3).join('\u001f');
+    expect(extendLegacyEtymologyFingerprint(before)).toBe(now);
+    expect(extendLegacyEtymologyFingerprint(now)).toBeNull();
+  });
+
+  it('renaming a component keeps the borrowing fields', () => {
+    const fp = fingerprintOutcome(
+      resolveEtymologyOutcome(observed, { componentsAction: 'confirm_existing', borrowedAction: 'set', borrowedFrom: 'en', borrowedTerm: 'radio' }),
+    );
+    expect(renameComponentInFingerprint(fp, 'comp_a', 'comp_z').split('\u001f').slice(3)).toEqual(['en', 'radio']);
   });
 
   it('preserves component ORDER as a distinct claim', () => {

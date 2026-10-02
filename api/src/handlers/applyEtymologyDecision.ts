@@ -28,6 +28,10 @@ export type { ComponentsAction };
 export interface ApplyEtymologyDecisionInput {
   componentsAction: ComponentsAction;
   components?: string[];
+  /** Loanword (0032): 'set' with borrowedFrom null says it is not one. */
+  borrowedAction?: 'confirm' | 'set';
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
   note?: string;
 }
 
@@ -98,14 +102,15 @@ export async function applyEtymologyDecisionInTransaction(
   input: ApplyEtymologyDecisionInput,
   decidedBy: string,
 ): Promise<void> {
-  const existing = await client.query<{ entry_type: 'phrase' | null }>(
-    'select entry_type from golden_record where word_id = $1',
+  const existing = await client.query<{ entry_type: 'phrase' | null; borrowed_from: string | null; borrowed_term: string | null }>(
+    'select entry_type, borrowed_from, borrowed_term from golden_record where word_id = $1',
     [wordId],
   );
   if ((existing.rowCount ?? 0) === 0) {
     throw new WordNotFoundError(wordId);
   }
   const isPhrase = existing.rows[0].entry_type === 'phrase';
+  const observedBorrowing = { borrowedFrom: existing.rows[0].borrowed_from, borrowedTerm: existing.rows[0].borrowed_term };
 
   // Read before any write below, so the fingerprint at the end describes the
   // state this decision was made against - the same freeze-at-observation rule
@@ -153,8 +158,13 @@ export async function applyEtymologyDecisionInTransaction(
     ]);
   }
 
-  const decision = { componentsAction: input.componentsAction, components: input.components };
-  const outcome = resolveEtymologyOutcome({ components: observedComponents }, input);
+  const outcome = resolveEtymologyOutcome({ components: observedComponents, ...observedBorrowing }, input);
+  await writeBorrowingInTransaction(client, wordId, outcome, decidedBy);
+  const decision = {
+    componentsAction: input.componentsAction,
+    components: input.components,
+    ...(input.borrowedAction ? { borrowedAction: input.borrowedAction, borrowedFrom: input.borrowedFrom, borrowedTerm: input.borrowedTerm } : {}),
+  };
   await client.query(
     `insert into word_decisions (word_id, axis, decision, note, decided_by, value_fingerprint)
      values ($1, 'etymology', $2, $3, $4, $5)
@@ -190,6 +200,22 @@ export async function applyEtymologyDecisionInTransaction(
 // authored and in the Wiktionary export - because a spelling that differs from its parts is
 // usually a real linguistic fact and occasionally a typo, and only a human can tell which.
 
+/** Makes the record say what an etymology outcome says about borrowing (0032). An outcome stored
+ * before 0032 has no borrowing keys and asserts nothing about it, so it changes nothing. */
+async function writeBorrowingInTransaction(
+  client: Queryable,
+  wordId: string,
+  outcome: EtymologyOutcome,
+  decidedBy: string,
+): Promise<void> {
+  if (outcome.borrowedFrom === undefined) return;
+  await client.query(
+    `update golden_record set borrowed_from = $1, borrowed_term = $2, updated_at = now(), updated_by = $3
+      where word_id = $4 and (borrowed_from is distinct from $1 or borrowed_term is distinct from $2)`,
+    [outcome.borrowedFrom, outcome.borrowedFrom ? (outcome.borrowedTerm ?? null) : null, decidedBy, wordId],
+  );
+}
+
 /** Writes a consensus OUTCOME as the golden etymology decision - the etymology
  * counterpart of applyEntryOutcomeInTransaction. Replaces the component list
  * with the agreed one and records the settled decision. */
@@ -218,6 +244,7 @@ export async function applyEtymologyOutcomeInTransaction(
   // Same existence check the action path applies - a consensus can still name a
   // component word that has since been removed.
   await assertComponentsExist(client, outcome.components);
+  await writeBorrowingInTransaction(client, wordId, outcome, decidedBy);
 
   await client.query('delete from golden_record_components where word_id = $1', [wordId]);
   for (const [position, componentWordId] of outcome.components.entries()) {

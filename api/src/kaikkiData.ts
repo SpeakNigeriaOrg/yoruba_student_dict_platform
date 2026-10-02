@@ -27,6 +27,8 @@ interface KaikkiSenseRow {
   alt_of_targets: string[];
   component_candidates: ComponentCandidate[];
   used_in_candidates: ComponentCandidate[];
+  borrowed_from: string | null;
+  borrowed_term: string | null;
 }
 
 function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
@@ -49,6 +51,7 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
     altOfTargets: row.alt_of_targets,
     componentCandidates: row.component_candidates,
     usedInCandidates: row.used_in_candidates,
+    ...(row.borrowed_from ? { borrowedFrom: row.borrowed_from, borrowedTerm: row.borrowed_term } : {}),
     // Never persisted (see ingest/'s own design notes) - only ever an
     // input to reciprocal synthesis at ingestion time, not meant to be
     // reloaded, same as the Python original.
@@ -60,7 +63,7 @@ function rowToKaikkiSense(row: KaikkiSenseRow): KaikkiSense {
  * same shape from one definition instead of three drifting copies. */
 const SENSE_COLUMNS = `s.entry_id, s.pos, s.etymology_number, s.etymology_text, s.headword, s.canonical_value,
        s.canonical_inference_method, s.canonical_confidence,
-       s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets,
+       s.canonical_original_value, s.standard_forms, s.glosses, s.alt_of_targets, s.borrowed_from, s.borrowed_term,
        coalesce(
          -- gloss / entryIds only when present (0031), so a candidate without them reads exactly as
          -- it did before - the parity-tested shape is unchanged.

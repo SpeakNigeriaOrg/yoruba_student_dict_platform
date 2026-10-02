@@ -76,6 +76,9 @@ export interface ConsensusGroup {
   currentOnlyInDerivedTerms: boolean;
   /** The record's extended definition, null when none of our own. */
   currentEnglishGloss: string | null;
+  /** The record's loanword source (0032), null when not a loanword. Etymology axis. */
+  currentBorrowedFrom: string | null;
+  currentBorrowedTerm: string | null;
   axis: DecisionAxis;
   /** Present only once a curator has decided. */
   decidedAt: string | null;
@@ -155,8 +158,11 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       definition: string | null;
       syllables: string[];
       cited_entry_id: string | null;
+      borrowed_from: string | null;
+      borrowed_term: string | null;
     } & EntryUsageRow>(
-      `select g.word_id, g.display_text, g.definition, g.syllables, c.entry_id as cited_entry_id, ${ENTRY_USAGE_COLUMNS}
+      `select g.word_id, g.display_text, g.definition, g.syllables, c.entry_id as cited_entry_id,
+              g.borrowed_from, g.borrowed_term, ${ENTRY_USAGE_COLUMNS}
        from golden_record g
        left join upstream_citations c on c.word_id = g.word_id
        where g.word_id = any($1)`,
@@ -213,6 +219,8 @@ export async function listConsensus(client: Queryable, options: ListConsensusOpt
       currentUsageLabels: word.usage_labels,
       currentOnlyInDerivedTerms: word.only_in_derived_terms,
       currentEnglishGloss: word.english_gloss,
+      currentBorrowedFrom: word.borrowed_from,
+      currentBorrowedTerm: word.borrowed_term,
       axis,
       decidedAt: decision?.decided_at ?? null,
       decidedByEmail: decision?.email ?? null,

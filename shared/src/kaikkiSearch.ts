@@ -109,6 +109,10 @@ export interface KaikkiSearchResult {
    * etymology they are choosing. `kọ́` returns three results differing only
    * by this and their glosses. */
   etymologyNumber: string | null;
+  /** Wiktionary's own "borrowed from" (0032), present only when it marks the word borrowed - so
+   * Add Word can start the loanword question from Wiktionary's answer. */
+  borrowedFrom?: string;
+  borrowedTerm?: string | null;
   /** Whether this etymology is already someone's identity.
    *
    * Populated ONLY by the API handler (api/src/handlers/searchKaikki.ts), because it is production
@@ -307,5 +311,8 @@ export function searchKaikki(records: KaikkiSearchRecord[], query: string, limit
     entryId: sense.entryId ?? null,
     etymologyNumber: sense.etymologyNumber ?? null,
     componentCandidates: sense.componentCandidates ?? null,
+    // Only when Wiktionary marks it borrowed, so every other result keeps its exact shape (the
+    // Python-parity fixtures compare results whole).
+    ...(sense.borrowedFrom ? { borrowedFrom: sense.borrowedFrom, borrowedTerm: sense.borrowedTerm ?? null } : {}),
   }));
 }

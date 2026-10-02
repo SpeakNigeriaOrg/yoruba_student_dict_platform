@@ -22,6 +22,7 @@ export * from './phraseSpelling.js';
 export * from './contributorTerms.js';
 export * from './partsOfSpeech.js';
 export * from './usageLabels.js';
+export * from './loanLanguages.js';
 export * from './publicationReadiness.js';
 export * from './gamePublishing.js';
 export * from './audioContainer.js';

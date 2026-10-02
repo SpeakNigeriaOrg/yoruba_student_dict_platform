@@ -30,6 +30,7 @@ import {
   buildVocabSpellingIndex,
   componentsAxisFields,
   diagnoseEntry,
+  normalizeLoanLanguage,
   orthographyInsensitiveForm,
   type ComponentsProposalItem,
   type DiagnosticsOverrides,
@@ -59,9 +60,17 @@ export interface ProposalItemWithNearMatches extends ComponentsProposalItem {
   wiktionaryCandidates: WiktionaryPartCandidate[];
 }
 
+export interface Borrowing {
+  /** Wiktionary language code (shared/src/loanLanguages.ts). */
+  from: string;
+  term: string | null;
+}
+
 export interface MyEtymologyAnswer {
   /** true: they said it has no parts. */
   atomic: boolean;
+  /** What they said about borrowing; undefined for an answer given before 0032. */
+  borrowing?: Borrowing | null;
   /** In order. `pending` marks a part they requested that a curator has not added yet. */
   components: { wordId: string; displayText: string; definition: string | null; pending: boolean }[];
   /** Whether it says something other than the record - what the screen's marker is for. */
@@ -97,6 +106,11 @@ export interface EtymologyReviewResult {
   /** This caller's own active answer on THIS axis - what they said the word is made of. Null when
    * they have not answered. See loadMyEtymologyAnswer. */
   myEtymologyAnswer: MyEtymologyAnswer | null;
+  /** Loanword (0032). `borrowing` is the record; `wiktionaryBorrowing` is what the cited
+   * Wiktionary entry's own {{bor}} template says - the screen starts from it when the record is
+   * silent, so a reviewer confirms rather than re-enters. */
+  borrowing: Borrowing | null;
+  wiktionaryBorrowing: Borrowing | null;
   componentsProposal: ProposalItemWithNearMatches[];
   components: string[];
   /** The decomposition WE hold, resolved to spellings, with the atomic self-reference already
@@ -162,8 +176,11 @@ export async function loadMyEtymologyAnswer(
   wordId: string,
   userId: string,
   recordComponents: string[],
+  recordBorrowing: Borrowing | null = null,
 ): Promise<MyEtymologyAnswer | null> {
-  const { rows } = await client.query<{ resolved_value: { components?: string[]; atomic?: boolean } | null }>(
+  const { rows } = await client.query<{
+    resolved_value: { components?: string[]; atomic?: boolean; borrowedFrom?: string | null; borrowedTerm?: string | null } | null;
+  }>(
     `select resolved_value from contributions
       where word_id = $1 and submitted_by = $2 and axis = 'etymology' and status = 'active'
       order by submitted_at desc limit 1`,
@@ -197,10 +214,16 @@ export async function loadMyEtymologyAnswer(
   // "No parts" arrives two ways - confirm_atomic, or rejecting a proposal on a word with nothing
   // recorded (an empty list) - and both say the same thing about the word.
   const atomic = v.atomic === true || ids.length === 0;
+  const borrowing =
+    v.borrowedFrom === undefined ? undefined : v.borrowedFrom ? { from: v.borrowedFrom, term: v.borrowedTerm ?? null } : null;
+  const borrowingDiffers =
+    borrowing !== undefined &&
+    ((borrowing?.from ?? null) !== (recordBorrowing?.from ?? null) || (borrowing?.term ?? null) !== (recordBorrowing?.term ?? null));
   const differsFromRecord =
+    borrowingDiffers ||
     atomic !== (recordComponents.length === 0) ||
     (!atomic && (ids.length !== recordComponents.length || ids.some((id, i) => id !== recordComponents[i])));
-  return { atomic, components, differsFromRecord };
+  return { atomic, components, differsFromRecord, ...(borrowing !== undefined ? { borrowing } : {}) };
 }
 
 /** The Wiktionary etymologies named as candidates for a proposal's parts, with whichever of our
@@ -248,6 +271,25 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
   const definition = await loadDefinition(client, wordId);
   const axisDecided = await loadAxisDecided(client, wordId, userId);
   const myProposedEntry = await loadMyEntryAnswer(client, wordId, userId);
+  const borrowingRows = await client.query<{
+    borrowed_from: string | null;
+    borrowed_term: string | null;
+    wik_from: string | null;
+    wik_term: string | null;
+  }>(
+    `select g.borrowed_from, g.borrowed_term, s.borrowed_from as wik_from, s.borrowed_term as wik_term
+       from golden_record g
+       left join upstream_citations c on c.word_id = g.word_id
+       left join kaikki_senses s on s.entry_id = c.entry_id
+      where g.word_id = $1
+      limit 1`,
+    [wordId],
+  );
+  const b = borrowingRows.rows[0];
+  const borrowing: Borrowing | null = b?.borrowed_from ? { from: b.borrowed_from, term: b.borrowed_term } : null;
+  const wiktionaryBorrowing: Borrowing | null = b?.wik_from
+    ? { from: normalizeLoanLanguage(b.wik_from), term: b.wik_term }
+    : null;
 
   const key = orthographyInsensitiveForm(entry.displayText);
   const senses = await loadKaikkiSensesForKey(client, key);
@@ -287,7 +329,10 @@ export async function getEtymologyReview(client: Queryable, wordId: string, user
       wordId,
       userId,
       fields.components.length === 1 && fields.components[0] === wordId ? [] : fields.components,
+      borrowing,
     ),
+    borrowing,
+    wiktionaryBorrowing,
     etymologyText: diagnosis.matchedEtymologyText ?? null,
     // Named, not spread: see the note on EtymologyReviewResult. usedInProposal and
     // usedAsComponentOf stop here.

@@ -73,6 +73,9 @@ export interface KaikkiSense {
    * since callers that only need the forward direction (e.g. tests using
    * older fixtures) don't need to supply it. */
   usedInCandidates?: ComponentCandidate[] | null;
+  /** From the entry's own {{bor}} template (0032), when Wiktionary marks it borrowed. */
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
   derivedForms: unknown[];
 }
 

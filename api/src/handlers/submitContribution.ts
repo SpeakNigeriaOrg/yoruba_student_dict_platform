@@ -96,6 +96,8 @@ async function loadObservedState(
   citedEntryId: string | null;
   usage: ReturnType<typeof usageObserved>;
   components: string[];
+  borrowedFrom: string | null;
+  borrowedTerm: string | null;
   isPhrase: boolean;
 }> {
   // Left-joined rather than a second query: the cited etymology is part of the
@@ -110,9 +112,11 @@ async function loadObservedState(
       definition: string | null;
       entry_type: 'phrase' | null;
       entry_id: string | null;
+      borrowed_from: string | null;
+      borrowed_term: string | null;
     } & EntryUsageRow
   >(
-    `select g.display_text, g.syllables, g.definition, g.entry_type, c.entry_id, ${ENTRY_USAGE_COLUMNS}
+    `select g.display_text, g.syllables, g.definition, g.entry_type, c.entry_id, g.borrowed_from, g.borrowed_term, ${ENTRY_USAGE_COLUMNS}
      from golden_record g
      left join upstream_citations c on c.word_id = g.word_id
      where g.word_id = $1`,
@@ -133,6 +137,8 @@ async function loadObservedState(
     citedEntryId: row.entry_id,
     usage: usageObserved(row),
     components: components.rows.map((r) => r.component_word_id),
+    borrowedFrom: row.borrowed_from,
+    borrowedTerm: row.borrowed_term,
     isPhrase: row.entry_type === 'phrase',
   };
 }
@@ -156,7 +162,10 @@ function resolveOutcome(
       input.proposedValue,
     );
   }
-  const outcome = resolveEtymologyOutcome({ components: observed.components }, input.proposedValue);
+  const outcome = resolveEtymologyOutcome(
+    { components: observed.components, borrowedFrom: observed.borrowedFrom, borrowedTerm: observed.borrowedTerm },
+    input.proposedValue,
+  );
   // Refused at submission, not left for approval. A phrase is composed of words by definition
   // (see PhraseNeedsComponentsError), so a proposal that it has none can never be applied - and
   // accepting it here would put a permanently unapprovable row in the curator queue, which is

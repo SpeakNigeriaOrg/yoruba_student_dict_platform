@@ -229,11 +229,21 @@ export type ComponentsAction = 'confirm_atomic' | 'confirm_existing' | 'reject_p
 
 export interface EtymologyObservedState {
   components: string[];
+  /** golden_record.borrowed_from / borrowed_term (0032): a loanword's source language (a
+   * Wiktionary code, loanLanguages.ts) and, optionally, the word it was borrowed as. */
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
 }
 
 export interface EtymologyContributionInput {
   componentsAction: ComponentsAction;
   components?: string[];
+  /** 'set' says whether it is a loanword (borrowedFrom null: it is not); absent or 'confirm'
+   * asserts what is on record. Independent of the components question - a loanword usually has
+   * no parts, but saying so is componentsAction's job. */
+  borrowedAction?: 'confirm' | 'set';
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
 }
 
 /** `atomic` carries the one claim that isn't visible in the resulting content:
@@ -248,6 +258,9 @@ export interface EtymologyOutcome {
   kind: 'etymology';
   components: string[];
   atomic: boolean;
+  /** Optional in the type for rows stored before 0032; backfillEntryUsageFields fills them in. */
+  borrowedFrom?: string | null;
+  borrowedTerm?: string | null;
 }
 
 /** Mirrors applyEtymologyDecision: accept_proposed and custom replace the component list with
@@ -264,10 +277,18 @@ export function resolveEtymologyOutcome(
 ): EtymologyOutcome {
   const replaces = input.componentsAction === 'accept_proposed' || input.componentsAction === 'custom';
   const atomic = input.componentsAction === 'confirm_atomic';
+  const setsBorrowing = input.borrowedAction === 'set';
+  const borrowedFrom = (setsBorrowing ? input.borrowedFrom : observed.borrowedFrom)?.trim() || null;
+  // A source word without a source language says nothing; it goes with the language.
+  const borrowedTerm = borrowedFrom
+    ? (setsBorrowing ? input.borrowedTerm : observed.borrowedTerm)?.trim() || null
+    : null;
   return {
     kind: 'etymology',
     components: atomic ? [] : replaces ? (input.components ?? []) : observed.components,
     atomic,
+    borrowedFrom,
+    borrowedTerm,
   };
 }
 
@@ -314,7 +335,28 @@ export function fingerprintOutcome(outcome: ContributionOutcome): string {
     'etymology',
     outcome.atomic ? 'atomic' : 'composite',
     outcome.components.map(normalizeText).join(LIST_SEP),
+    ...borrowingFields(outcome),
   ].join(FIELD_SEP);
+}
+
+/** Loanword source language and word (0032). The language is a code, compared exactly; the word is
+ * Yoruba-or-foreign text, NFC-normalized like a spelling. Absent reads as not borrowed. */
+function borrowingFields(outcome: EtymologyOutcome): [string, string] {
+  return [
+    outcome.borrowedFrom ?? NULL_MARKER,
+    outcome.borrowedFrom && outcome.borrowedTerm ? normalizeText(outcome.borrowedTerm) : NULL_MARKER,
+  ];
+}
+
+/** The etymology fingerprint before 0032: 'etymology', atomic/composite, components. */
+const PRE_BORROWING_ETYMOLOGY_FIELDS = 3;
+
+/** Extends a pre-0032 etymology fingerprint with "not borrowed". Exact: nothing could record a
+ * loanword before 0032. Null for anything else, so the backfill is idempotent. */
+export function extendLegacyEtymologyFingerprint(fingerprint: string): string | null {
+  const fields = fingerprint.split(FIELD_SEP);
+  if (fields[0] !== 'etymology' || fields.length !== PRE_BORROWING_ETYMOLOGY_FIELDS) return null;
+  return [fingerprint, NULL_MARKER, NULL_MARKER].join(FIELD_SEP);
 }
 
 /** The part of speech, usage labels and only-in-derived-terms flag, as fingerprint fields.
@@ -353,12 +395,19 @@ export function renameComponentInFingerprint(fingerprint: string, from: string, 
   // Only an etymology fingerprint carries component word_ids. An entry fingerprint's fields
   // are spelling, syllables, gloss, an upstream entry id, a pos tag, usage labels and a flag,
   // none of which a word_id names.
-  if (fields.length !== 3 || fields[0] !== 'etymology' || fields[2] === '') return fingerprint;
+  // Three fields before 0032, five since (borrowing appended); either way components are field 2
+  // and everything after it is carried over untouched.
+  if ((fields.length !== 3 && fields.length !== 5) || fields[0] !== 'etymology' || fields[2] === '') return fingerprint;
   const before = normalizeText(from);
   const after = normalizeText(to);
   const components = fields[2].split(LIST_SEP);
   if (!components.includes(before)) return fingerprint;
-  return ['etymology', fields[1], components.map((c) => (c === before ? after : c)).join(LIST_SEP)].join(FIELD_SEP);
+  return [
+    'etymology',
+    fields[1],
+    components.map((c) => (c === before ? after : c)).join(LIST_SEP),
+    ...fields.slice(3),
+  ].join(FIELD_SEP);
 }
 
 /** The extended definition as a fingerprint field: normalized like the student definition (it is
@@ -440,7 +489,8 @@ export type ClaimField =
   | 'usageLabels'
   | 'onlyInDerivedTerms'
   | 'englishGloss'
-  | 'components';
+  | 'components'
+  | 'borrowing';
 
 /** The entry fingerprint WITHOUT the student definition: what word this is, not what it means.
  *
@@ -479,8 +529,12 @@ export function differingFields(outcomes: ContributionOutcome[]): ClaimField[] {
   if (outcomes.length < 2) return [];
   const entries = outcomes.filter((o): o is EntryOutcome => o.kind === 'entry');
   if (entries.length !== outcomes.length) {
-    const sets = new Set(outcomes.map((o) => fingerprintOutcome(o)));
-    return sets.size > 1 ? ['components'] : [];
+    const ety = outcomes.filter((o): o is EtymologyOutcome => o.kind === 'etymology');
+    const etyVaries = (project: (o: EtymologyOutcome) => string) => new Set(ety.map(project)).size > 1;
+    const out: ClaimField[] = [];
+    if (etyVaries((o) => `${o.atomic}${FIELD_SEP}${o.components.map(normalizeText).join(LIST_SEP)}`)) out.push('components');
+    if (etyVaries((o) => borrowingFields(o).join(FIELD_SEP))) out.push('borrowing');
+    return out;
   }
   const varies = (project: (o: EntryOutcome) => string) => new Set(entries.map(project)).size > 1;
   const fields: ClaimField[] = [];
