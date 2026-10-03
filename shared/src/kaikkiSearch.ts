@@ -136,6 +136,10 @@ export interface KaikkiSearchResult {
    * a cited word sharing a spelling with a different etymology is the `kọ́` false positive, and
    * suppressing it is the point rather than an omission. */
   spellingMatches?: Array<{ wordId: string; displayText: string }>;
+  /** Populated only by the API handler, like `claim`: for each of componentCandidates, in order,
+   * the words we hold that the part could be. `citesThisPart` marks a word whose citation is one
+   * of the etymologies the part names - that part exactly; the rest only share its spelling. */
+  partWords?: Array<Array<{ wordId: string; displayText: string; syllables: string[]; definition: string | null; citesThisPart: boolean }>>;
   /** Wiktionary's own structured decomposition of this etymology, unresolved against our vocab -
    * the same field diagnoseEntry/componentsAxis read for an EXISTING word's etymology review, here
    * for a word that does not exist yet. Add Word's "is this word built from other words?" used to

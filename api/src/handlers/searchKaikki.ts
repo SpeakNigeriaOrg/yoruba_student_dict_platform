@@ -33,9 +33,10 @@ export async function searchKaikkiHandler(client: Queryable, query: string): Pro
   if (results.length === 0) return results;
 
   const entryIds = results.map((result) => result.entryId).filter((id): id is string => id !== null);
-  const [claims, uncomparable] = await Promise.all([
+  const [claims, uncomparable, heldParts] = await Promise.all([
     loadEntryClaims(client, entryIds),
     loadIdentityUncomparableWords(client),
+    loadHeldParts(client, results),
   ]);
 
   return results.map((result) => {
@@ -48,6 +49,50 @@ export async function searchKaikkiHandler(client: Queryable, query: string): Pro
       : uncomparable.filter((word) =>
           result.standardForms.some((form) => orthographyInsensitiveForm(form) === word.base),
         ).map((word) => ({ wordId: word.wordId, displayText: word.displayText }));
-    return { ...result, claim, spellingMatches };
+    return { ...result, claim, spellingMatches, partWords: partWords(result, heldParts) };
   });
+}
+
+interface HeldPart {
+  wordId: string;
+  displayText: string;
+  syllables: string[];
+  definition: string | null;
+  entryId: string | null;
+}
+
+/** For each part Wiktionary names (componentCandidates, in order), the words we hold that it could
+ * be - so Add Word can say which one to add, rather than leaving the curator to search for it.
+ *
+ * A word whose citation is one of the etymologies the part names is that part exactly
+ * (`citesThisPart`); a word that merely shares the spelling may be a different word altogether -
+ * the three kọ́ - and is offered as such. */
+function partWords(result: KaikkiSearchResult, held: HeldPart[]): KaikkiSearchResult['partWords'] {
+  return (result.componentCandidates ?? []).map((c) => {
+    const ids = c.entryIds ?? [];
+    const form = c.form.normalize('NFC');
+    return held
+      .filter((w) => (w.entryId !== null && ids.includes(w.entryId)) || w.displayText.normalize('NFC') === form)
+      .map((w) => ({
+        wordId: w.wordId,
+        displayText: w.displayText,
+        syllables: w.syllables,
+        definition: w.definition,
+        citesThisPart: w.entryId !== null && ids.includes(w.entryId),
+      }))
+      .sort((a, b) => Number(b.citesThisPart) - Number(a.citesThisPart));
+  });
+}
+
+async function loadHeldParts(client: Queryable, results: KaikkiSearchResult[]): Promise<HeldPart[]> {
+  const parts = results.flatMap((r) => r.componentCandidates ?? []);
+  if (parts.length === 0) return [];
+  const { rows } = await client.query<{ word_id: string; display_text: string; syllables: string[]; definition: string | null; entry_id: string | null }>(
+    `select g.word_id, g.display_text, g.syllables, g.definition, c.entry_id
+       from golden_record g
+       left join upstream_citations c on c.word_id = g.word_id
+      where c.entry_id = any($1) or normalize(g.display_text, NFC) = any($2)`,
+    [[...new Set(parts.flatMap((p) => p.entryIds ?? []))], [...new Set(parts.map((p) => p.form.normalize('NFC')))]],
+  );
+  return rows.map((r) => ({ wordId: r.word_id, displayText: r.display_text, syllables: r.syllables ?? [], definition: r.definition, entryId: r.entry_id }));
 }

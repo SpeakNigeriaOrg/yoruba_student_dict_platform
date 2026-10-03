@@ -103,7 +103,7 @@ describe('AddWord - Word tab', () => {
     expect(screen.getByRole('radio', { name: 'ẹan' })).not.toBeChecked();
   });
 
-  it("shows Wiktionary's own suggested components before the question is even asked", async () => {
+  it('lays out where Wiktionary says the word comes from, right above the parts question, and adds the parts we hold', async () => {
     const fetchMock = mockFetch({
       kaikkiResults: [
         {
@@ -115,9 +115,14 @@ describe('AddWord - Word tab', () => {
           standardForms: ['ojúlé'],
           entryId: 'en-ojule-yo-noun-ABC',
           etymologyNumber: null,
+          etymologyText: 'From ojú (“eye”) + ilé (“house”).',
           componentCandidates: [
-            { form: 'ojú', provenance: 'etymology_template' },
-            { form: 'ilé', provenance: 'etymology_template' },
+            { form: 'ojú', provenance: 'etymology_template', gloss: 'eye', entryIds: ['en-oju-yo-noun-X'] },
+            { form: 'ilé', provenance: 'etymology_template', gloss: 'house', entryIds: ['en-ile-yo-noun-X'] },
+          ],
+          partWords: [
+            [{ wordId: 'oju_eye', displayText: 'ojú', syllables: ['o', 'jú'], definition: 'eye', citesThisPart: true }],
+            [{ wordId: 'ile_house', displayText: 'ilé', syllables: ['i', 'lé'], definition: 'house', citesThisPart: false }],
           ],
         },
       ],
@@ -130,12 +135,22 @@ describe('AddWord - Word tab', () => {
     await waitFor(() => screen.getByText('ojúlé'));
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
-    // Visible even before the components section is opened.
-    expect(screen.getByLabelText("Wiktionary's suggested components")).toHaveTextContent('ojú + ilé');
+    // Visible before the parts question is opened, with the reasoning and the words we hold.
+    const where = screen.getByLabelText('Where it comes from');
+    expect(where).toHaveTextContent('From ojú (“eye”) + ilé (“house”).');
+    const parts = within(where).getByLabelText('Parts Wiktionary names');
+    expect(parts).toHaveTextContent('ojú (“eye”)ojú — eye (the word Wiktionary means)');
+    expect(parts).toHaveTextContent('ilé — house (spelled the same - check it is the same word)');
     expect(screen.queryByLabelText('Word components section')).not.toBeInTheDocument();
+
+    await user.click(within(where).getByRole('button', { name: 'Add all of these: ojú + ilé' }));
+    const list = screen.getByLabelText('Word components');
+    expect(list).toHaveTextContent('ojú — eye');
+    expect(list).toHaveTextContent('ilé — house');
+    expect(within(where).getAllByRole('button', { name: /^Add .* as a part/ }).every((b) => b.hasAttribute('disabled'))).toBe(true);
   });
 
-  it("keeps a parent page's derived-terms listing out of the breakdown, and says where it came from", async () => {
+  it("keeps a parent page's derived-terms listing apart from the parts, says where it came from, and lets it be added", async () => {
     const fetchMock = mockFetch({
       kaikkiResults: [
         {
@@ -148,9 +163,14 @@ describe('AddWord - Word tab', () => {
           entryId: 'en-agbale-yo-noun-ABC',
           etymologyNumber: null,
           componentCandidates: [
-            { form: 'a-', provenance: 'etymology_template' },
-            { form: 'gbálẹ̀', provenance: 'etymology_template' },
+            { form: 'a-', provenance: 'etymology_template', gloss: 'agent prefix' },
+            { form: 'gbálẹ̀', provenance: 'etymology_template', gloss: 'to sweep the ground' },
             { form: 'gbá', provenance: 'derived_reciprocal', entryIds: ['en-gba-yo-verb-X'] },
+          ],
+          partWords: [
+            [{ wordId: 'a-_agent_prefix', displayText: 'a-', syllables: ['a'], definition: 'agent prefix', citesThisPart: false }],
+            [],
+            [{ wordId: 'gba_sweep', displayText: 'gbá', syllables: ['gbá'], definition: 'to sweep', citesThisPart: true }],
           ],
         },
       ],
@@ -164,10 +184,16 @@ describe('AddWord - Word tab', () => {
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
     // Was "a- + gbálẹ̀ + gbá": gbá's list counted as a third part, though gbá is inside gbálẹ̀.
-    expect(screen.getByLabelText("Wiktionary's suggested components")).toHaveTextContent(/^Wiktionary suggests this is built from: a- \+ gbálẹ̀$/);
-    expect(screen.getByLabelText('Clues from other Wiktionary pages')).toHaveTextContent(
-      "Wiktionary's page for gbá lists this word among the words that come from it, so gbá may be one of its parts.",
-    );
+    const parts = screen.getByLabelText('Parts Wiktionary names');
+    expect(within(parts).getAllByRole('listitem').filter((li) => li.parentElement === parts)).toHaveLength(2);
+    expect(parts).toHaveTextContent('gbálẹ̀ (“to sweep the ground”) - not in the dictionary yet');
+    const clue = screen.getByLabelText('Clue from another Wiktionary page');
+    expect(clue).toHaveTextContent("Wiktionary's page for gbá lists this word among the words that come from it");
+
+    // Only the part we hold is offered in bulk; the clue is added on its own say-so.
+    expect(screen.getByRole('button', { name: 'Add the one we have: a-' })).toBeInTheDocument();
+    await user.click(within(clue).getByRole('button', { name: 'Add gbá as a part: to sweep' }));
+    expect(screen.getByLabelText('Word components')).toHaveTextContent('gbá — to sweep');
   });
 
   it("shows each etymology's own text on Wiktionary, in the results and once it is cited", async () => {
@@ -198,7 +224,7 @@ describe('AddWord - Word tab', () => {
     expect(screen.getByLabelText('Cited etymology')).toHaveTextContent('Contraction of sọ + ọ̀rọ̀');
   });
 
-  it('says nothing when Kaikki proposes only a single root - a root is not a breakdown', async () => {
+  it('shows a single part Wiktionary names, and offers nothing to add when we hold none', async () => {
     const fetchMock = mockFetch({
       kaikkiResults: [
         {
@@ -222,7 +248,9 @@ describe('AddWord - Word tab', () => {
     await waitFor(() => screen.getByText('ọba'));
     await user.click(screen.getByRole('button', { name: 'Select' }));
 
-    expect(screen.queryByLabelText("Wiktionary's suggested components")).not.toBeInTheDocument();
+    // One part is shown like any other - a partial etymology is still evidence. Nothing is held for it.
+    expect(screen.getByLabelText('Parts Wiktionary names')).toHaveTextContent('ba - not in the dictionary yet');
+    expect(screen.queryByRole('button', { name: /^Add all|^Add the/ })).not.toBeInTheDocument();
   });
 
   it('submits createWord citing the picked etymology, not just its spelling', async () => {

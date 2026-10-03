@@ -393,9 +393,6 @@ function WordTab({
   const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
   /** The part of speech this word will resolve to: the one typed here off-path, else the cited
    * etymology's own. What decides whether "not a standalone word" is fixed (an affix) or asked. */
-  // The picked etymology's own breakdown, and the parent pages whose derived-terms lists name it.
-  const ownParts = (selected?.componentCandidates ?? []).filter((c) => c.provenance !== 'derived_reciprocal');
-  const clueParents = (selected?.componentCandidates ?? []).filter((c) => c.provenance === 'derived_reciprocal').map((c) => c.form);
   const effectivePos = offPath ? pos || null : (selected?.pos ?? null);
   const citable = offPath ? Boolean(exemptReason.trim()) : Boolean(selected?.entryId);
 
@@ -721,34 +718,19 @@ function WordTab({
             />
           ) : null}
 
-          {/* Said before the question is even asked, not left for Review to reveal later - a
-              curator answering blind here had no way to know Wiktionary's own etymology template
-              already proposed one, and would meet the identical proposal again on the etymology
-              review screen after the fact. One candidate is a root, not a breakdown - see
-              EtymologyReview's singleRootProposal - so only shown once there is a real one to
-              weigh. Unresolved against our vocab on purpose: this is a hint to act on with the
-              picker below, not a claim about whether we already hold these words. */}
-          {ownParts.length > 1 ? (
-            <p className="field-note" aria-label="Wiktionary's suggested components">
-              Wiktionary suggests this is built from: {ownParts.map((c) => c.form).join(' + ')}
-            </p>
-          ) : null}
-          {/* The weaker, secondary evidence, said as what it is - see EtymologyReview's
-              DerivedTermClues. It used to be counted as a part in the line above. */}
-          {clueParents.length > 0 ? (
-            <p className="field-note" aria-label="Clues from other Wiktionary pages">
-              {clueParents.length === 1 ? (
-                <>
-                  Wiktionary&apos;s page for <strong>{clueParents[0]}</strong> lists this word among the words that come
-                  from it, so {clueParents[0]} may be one of its parts.
-                </>
-              ) : (
-                <>
-                  Wiktionary&apos;s pages for <strong>{clueParents.join(', ')}</strong> list this word among the words
-                  that come from them, so they may be among its parts.
-                </>
-              )}
-            </p>
+          {/* Where Wiktionary says the word comes from, directly above the question it informs -
+              whether to add parts, and which. It used to be one bare line naming the parts, with
+              no reasoning, no sign of which of our words each part is, and nothing at all for a
+              word whose etymology is only prose. */}
+          {selected ? (
+            <WhereItComesFrom
+              result={selected}
+              chosen={components}
+              onAdd={(parts) => {
+                setComponentsOpen(true);
+                setComponents((prev) => [...prev, ...parts]);
+              }}
+            />
           ) : null}
 
           {/* Optional, collapsed, and last of the content fields.
@@ -849,6 +831,125 @@ interface PhrasePart {
   displayText: string;
   syllables: string[];
   definition: string | null;
+}
+
+type PartWord = NonNullable<KaikkiSearchResult['partWords']>[number][number];
+
+const toPart = (w: PartWord): PhrasePart => ({
+  wordId: w.wordId,
+  displayText: w.displayText,
+  syllables: w.syllables,
+  definition: w.definition,
+});
+
+/** The word a part surely is: the one citing the very etymology Wiktionary names, else the only
+ * word we hold spelled that way. Null when there is none, or a choice to make. */
+function surePartWord(words: PartWord[]): PartWord | null {
+  return words.find((w) => w.citesThisPart) ?? (words.length === 1 ? words[0] : null);
+}
+
+/** One part Wiktionary names, and the words we hold that it could be - each with its meaning, so
+ * the choice between two words spelled alike (the three kọ́) is made on what they mean. */
+function PartWords({ words, chosen, onAdd }: { words: PartWord[]; chosen: PhrasePart[]; onAdd: (parts: PhrasePart[]) => void }) {
+  if (words.length === 0) return <span className="field-note"> - not in the dictionary yet</span>;
+  return (
+    <ul className="plain-list">
+      {words.map((w) => {
+        const added = chosen.some((p) => p.wordId === w.wordId);
+        return (
+          <li key={w.wordId}>
+            <strong>{w.displayText}</strong>
+            {w.definition ? ` — ${w.definition}` : ''}{' '}
+            <span className="field-note">
+              {w.citesThisPart ? '(the word Wiktionary means)' : '(spelled the same - check it is the same word)'}
+            </span>{' '}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={added}
+              onClick={() => onAdd([toPart(w)])}
+              aria-label={`Add ${w.displayText} as a part: ${w.definition ?? w.wordId}`}
+            >
+              {added ? 'Added' : 'Add as a part'}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Where Wiktionary says a word comes from, laid out for the question right below it: is this word
+ * built from other words, and from which of ours?
+ *
+ * Three kinds of evidence, each said as what it is: the etymology's own text (the reasoning, and
+ * the only account at all for an etymology with no structured parts); the parts its etymology
+ * names, each resolved to the words we hold - exactly, by citation, where we can; and clues from
+ * other pages whose derived-terms lists name this word (see EtymologyReview's DerivedTermClues). */
+function WhereItComesFrom({
+  result,
+  chosen,
+  onAdd,
+}: {
+  result: KaikkiSearchResult;
+  chosen: PhrasePart[];
+  onAdd: (parts: PhrasePart[]) => void;
+}) {
+  const rows = (result.componentCandidates ?? []).map((candidate, i) => ({ candidate, words: result.partWords?.[i] ?? [] }));
+  const own = rows.filter((r) => r.candidate.provenance !== 'derived_reciprocal');
+  const clues = rows.filter((r) => r.candidate.provenance === 'derived_reciprocal');
+  const ready = own
+    .map((r) => surePartWord(r.words))
+    .filter((w): w is PartWord => w !== null && !chosen.some((p) => p.wordId === w.wordId));
+  const text = result.etymologyText;
+
+  if (!text?.trim() && own.length === 0 && clues.length === 0) {
+    return (
+      <p className="field-note" aria-label="Where it comes from">
+        Wiktionary gives no etymology for this word.
+      </p>
+    );
+  }
+  return (
+    <div className="field" aria-label="Where it comes from">
+      <p>
+        <strong>Where Wiktionary says it comes from</strong>
+      </p>
+      <WiktionaryEtymologyText text={text} />
+      {own.length > 0 ? (
+        <>
+          <p className="field-note">The parts its etymology names, and the words we hold for them:</p>
+          <ol aria-label="Parts Wiktionary names">
+            {own.map(({ candidate, words }, i) => (
+              <li key={`${i}-${candidate.form}`}>
+                <strong>{candidate.form}</strong>
+                {candidate.gloss ? ` (“${candidate.gloss}”)` : ''}
+                <PartWords words={words} chosen={chosen} onAdd={onAdd} />
+              </li>
+            ))}
+          </ol>
+          {ready.length > 0 ? (
+            <button type="button" className="btn btn-secondary" onClick={() => onAdd(ready.map(toPart))}>
+              {ready.length === own.length ? 'Add all of these' : `Add the ${ready.length === 1 ? 'one' : ready.length} we have`}:{' '}
+              {ready.map((w) => w.displayText).join(' + ')}
+            </button>
+          ) : null}
+        </>
+      ) : text?.trim() ? (
+        <p className="field-note">Its etymology names no parts in a form we can read - judge from the text above.</p>
+      ) : null}
+      {clues.map(({ candidate, words }) => (
+        <div key={candidate.form} aria-label="Clue from another Wiktionary page">
+          <p className="field-note">
+            Clue from another page: Wiktionary&apos;s page for <strong>{candidate.form}</strong> lists this word among the
+            words that come from it, so {candidate.form} may be one of its parts. That list doesn&apos;t say what the other
+            parts are.
+          </p>
+          <PartWords words={words} chosen={chosen} onAdd={onAdd} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Picking the words an entry is built from. One control, used by both tabs.

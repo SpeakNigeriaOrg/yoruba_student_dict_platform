@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { searchKaikkiHandler } from './searchKaikki.js';
+import { writeCitationInTransaction } from './upstreamCitations.js';
 
 const NS = 'testsearchk_';
 const pool = getTestPool();
@@ -185,5 +186,53 @@ describe('searchKaikkiHandler reports whether an etymology is already taken', ()
 
   it('still returns nothing for a query that matches nothing, without running the claim lookups', async () => {
     expect(await searchKaikkiHandler(pool, 'qzxvnothingmatchesthisxyz')).toEqual([]);
+  });
+});
+
+describe('the parts Wiktionary names, matched to the words we hold', () => {
+  it('marks the word citing the very etymology a part names, and offers a same-spelled word as only that', async () => {
+    const compound = `${NS}compoundpartsxyz`;
+    const sense = await pool.query<{ sense_id: string }>(
+      `insert into kaikki_senses
+         (entry_id, pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses, etymology_text)
+       values ($1, 'noun', $2, $2, 'explicit_canonical_tag', 1.0, $2, $3, $4, $5) returning sense_id`,
+      [`${NS}entry-compound`, compound, [compound], ['a test compound'], 'From one + two.'],
+    );
+    seededKaikkiSenseIds.push(sense.rows[0].sense_id);
+    await pool.query('insert into kaikki_sense_keys (sense_id, orthography_insensitive_key) values ($1, $2)', [sense.rows[0].sense_id, compound]);
+    await pool.query(
+      `insert into kaikki_component_candidates (sense_id, position, form, provenance, gloss, candidate_entry_ids)
+       values ($1, 0, $2, 'etymology_template', 'one', $3), ($1, 1, $4, 'etymology_template', 'two', null)`,
+      [sense.rows[0].sense_id, `${NS}partone`, [`${NS}entry-one`], `${NS}parttwo`],
+    );
+    // partone: two words spelled the same, one of which cites the etymology named. parttwo: one by spelling.
+    for (const [wordId, spelling] of [
+      [`${NS}one_cited`, `${NS}partone`],
+      [`${NS}one_other`, `${NS}partone`],
+      [`${NS}two`, `${NS}parttwo`],
+    ]) {
+      await pool.query('insert into golden_record (word_id, display_text, syllables, definition) values ($1, $2, $3, $4)', [wordId, spelling, [spelling], wordId]);
+    }
+    // The etymology partone names, which one_cited cites.
+    const one = await pool.query<{ sense_id: string }>(
+      "insert into kaikki_senses (entry_id, pos, headword, canonical_value, canonical_inference_method, canonical_confidence, canonical_original_value, standard_forms, glosses) values ($1, 'noun', $2, $2, 'explicit_canonical_tag', 1.0, $2, $3, '{one}') returning sense_id",
+      [`${NS}entry-one`, `${NS}partone`, [`${NS}partone`]],
+    );
+    seededKaikkiSenseIds.push(one.rows[0].sense_id);
+    const curator = await pool.query<{ user_id: string }>(
+      "insert into users (email, display_name, role) values ($1, 'c', 'curator') returning user_id",
+      [`${NS}curator@example.com`],
+    );
+    await writeCitationInTransaction(pool, `${NS}one_cited`, { entryId: `${NS}entry-one` }, curator.rows[0].user_id);
+
+    const [result] = await searchKaikkiHandler(pool, compound);
+    expect(result.etymologyText).toBe('From one + two.');
+    expect(result.partWords?.map((words) => words.map((w) => [w.wordId, w.citesThisPart]))).toEqual([
+      [
+        [`${NS}one_cited`, true],
+        [`${NS}one_other`, false],
+      ],
+      [[`${NS}two`, false]],
+    ]);
   });
 });
