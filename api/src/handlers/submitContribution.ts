@@ -33,6 +33,7 @@ import {
   type ContributionOutcome,
 } from '@yoruba-student-dict-platform/shared';
 import { WordNotFoundError } from './errors.js';
+import { assertWordIdShape } from './wordIdShape.js';
 import { ENTRY_USAGE_COLUMNS, usageObserved, validateEntryUsageInput, type EntryUsageRow } from '../entryUsage.js';
 import type { ApplyEntryDecisionInput } from './applyEntryDecision.js';
 import { PhraseNeedsComponentsError, type ApplyEtymologyDecisionInput } from './applyEtymologyDecision.js';
@@ -198,6 +199,10 @@ export async function submitContributionInTransaction(
   // it IS the content - so it carries no fingerprint and takes no part in
   // consensus. A curator approves it individually.
   if (input.axis === 'new_entry') {
+    // Checked here and not only at approval, where createWord checks it again: the planned id is
+    // what other volunteers' etymologies point at while the request waits, so a bad one would be
+    // linked to before anyone could find out it can never be created.
+    assertWordIdShape(input.proposedValue.proposedWordId);
     const result = await db.query<{ contribution_id: string }>(
       `insert into contributions (word_id, axis, proposed_value, note, submitted_by)
        values (null, $1, $2, $3, $4)

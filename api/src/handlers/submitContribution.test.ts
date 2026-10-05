@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { submitContribution } from './submitContribution.js';
 import { WordNotFoundError } from './errors.js';
+import { InvalidWordIdError } from './wordIdShape.js';
 
 const NS = 'testsub_';
 const pool = getTestPool();
@@ -64,6 +65,19 @@ describe('submitContribution', () => {
       contributionId,
     ]);
     expect(row.rows[0].word_id).toBeNull();
+  });
+
+  it('refuses a new_entry whose proposed word_id could never be created, and writes nothing', async () => {
+    const bad = `${NS}kaabo!_welcome`;
+    await expect(
+      submitContribution(
+        pool,
+        { axis: 'new_entry', proposedValue: { proposedWordId: bad, displayText: 'káàbọ̀!', syllables: ['káà', 'bọ̀'], type: 'word' } },
+        volunteerUserId,
+      ),
+    ).rejects.toThrow(InvalidWordIdError);
+    const rows = await pool.query(`select 1 from contributions where proposed_value ->> 'proposedWordId' = $1`, [bad]);
+    expect(rows.rowCount).toBe(0);
   });
 
   it('rejects an entry/etymology contribution against a nonexistent word_id', async () => {
