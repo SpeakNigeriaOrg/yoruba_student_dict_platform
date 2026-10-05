@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { orthographyInsensitiveForm } from '@yoruba-student-dict-platform/shared';
+import { spellingSlug } from '@yoruba-student-dict-platform/shared';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { createWord } from './createWord.js';
 import { createPhrase } from './createPhrase.js';
@@ -44,7 +44,7 @@ describe('assertWordIdShape', () => {
     }
   });
 
-  it('agrees with orthographyInsensitiveForm, which is where ids come from', () => {
+  it('agrees with spellingSlug, which is where ids come from', () => {
     // The guarantee is only real if the deriving function cannot produce something this refuses.
     // `ọwọ́` is the hard case: underdot and tone on the same vowel.
     //
@@ -53,8 +53,9 @@ describe('assertWordIdShape', () => {
     // was added and the hyphen was added alongside it to make the line pass, the two rules
     // disagreed and nothing failed. That is exactly the drift this test exists to prevent, so it
     // can only ever read the real constant.
-    for (const spelling of ['ọwọ́', 'ẹ jọ̀ọ́', 'Ṣóyínká', 'gban̄gba', 'ilé-ìwé', 'rẹ́rìn-ín', 'aárùn-ún', '-ọlá']) {
-      const base = orthographyInsensitiveForm(spelling).replace(/\s+/g, '_');
+    // The punctuated forms are interjections and questions as Wiktionary cites them (`káàbọ̀!`).
+    for (const spelling of ['ọwọ́', 'ẹ jọ̀ọ́', 'Ṣóyínká', 'gban̄gba', 'ilé-ìwé', 'rẹ́rìn-ín', 'aárùn-ún', '-ọlá', 'káàbọ̀!', 'ṣé?', 'ó dàbọ̀.']) {
+      const base = spellingSlug(spelling);
       expect(base).toMatch(WORD_ID_PATTERN);
       expect(() => assertWordIdShape(base)).not.toThrow();
     }

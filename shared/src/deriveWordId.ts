@@ -81,10 +81,27 @@ export function meaningSlug(gloss: string | undefined): string {
     .replace(/^_+|_+$/g, '');
 }
 
-/** The base id for a spelling and a meaning. Spaces become underscores so a multi-word
- * Wiktionary form (`ilẹ̀ Faran̄sé`) yields a usable id rather than one with a space in it. */
+/** The spelling half of a word_id. Spaces become underscores so a multi-word Wiktionary form
+ * (`ilẹ̀ Faran̄sé`) yields a usable id rather than one with a space in it.
+ *
+ * Punctuation is dropped, the hyphen excepted. An interjection is cited as `káàbọ̀!`, and the
+ * `!` used to pass straight through into `kaabo!_welcome`, which wordIdShape then refused - the
+ * deriver producing what the validator rejects, the same contradiction the hyphen once was. The
+ * `!` frames the word rather than spelling it, so `káàbọ̀!` and `káàbọ̀` should share an id. The
+ * hyphen stays because it IS spelling (`ilé-ìwé`, the affix `-ọlá`; see wordIdShape.ts).
+ *
+ * Only punctuation and symbols go. A letter outside a-z survives, so an unexpected script still
+ * fails visibly at wordIdShape instead of silently vanishing from the id. */
+export function spellingSlug(displayText: string): string {
+  return orthographyInsensitiveForm(displayText)
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '_');
+}
+
+/** The base id for a spelling and a meaning. */
 export function deriveWordId(displayText: string, gloss: string | undefined): string {
-  const base = orthographyInsensitiveForm(displayText).replace(/\s+/g, '_');
+  const base = spellingSlug(displayText);
   const meaning = meaningSlug(gloss);
   // No meaning to slug (15 of 6272 entries, all glossless) - the base alone is still a valid
   // id, and a curator seeing `a` in the request queue will know to fix it. Better than
@@ -110,7 +127,7 @@ export function deriveWordId(displayText: string, gloss: string | undefined): st
  * Returns null when the id does not have that shape - a legacy id, or one a human wrote freehand
  * - rather than inventing a label out of part of a key. */
 export function etymidLabelFromWordId(wordId: string, displayText: string): string | null {
-  const prefix = `${orthographyInsensitiveForm(displayText).replace(/\s+/g, '_')}_`;
+  const prefix = `${spellingSlug(displayText)}_`;
   if (!wordId.startsWith(prefix)) return null;
   const hint = wordId.slice(prefix.length);
   return hint ? hint.replace(/_/g, ' ') : null;

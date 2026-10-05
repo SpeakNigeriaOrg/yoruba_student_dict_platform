@@ -55,6 +55,18 @@ describe('determinism - what the consensus tally depends on', () => {
     expect(deriveWordId('abo adìyẹ', 'hen')).toBe('abo_adiye_hen');
     expect(deriveWordId('ilẹ̀ Faran̄sé', 'France')).toBe('ile_faranse_france');
   });
+
+  it('drops punctuation from the spelling, so an interjection yields a valid id', () => {
+    expect(deriveWordId('káàbọ̀!', 'welcome')).toBe('kaabo_welcome');
+    expect(deriveWordId('káàbọ̀!', 'welcome')).toBe(deriveWordId('káàbọ̀', 'welcome'));
+    expect(deriveWordId('ṣé?', 'is it')).toBe('se_is_it');
+    expect(deriveWordId('ẹ kú àárọ̀ o !', 'good morning')).toBe('e_ku_aaro_o_good_morning');
+  });
+
+  it('keeps the hyphen, which is spelling rather than punctuation', () => {
+    expect(deriveWordId('ilé-ìwé', 'school')).toBe('ile-iwe_school');
+    expect(deriveWordId('-ọlá', 'wealth')).toBe('-ola_wealth');
+  });
 });
 
 describe('meaningSlug', () => {
