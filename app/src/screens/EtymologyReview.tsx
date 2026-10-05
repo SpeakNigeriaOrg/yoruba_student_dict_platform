@@ -17,7 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import type { KaikkiSearchResult } from '@yoruba-student-dict-platform/shared';
-import { orthographyInsensitiveForm, syllabifyWord } from '@yoruba-student-dict-platform/shared';
+import { spellingSlug, syllabifyWord } from '@yoruba-student-dict-platform/shared';
 import {
   createWord,
   getEtymologyReview,
@@ -230,7 +230,7 @@ function AddMissingComponent({ kaikkiForm, onAdded }: { kaikkiForm: string; onAd
     setSyllablesText(syllabifyWord(form).join(','));
   }
 
-  const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
+  const wordIdPreview = selectedForm && hint ? `${spellingSlug(selectedForm)}_${hint}` : '';
 
   async function submit() {
     if (!wordIdPreview) {

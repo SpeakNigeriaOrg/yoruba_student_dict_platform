@@ -84,7 +84,7 @@ export function meaningSlug(gloss: string | undefined): string {
 /** The spelling half of a word_id. Spaces become underscores so a multi-word Wiktionary form
  * (`ilẹ̀ Faran̄sé`) yields a usable id rather than one with a space in it.
  *
- * Punctuation is dropped, the hyphen excepted. An interjection is cited as `káàbọ̀!`, and the
+ * Punctuation is dropped, the hyphen and underscore excepted. An interjection is cited as `káàbọ̀!`, and the
  * `!` used to pass straight through into `kaabo!_welcome`, which wordIdShape then refused - the
  * deriver producing what the validator rejects, the same contradiction the hyphen once was. The
  * `!` frames the word rather than spelling it, so `káàbọ̀!` and `káàbọ̀` should share an id. The
@@ -94,7 +94,7 @@ export function meaningSlug(gloss: string | undefined): string {
  * fails visibly at wordIdShape instead of silently vanishing from the id. */
 export function spellingSlug(displayText: string): string {
   return orthographyInsensitiveForm(displayText)
-    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, '')
     .trim()
     .replace(/\s+/g, '_');
 }

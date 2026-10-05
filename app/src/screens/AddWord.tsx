@@ -35,7 +35,7 @@ import {
   normalizeLoanLanguage,
   describePhraseSpelling,
   isMultiWord,
-  orthographyInsensitiveForm,
+  spellingSlug,
   phraseTokens,
   syllabifyWord,
 } from '@yoruba-student-dict-platform/shared';
@@ -390,7 +390,7 @@ function WordTab({
     resetForm();
   }
 
-  const wordIdPreview = selectedForm && hint ? `${orthographyInsensitiveForm(selectedForm).replace(/ /g, '_')}_${hint}` : '';
+  const wordIdPreview = selectedForm && hint ? `${spellingSlug(selectedForm)}_${hint}` : '';
   /** The part of speech this word will resolve to: the one typed here off-path, else the cited
    * etymology's own. What decides whether "not a standalone word" is fixed (an affix) or asked. */
   const effectivePos = offPath ? pos || null : (selected?.pos ?? null);
@@ -1299,7 +1299,7 @@ function PhraseTab({
   // already says none have been picked. A warning that fires through the whole of normal authoring is
   // one people learn to scroll past, which is how the old duplicate warning came to be ignored.
   const spellingNote = components.length === 0 ? null : describePhraseSpelling(spellingCheck);
-  const wordIdPreview = displayText && hint ? `${orthographyInsensitiveForm(displayText).replace(/ /g, '_')}_${hint}` : '';
+  const wordIdPreview = displayText && hint ? `${spellingSlug(displayText)}_${hint}` : '';
 
   useEffect(() => {
     if (!displayText) {
