@@ -21,9 +21,18 @@
 // case, it is visible and unticks in one click, and nothing is assigned until
 // the picker's own Assign button is pressed - so the default is a suggestion,
 // not an action.
+//
+// OLDER WORDS A PAGE AT A TIME. The browse used to stop at the newest 200 with
+// no way past them, so a batch older than that could be neither seen nor picked
+// here. "Show older words" appends the next page; nothing on it is pre-selected,
+// since the suggestion is only ever the newest day.
 
 import { useEffect, useMemo, useState } from 'react';
 import { getRecentWords, type RecentWordSummary } from '../api.js';
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export interface RecentWordsBrowserProps {
   /** Whose assignments the alreadyAssigned flags are about - the user being
@@ -79,13 +88,17 @@ export function RecentWordsBrowser({ userId, onAddSelected, onClose }: RecentWor
   const [words, setWords] = useState<RecentWordSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
     getRecentWords(userId)
-      .then((loaded) => {
+      .then(({ words: loaded, hasMore: more }) => {
         if (!live) return;
         setWords(loaded);
+        setHasMore(more);
         // Pre-select the newest day's still-unassigned words. Computed from the
         // response rather than in a second effect, so there is no render where
         // the list is up and the default has not been applied yet.
@@ -94,7 +107,7 @@ export function RecentWordsBrowser({ userId, onAddSelected, onClose }: RecentWor
         setSelected(new Set(newest ? newest.words.filter((w) => !w.alreadyAssigned).map((w) => w.wordId) : []));
       })
       .catch((err: unknown) => {
-        if (live) setError(err instanceof Error ? err.message : String(err));
+        if (live) setError(messageOf(err));
       });
     return () => {
       live = false;
@@ -102,6 +115,20 @@ export function RecentWordsBrowser({ userId, onAddSelected, onClose }: RecentWor
   }, [userId]);
 
   const groups = useMemo(() => (words ? groupByDay(words, new Date()) : []), [words]);
+
+  function showOlder() {
+    const last = words?.[words.length - 1];
+    if (!last) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    getRecentWords(userId, { before: last.wordId })
+      .then(({ words: older, hasMore: more }) => {
+        setWords((prev) => [...(prev ?? []), ...older]);
+        setHasMore(more);
+      })
+      .catch((err: unknown) => setOlderError(messageOf(err)))
+      .finally(() => setLoadingOlder(false));
+  }
 
   function toggle(wordId: string) {
     setSelected((prev) => {
@@ -153,13 +180,15 @@ export function RecentWordsBrowser({ userId, onAddSelected, onClose }: RecentWor
         <p>No words have been added yet.</p>
       ) : (
         <>
-          {groups.map((group) => {
+          {groups.map((group, index) => {
+            // The oldest day shown may continue on the next page, so its count is only what is loaded.
+            const partial = hasMore && index === groups.length - 1;
             const selectable = selectableOf(group);
             const allOn = selectable.length > 0 && selectable.every((w) => selected.has(w.wordId));
             return (
               <div key={group.key}>
                 <h3>
-                  {group.label} — {group.words.length} word(s)
+                  {group.label} — {group.words.length} word(s){partial ? ' so far' : ''}
                 </h3>
                 {selectable.length > 0 ? (
                   <div className="btn-row">
@@ -195,6 +224,14 @@ export function RecentWordsBrowser({ userId, onAddSelected, onClose }: RecentWor
               </div>
             );
           })}
+          {olderError ? <p role="alert" className="error-banner">Couldn't load older words: {olderError}</p> : null}
+          {hasMore ? (
+            <div className="btn-row">
+              <button type="button" className="btn btn-secondary" onClick={showOlder} disabled={loadingOlder}>
+                {loadingOlder ? 'Loading older words...' : 'Show older words'}
+              </button>
+            </div>
+          ) : null}
           <div className="btn-row">
             <button type="button" className="btn btn-primary" onClick={handleAdd} disabled={selected.size === 0}>
               Add {selected.size} selected word(s)

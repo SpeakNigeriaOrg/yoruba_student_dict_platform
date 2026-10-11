@@ -1,8 +1,9 @@
 // functions/recentWords.ts
 //
-// GET /api/recent-words?userId=...&limit=... - curator-only. The newest
-// entries, flagged with what {userId} already has, for the assignment
-// dialog's "browse recently added" list.
+// GET /api/recent-words?userId=...&limit=...&before=... - curator-only. The
+// newest entries, flagged with what {userId} already has, for the assignment
+// dialog's "browse recently added" list. `before` (the word_id of the last word
+// shown) pages back past the newest `limit`.
 //
 // A top-level route rather than words/recent: wordAdmin.ts already owns
 // GET words/{wordId}, and a literal segment sharing a position with a route
@@ -13,7 +14,7 @@ import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } 
 import { getPool } from '../db.js';
 import { ForbiddenError, requireCurator, UnauthenticatedError } from '../httpAuth.js';
 import { listRecentWords, RECENT_WORDS_DEFAULT_LIMIT } from '../handlers/listRecentWords.js';
-import { UserNotFoundError } from '../handlers/errors.js';
+import { UserNotFoundError, WordNotFoundError } from '../handlers/errors.js';
 
 export async function recentWordsFunction(request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
   try {
@@ -31,12 +32,14 @@ export async function recentWordsFunction(request: HttpRequest, _context: Invoca
       limit = Number(rawLimit);
       if (!Number.isFinite(limit)) throw new Error('limit must be a number');
     }
-    const words = await listRecentWords(getPool(), userId, limit);
-    return { status: 200, jsonBody: { words } };
+    const before = request.query.get('before') ?? undefined;
+    const page = await listRecentWords(getPool(), userId, limit, before);
+    return { status: 200, jsonBody: page };
   } catch (err) {
     if (err instanceof UnauthenticatedError) return { status: 401, jsonBody: { error: err.message } };
     if (err instanceof ForbiddenError) return { status: 403, jsonBody: { error: err.message } };
     if (err instanceof UserNotFoundError) return { status: 404, jsonBody: { error: err.message } };
+    if (err instanceof WordNotFoundError) return { status: 404, jsonBody: { error: err.message } };
     if (err instanceof Error) return { status: 400, jsonBody: { error: err.message } };
     throw err;
   }

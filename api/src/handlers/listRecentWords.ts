@@ -19,7 +19,7 @@
 // question one query already answers.
 
 import type { Queryable } from '../db.js';
-import { UserNotFoundError } from './errors.js';
+import { UserNotFoundError, WordNotFoundError } from './errors.js';
 
 export interface RecentWordSummary {
   wordId: string;
@@ -30,20 +30,40 @@ export interface RecentWordSummary {
   alreadyAssigned: boolean;
 }
 
-/** Enough to cover a large day's additions without becoming a second way to
- * page the whole dictionary - that is what 'all' is for. A curator who added
- * more than this in one batch still gets the newest slice, and the day heading
- * in the UI says how many it is showing. */
+export interface RecentWordsPage {
+  words: RecentWordSummary[];
+  /** Whether anything older than the last word returned exists - so the UI
+   * offers "Show older words" only when there are some. */
+  hasMore: boolean;
+}
+
+/** One page of the browse. It used to be the whole browse: the newest 200 and
+ * nothing behind them, so a curator could not reach - or assign from the list -
+ * anything added before the latest 200. Older words are now fetched a page at a
+ * time with `before`. */
 export const RECENT_WORDS_DEFAULT_LIMIT = 200;
 export const RECENT_WORDS_MAX_LIMIT = 500;
 
+/** `before` is the word_id of the last word already shown; the page continues
+ * from there. A word id rather than a timestamp, because created_at is stored to
+ * the microsecond and a JavaScript Date round-trip keeps only milliseconds - a
+ * timestamp cursor would skip or repeat words added within the same millisecond,
+ * which is exactly what a bulk import does. The database looks the position up
+ * from the id at full precision. */
 export async function listRecentWords(
   db: Queryable,
   forUserId: string,
   limit: number = RECENT_WORDS_DEFAULT_LIMIT,
-): Promise<RecentWordSummary[]> {
+  before?: string,
+): Promise<RecentWordsPage> {
   const userCheck = await db.query('select 1 from users where user_id = $1', [forUserId]);
   if ((userCheck.rowCount ?? 0) === 0) throw new UserNotFoundError(forUserId);
+  if (before !== undefined) {
+    // A cursor word deleted since the page was loaded has no position to continue
+    // from; saying so beats silently returning nothing, which reads as "no older words".
+    const cursorCheck = await db.query('select 1 from golden_record where word_id = $1', [before]);
+    if ((cursorCheck.rowCount ?? 0) === 0) throw new WordNotFoundError(before);
+  }
 
   const capped = Math.min(Math.max(Math.trunc(limit), 1), RECENT_WORDS_MAX_LIMIT);
   const result = await db.query<{
@@ -60,11 +80,19 @@ export async function listRecentWords(
     `select gr.word_id, gr.display_text, gr.definition, gr.entry_type, gr.created_at,
             exists (select 1 from assignments a where a.word_id = gr.word_id and a.user_id = $1) as already_assigned
      from golden_record gr
+     where $3::text is null
+        or exists (
+          select 1 from golden_record c
+          where c.word_id = $3
+            and (gr.created_at < c.created_at or (gr.created_at = c.created_at and gr.word_id > c.word_id))
+        )
      order by gr.created_at desc, gr.word_id asc
-     limit $2`,
-    [forUserId, capped],
+     limit $2 + 1`,
+    // One extra row answers hasMore without a second count query.
+    [forUserId, capped, before ?? null],
   );
-  return result.rows.map((row) => ({
+  const hasMore = result.rows.length > capped;
+  const words = result.rows.slice(0, capped).map((row) => ({
     wordId: row.word_id,
     displayText: row.display_text,
     definition: row.definition,
@@ -72,4 +100,5 @@ export async function listRecentWords(
     createdAt: row.created_at,
     alreadyAssigned: row.already_assigned,
   }));
+  return { words, hasMore };
 }

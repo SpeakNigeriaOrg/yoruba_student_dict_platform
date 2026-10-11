@@ -354,10 +354,17 @@ export interface RecentWordSummary {
   alreadyAssigned: boolean;
 }
 
-export function getRecentWords(userId: string, limit?: number): Promise<RecentWordSummary[]> {
+export interface RecentWordsPage {
+  words: RecentWordSummary[];
+  hasMore: boolean;
+}
+
+/** `before` is the word_id of the last word already shown, to fetch the page older than it. */
+export function getRecentWords(userId: string, options: { limit?: number; before?: string } = {}): Promise<RecentWordsPage> {
   const params = new URLSearchParams({ userId });
-  if (limit !== undefined) params.set('limit', String(limit));
-  return fetchJson<{ words: RecentWordSummary[] }>(`/api/recent-words?${params.toString()}`).then((r) => r.words);
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  if (options.before !== undefined) params.set('before', options.before);
+  return fetchJson<RecentWordsPage>(`/api/recent-words?${params.toString()}`);
 }
 
 export function unassignWord(userId: string, wordId: string): Promise<{ userId: string; wordId: string; status: string }> {

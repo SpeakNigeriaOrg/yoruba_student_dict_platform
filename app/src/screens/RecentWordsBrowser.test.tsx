@@ -33,8 +33,8 @@ function daysAgoNoon(n: number): Date {
   return d;
 }
 
-function stubRecentWords(words: RecentWordSummary[]) {
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ words }) });
+function stubRecentWords(words: RecentWordSummary[], hasMore = false) {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ words, hasMore }) });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -136,6 +136,42 @@ describe('RecentWordsBrowser', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't load recently added words/));
     expect(screen.queryByText('Loading recently added words...')).not.toBeInTheDocument();
+  });
+
+  it('shows older words a page at a time, continuing from the last word shown, selecting none of them', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ words: [word('new1', hoursAgo(1)), word('old1', daysAgoNoon(4))], hasMore: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ words: [word('older1', daysAgoNoon(9))], hasMore: false }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const onAddSelected = vi.fn();
+    const user = userEvent.setup();
+
+    render(<RecentWordsBrowser userId="u1" onAddSelected={onAddSelected} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show older words' })).toBeInTheDocument());
+    // The oldest day loaded may continue on the next page.
+    expect(screen.getByText(/1 word\(s\) so far/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show older words' }));
+
+    await waitFor(() => expect(screen.getByText(/older1/)).toBeInTheDocument());
+    expect(String(fetchMock.mock.calls[1][0])).toContain('before=old1');
+    expect(screen.queryByRole('button', { name: 'Show older words' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/so far/)).not.toBeInTheDocument();
+
+    const olderDay = daysAgoNoon(9).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    await user.click(screen.getByRole('button', { name: `Select all 1 from ${olderDay}` }));
+    await user.click(screen.getByRole('button', { name: /Add 2 selected/ }));
+    expect(onAddSelected).toHaveBeenCalledWith(['new1', 'older1']);
+  });
+
+  it('offers no older words when the first page is everything', async () => {
+    stubRecentWords([word('new1', hoursAgo(1))], false);
+
+    render(<RecentWordsBrowser userId="u1" onAddSelected={() => {}} onClose={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText(/new1/)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Show older words' })).not.toBeInTheDocument();
   });
 
   it('says so when nothing has been added yet', async () => {

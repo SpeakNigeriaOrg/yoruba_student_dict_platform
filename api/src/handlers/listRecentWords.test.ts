@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanUpTestData, getTestPool } from '../testSupport.js';
 import { listRecentWords, RECENT_WORDS_MAX_LIMIT } from './listRecentWords.js';
-import { UserNotFoundError } from './errors.js';
+import { UserNotFoundError, WordNotFoundError } from './errors.js';
 
 const NS = 'testrw_';
 const pool = getTestPool();
@@ -39,8 +39,8 @@ afterAll(async () => {
   await pool.end();
 });
 
-function ours(rows: { wordId: string }[]) {
-  return rows.filter((r) => r.wordId.startsWith(NS));
+function ours(page: { words: { wordId: string }[] }) {
+  return page.words.filter((r) => r.wordId.startsWith(NS));
 }
 
 describe('listRecentWords', () => {
@@ -71,13 +71,39 @@ describe('listRecentWords', () => {
   });
 
   it('caps the limit rather than letting a caller page the whole dictionary', async () => {
-    const rows = await listRecentWords(pool, volunteerId, 10_000);
-    expect(rows.length).toBeLessThanOrEqual(RECENT_WORDS_MAX_LIMIT);
+    const { words } = await listRecentWords(pool, volunteerId, 10_000);
+    expect(words.length).toBeLessThanOrEqual(RECENT_WORDS_MAX_LIMIT);
   });
 
-  it('honours a smaller limit', async () => {
-    const rows = await listRecentWords(pool, volunteerId, 1);
-    expect(rows).toHaveLength(1);
+  it('honours a smaller limit, and says there is more', async () => {
+    const page = await listRecentWords(pool, volunteerId, 1);
+    expect(page.words).toHaveLength(1);
+    expect(page.hasMore).toBe(true);
+  });
+
+  it('continues after the `before` word, never repeating it or anything newer', async () => {
+    const afterNew = ours(await listRecentWords(pool, volunteerId, RECENT_WORDS_MAX_LIMIT, `${NS}new`));
+    expect(afterNew.map((r) => r.wordId)).toEqual([`${NS}mid`, `${NS}old`]);
+    const afterMid = ours(await listRecentWords(pool, volunteerId, RECENT_WORDS_MAX_LIMIT, `${NS}mid`));
+    expect(afterMid.map((r) => r.wordId)).toEqual([`${NS}old`]);
+  });
+
+  it('keeps words sharing one created_at - a bulk import - in order across pages', async () => {
+    // Same transaction, same created_at to the microsecond: only word_id orders them.
+    await pool.query(
+      `insert into golden_record (word_id, display_text, syllables, created_at, updated_at)
+       select $1 || n, 'bulk', array['bulk'], timestamp '2001-01-01 00:00:00.123456', now()
+       from generate_series(1, 3) as n`,
+      [`${NS}bulk`],
+    );
+    const first = await listRecentWords(pool, volunteerId, 1, `${NS}bulk1`);
+    const second = await listRecentWords(pool, volunteerId, 1, `${NS}bulk2`);
+    expect(first.words[0].wordId).toBe(`${NS}bulk2`);
+    expect(second.words[0].wordId).toBe(`${NS}bulk3`);
+  });
+
+  it('throws WordNotFoundError for a `before` word that does not exist', async () => {
+    await expect(listRecentWords(pool, volunteerId, 10, `${NS}gone`)).rejects.toBeInstanceOf(WordNotFoundError);
   });
 
   it('throws UserNotFoundError for an unknown user', async () => {
